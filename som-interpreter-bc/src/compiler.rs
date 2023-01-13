@@ -539,10 +539,12 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef) -> Option<Meth
 
             ast::MethodBody::Primitive => MethodKind::NotImplemented(defn.signature.clone()),
             ast::MethodBody::Body { .. } => {
+                let body_len = ctxt.inner.body.as_ref().unwrap().iter().len();
                 let env = MethodEnv {
                     locals: ctxt.inner.locals.iter().map(|_| Value::Nil).collect(),
                     literals: ctxt.inner.literals.into_iter().collect(),
                     body: ctxt.inner.body.unwrap_or_default(),
+                    inline_cache: RefCell::new(vec![None; body_len])
                 };
                 MethodKind::Defined(env)
             }
