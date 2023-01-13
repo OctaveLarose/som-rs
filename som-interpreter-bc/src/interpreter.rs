@@ -48,7 +48,7 @@ impl Interpreter {
         self.frames.last()
     }
 
-    fn send(&mut self, idx: u8, nb_params_opt: Option<usize>, frame: SOMRef<Frame>, universe: &mut Universe) {
+    fn send(&mut self, idx: u8, nb_params_opt: Option<usize>, current_bc_idx: usize, frame: SOMRef<Frame>, universe: &mut Universe) {
         let literal = frame.borrow().lookup_constant(idx as usize).unwrap();
         let symbol = match literal {
             Literal::Symbol(sym) => sym,
@@ -74,6 +74,11 @@ impl Interpreter {
             .nth_back(nb_params)
             .unwrap();
 
+        // dbg!(&receiver);
+        let cache_lookup = frame.borrow().get_inline_cache(current_bc_idx);
+        // TODO check if exists, check if correct receiver, then use
+
+        // if cache_lookup.is_some() && cache_lookup.unwrap().holder
         let method = receiver.lookup_method(universe, symbol);
 
         if let Some(method) = method {
@@ -248,6 +253,7 @@ impl Interpreter {
             //     print!("");
             // }
 
+            // TODO instead of borrowing it every time, borrow a single reference and walk around with it. does that need a Rc though...
             frame.borrow_mut().bytecode_idx += 1;
             // dbg!(&frame.borrow().get_method().signature);
 
@@ -395,16 +401,16 @@ impl Interpreter {
                     }
                 }
                 Bytecode::Send1(idx) => {
-                    self.send(idx, Some(1), frame.clone(), universe);
+                    self.send(idx, Some(1), frame.clone().borrow_mut().bytecode_idx, frame.clone(), universe);
                 }
                 Bytecode::Send2(idx) => {
-                    self.send(idx, Some(2), frame.clone(), universe);
+                    self.send(idx, Some(2), frame.clone().borrow_mut().bytecode_idx, frame.clone(), universe);
                 }
                 Bytecode::Send3(idx) => {
-                    self.send(idx, Some(3), frame.clone(), universe);
+                    self.send(idx, Some(3), frame.clone().borrow_mut().bytecode_idx, frame.clone(), universe);
                 }
                 Bytecode::SendN(idx) => {
-                    self.send(idx, None, frame.clone(), universe);
+                    self.send(idx, None, frame.clone().borrow_mut().bytecode_idx, frame.clone(), universe);
                 }
                 Bytecode::SuperSend1(idx) => {
                     self.super_send(idx, Some(1), frame.clone(), universe);

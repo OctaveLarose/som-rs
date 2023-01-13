@@ -193,8 +193,8 @@ impl Frame {
         }
     }
 
-    pub fn get_inline_cache(frame: &SOMRef<Frame>, idx: usize) -> Option<Rc<Method>> {
-        match frame.borrow().kind() {
+    pub fn get_inline_cache(&self, idx: usize) -> Option<Rc<Method>> {
+        match self.kind() {
             FrameKind::Block { block, .. } => block.inline_cache.borrow_mut()[idx].clone(),
             FrameKind::Method { method, .. } => {
                 match method.kind() {
@@ -205,8 +205,8 @@ impl Frame {
         }
     }
 
-    pub fn set_inline_cache(frame: &SOMRef<Frame>, idx: usize, method: Rc<Method>) {
-        match frame.borrow().kind() {
+    pub fn set_inline_cache(&mut self, idx: usize, method: Rc<Method>) {
+        match self.kind() {
             FrameKind::Block { block, .. } => { block.inline_cache.borrow_mut()[idx] = Some(method.clone()) },
             FrameKind::Method { method, .. } => {
                 match method.kind() {
