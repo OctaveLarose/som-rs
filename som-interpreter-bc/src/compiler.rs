@@ -637,12 +637,14 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block) -> Option<Block> {
     }
     // ctxt.remove_dup_popx_pop_sequences();
 
+    let body_len = ctxt.body.as_ref().unwrap().iter().len();
     let block = Block {
         frame: None,
         locals: ctxt.locals.into_iter().map(|_| Value::Nil).collect(),
         literals: ctxt.literals.into_iter().collect(),
         body: ctxt.body.unwrap_or_default(),
-        nb_params: ctxt.args.len()
+        nb_params: ctxt.args.len(),
+        inline_cache: RefCell::new(vec![None; body_len])
     };
 
     Some(block)

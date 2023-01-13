@@ -101,22 +101,6 @@ impl Method {
             MethodKind::NotImplemented(_) => todo!(),
         }
     }
-
-    pub fn get_inline_cache(self: Rc<Self>, idx: usize) -> Option<Rc<Method>> {
-        match self.kind() {
-            MethodKind::Defined(env) => env.inline_cache.borrow_mut()[idx].clone(),
-            MethodKind::Primitive(_) => panic!("should be made unreachable, probably?"),
-            MethodKind::NotImplemented(_) => panic!("should be made unreachable, probably?")
-        }
-    }
-
-    pub fn set_inline_cache(self: Rc<Self>, idx: usize, method: Rc<Method>) {
-        match self.kind() {
-            MethodKind::Defined(env) => { env.inline_cache.borrow_mut()[idx] = Some(method) },
-            MethodKind::Primitive(_) => panic!("should be made unreachable, probably?"),
-            MethodKind::NotImplemented(_) => panic!("should be made unreachable, probably?")
-        }
-    }
 }
 
 impl fmt::Display for Method {

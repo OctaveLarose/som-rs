@@ -192,4 +192,28 @@ impl Frame {
             FrameKind::Method { .. } => frame.clone(),
         }
     }
+
+    pub fn get_inline_cache(frame: &SOMRef<Frame>, idx: usize) -> Option<Rc<Method>> {
+        match frame.borrow().kind() {
+            FrameKind::Block { block, .. } => block.inline_cache.borrow_mut()[idx].clone(),
+            FrameKind::Method { method, .. } => {
+                match method.kind() {
+                    MethodKind::Defined(env) => env.inline_cache.borrow_mut()[idx].clone(),
+                    _ => panic!("should be made unreachable, probably?"),
+                }
+            },
+        }
+    }
+
+    pub fn set_inline_cache(frame: &SOMRef<Frame>, idx: usize, method: Rc<Method>) {
+        match frame.borrow().kind() {
+            FrameKind::Block { block, .. } => { block.inline_cache.borrow_mut()[idx] = Some(method.clone()) },
+            FrameKind::Method { method, .. } => {
+                match method.kind() {
+                    MethodKind::Defined(env) => { env.inline_cache.borrow_mut()[idx] = Some(method.clone()) },
+                    _ => panic!("should be made unreachable, probably?")
+                }
+            },
+        }
+    }
 }

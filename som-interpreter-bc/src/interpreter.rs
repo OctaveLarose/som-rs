@@ -68,12 +68,13 @@ impl Interpreter {
             }
         };
 
-        let method = self
+        let receiver = self
             .stack
             .iter()
             .nth_back(nb_params)
-            .unwrap()
-            .lookup_method(universe, symbol);
+            .unwrap();
+
+        let method = receiver.lookup_method(universe, symbol);
 
         if let Some(method) = method {
             match method.kind() {
