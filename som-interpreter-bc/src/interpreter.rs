@@ -138,10 +138,11 @@ impl Interpreter {
                 return;
             }
         };
-        let signature = universe.lookup_symbol(symbol);
+
         let nb_params = match nb_params_opt {
             Some(x) => x,
             None => {
+                let signature = universe.lookup_symbol(symbol);
                 match signature.chars().nth(0) {
                     Some(ch) if !ch.is_alphabetic() => 1,
                     _ => signature.chars().filter(|ch| *ch == ':').count(),
