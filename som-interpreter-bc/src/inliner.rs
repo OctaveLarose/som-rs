@@ -36,6 +36,7 @@ impl PrimMessageInliner for ast::Expression {
     fn inline_expr(&self, ctxt: &mut dyn InnerGenCtxt, block_expr: &ast::Expression) -> Option<()> {
         match block_expr {
             ast::Expression::Block(block) => {
+                dbg!(&block.locals);
                 for block_local in &block.locals {
                     ctxt.push_local(String::from(block_local)); // breaks shadowing
                 }
@@ -68,6 +69,11 @@ impl PrimMessageInliner for ast::Expression {
         // todo i think Recurse took a big hit when i started inlining any expression instead of just blocks. needs investigating
         self.inline_expr(ctxt, message.values.get(0)?);
         ctxt.backpatch_jump_to_current(jump_idx);
+
+        dbg!(ctxt.class_name());
+        // ctxt.find_var()
+        // let lol_dbg = ctxt.get_instructions();
+        // dbg!(lol_dbg);
 
         return Some(());
     }

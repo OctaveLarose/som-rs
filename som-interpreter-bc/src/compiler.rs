@@ -193,17 +193,7 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
 
     fn backpatch_jump_to_current(&mut self, idx_to_backpatch: usize) {
         let jump_offset = self.get_cur_instr_idx() - idx_to_backpatch;
-
-        self.body.as_mut().unwrap()[idx_to_backpatch] =
-            match self.body.as_ref().unwrap()[idx_to_backpatch] {
-                Bytecode::Jump(_) => Bytecode::Jump(jump_offset),
-                Bytecode::JumpBackward(_) => Bytecode::JumpBackward(jump_offset),
-                Bytecode::JumpOnTrueTopNil(_) => Bytecode::JumpOnTrueTopNil(jump_offset),
-                Bytecode::JumpOnFalseTopNil(_) => Bytecode::JumpOnFalseTopNil(jump_offset),
-                Bytecode::JumpOnTruePop(_) => Bytecode::JumpOnTruePop(jump_offset),
-                Bytecode::JumpOnFalsePop(_) => Bytecode::JumpOnFalsePop(jump_offset),
-                _ => panic!("Attempting to backpatch a bytecode non jump")
-        };
+        self.patch_jump(idx_to_backpatch, jump_offset)
     }
 
     fn patch_jump(&mut self, idx_to_backpatch: usize, new_val: usize) {
@@ -518,12 +508,6 @@ impl MethodCodegen for ast::Expression {
                 ctxt.push_instr(Bytecode::PushBlock(idx as u8));
                 Some(())
             }
-            // TODO: should that go?
-            // ast::Expression::Term(term) => term
-            //     .body
-            //     .exprs
-            //     .iter()
-            //     .try_for_each(|expr| expr.codegen(ctxt)),
         }
     }
 }

@@ -74,3 +74,8 @@ pub enum Token {
     /// Some whitespace (` `).
     Whitespace,
 }
+
+pub struct TokenCoords {
+    pub line: usize,
+    pub char_idx: usize
+}

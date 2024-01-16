@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use anyhow::{anyhow, Error};
+use som_lexer::Token;
+use som_lexer::TokenCoords;
 
 use crate::block::Block;
 use crate::class::Class;
@@ -230,11 +232,19 @@ impl Universe {
                 Err(err) => return Err(Error::from(err)),
             };
 
+            let le_tokens_de_la_famille: Vec<(_, _)> = som_lexer::Lexer::new(contents.as_str())
+                .skip_comments(true)
+                .skip_whitespace(true)
+                .collect();
+
             // Collect all tokens from the file.
             let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
                 .skip_comments(true)
                 .skip_whitespace(true)
-                .collect();
+                .collect::<Vec<(Token, TokenCoords)>>()
+                .iter()
+                .map(|s| s.0.clone())
+                .collect::<Vec<Token>>();
 
             // Parse class definition from the tokens.
             let defn = match som_parser::parse_file(tokens.as_slice()) {
@@ -274,7 +284,10 @@ impl Universe {
             let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
                 .skip_comments(true)
                 .skip_whitespace(true)
-                .collect();
+                .collect::<Vec<(Token, TokenCoords)>>()
+                .iter()
+                .map(|s| s.0.clone())
+                .collect::<Vec<Token>>();
 
             // Parse class definition from the tokens.
             let defn = match som_parser::parse_file(tokens.as_slice()) {
@@ -365,7 +378,10 @@ impl Universe {
         let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
             .skip_comments(true)
             .skip_whitespace(true)
-            .collect();
+            .collect::<Vec<(Token, TokenCoords)>>()
+            .iter()
+            .map(|s| s.0.clone())
+            .collect::<Vec<Token>>();
 
         // Parse class definition from the tokens.
         let defn = match som_parser::parse_file(tokens.as_slice()) {

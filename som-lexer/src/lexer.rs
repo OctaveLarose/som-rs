@@ -1,4 +1,4 @@
-use crate::token::Token;
+use crate::token::{Token, TokenCoords};
 
 /// The lexer for the Simple Object Machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -7,6 +7,8 @@ pub struct Lexer {
     pub(crate) skip_comments: bool,
     pub(crate) skip_whitespace: bool,
     pub(crate) skip_separator: bool,
+    cur_line: usize,
+    next_char_idx: usize
 }
 
 impl Lexer {
@@ -20,6 +22,8 @@ impl Lexer {
             skip_comments: false,
             skip_whitespace: false,
             skip_separator: false,
+            cur_line: 0,
+            next_char_idx: 0
         }
     }
 
@@ -62,7 +66,7 @@ impl Lexer {
         }
     }
 
-    fn lex_comment(&mut self) -> Option<Token> {
+    fn lex_comment(&mut self) -> Option<(Token, TokenCoords)> {
         let mut output = String::new();
         self.chars.pop()?;
         loop {
@@ -71,7 +75,7 @@ impl Lexer {
                 break if self.skip_comments {
                     self.next()
                 } else {
-                    Some(Token::Comment(output))
+                    self.return_value(Token::Comment(output))
                 };
             } else {
                 output.push(ch);
@@ -79,26 +83,26 @@ impl Lexer {
         }
     }
 
-    fn lex_operator(&mut self) -> Option<Token> {
+    fn lex_operator(&mut self) -> Option<(Token, TokenCoords)> {
         let iter = self.chars.iter().rev().copied();
         let length = iter.take_while(|ch| Lexer::is_operator(*ch)).count();
         match length {
             0 => None,
             1 => match self.chars.pop()? {
-                '~' => Some(Token::Not),
-                '&' => Some(Token::And),
-                '|' => Some(Token::Or),
-                '*' => Some(Token::Star),
-                '/' => Some(Token::Div),
-                '\\' => Some(Token::Mod),
-                '+' => Some(Token::Plus),
-                '=' => Some(Token::Equal),
-                '>' => Some(Token::More),
-                '<' => Some(Token::Less),
-                ',' => Some(Token::Comma),
-                '@' => Some(Token::At),
-                '%' => Some(Token::Per),
-                '-' => Some(Token::Minus),
+                '~' => self.return_value(Token::Not),
+                '&' => self.return_value(Token::And),
+                '|' => self.return_value(Token::Or),
+                '*' => self.return_value(Token::Star),
+                '/' => self.return_value(Token::Div),
+                '\\' => self.return_value(Token::Mod),
+                '+' => self.return_value(Token::Plus),
+                '=' => self.return_value(Token::Equal),
+                '>' => self.return_value(Token::More),
+                '<' => self.return_value(Token::Less),
+                ',' => self.return_value(Token::Comma),
+                '@' => self.return_value(Token::At),
+                '%' => self.return_value(Token::Per),
+                '-' => self.return_value(Token::Minus),
                 _ => None,
             },
             length => {
@@ -106,7 +110,7 @@ impl Lexer {
                 for _ in 0..length {
                     operator.push(self.chars.pop()?);
                 }
-                Some(Token::OperatorSequence(operator))
+                self.return_value(Token::OperatorSequence(operator))
             }
         }
     }
@@ -157,15 +161,27 @@ impl Lexer {
             '~' | '&' | '|' | '*' | '/' | '\\' | '+' | '=' | '>' | '<' | ',' | '@' | '%' | '-'
         )
     }
+
+    // bad name
+    fn return_value(&self, token: Token) -> Option<(Token, TokenCoords)> {
+        Some((token, TokenCoords { line: self.cur_line, char_idx: self.next_char_idx - 1 }))
+    }
 }
 
 impl Iterator for Lexer {
-    type Item = Token;
+    type Item = (Token, TokenCoords);
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut iter = self.chars.iter().rev().copied().peekable();
         let peeked = iter.peek().copied()?;
+        self.next_char_idx += 1;
         match peeked {
+            '\n' => {
+                self.cur_line += 1;
+                self.next_char_idx = 0;
+                self.chars.pop()?;
+                self.next()
+            },
             _ if peeked.is_whitespace() => {
                 let count = iter.take_while(|c| c.is_whitespace()).count();
                 for _ in 0..count {
@@ -174,26 +190,26 @@ impl Iterator for Lexer {
                 if self.skip_whitespace {
                     self.next()
                 } else {
-                    Some(Token::Whitespace)
+                    self.return_value(Token::Whitespace)
                 }
             }
-            '\'' => self.lex_string().map(Token::LitString),
+            '\'' => self.lex_string().map(|s| self.return_value(Token::LitString(s)).unwrap()),
             '"' => self.lex_comment(),
             '[' => {
                 self.chars.pop()?;
-                Some(Token::NewBlock)
+                self.return_value(Token::NewBlock)
             }
             ']' => {
                 self.chars.pop()?;
-                Some(Token::EndBlock)
+                self.return_value(Token::EndBlock)
             }
             '(' => {
                 self.chars.pop()?;
-                Some(Token::NewTerm)
+                self.return_value(Token::NewTerm)
             }
             ')' => {
                 self.chars.pop()?;
-                Some(Token::EndTerm)
+                self.return_value(Token::EndTerm)
             }
             '#' => {
                 iter.next()?;
@@ -201,17 +217,17 @@ impl Iterator for Lexer {
                     Some('\'') => {
                         self.chars.pop()?;
                         let symbol = self.lex_string()?;
-                        Some(Token::LitSymbol(symbol))
+                        self.return_value(Token::LitSymbol(symbol))
                     }
                     Some('(') => {
                         self.chars.pop()?;
                         self.chars.pop()?;
-                        Some(Token::NewArray)
+                        self.return_value(Token::NewArray)
                     }
                     Some(ch) if ch.is_alphabetic() => {
                         self.chars.pop()?;
                         let symbol = self.lex_symbol()?;
-                        Some(Token::LitSymbol(symbol))
+                        self.return_value(Token::LitSymbol(symbol))
                     }
                     Some(ch) if Lexer::is_operator(ch) => {
                         let len = iter.take_while(|ch| Lexer::is_operator(*ch)).count();
@@ -220,18 +236,18 @@ impl Iterator for Lexer {
                         for _ in 0..len {
                             symbol.push(self.chars.pop()?);
                         }
-                        Some(Token::LitSymbol(symbol))
+                        self.return_value(Token::LitSymbol(symbol))
                     }
                     _ => None,
                 }
             }
             '^' => {
                 self.chars.pop()?;
-                Some(Token::Exit)
+                self.return_value(Token::Exit)
             }
             '.' => {
                 self.chars.pop()?;
-                Some(Token::Period)
+                self.return_value(Token::Period)
             }
             '-' => {
                 let sep_len = iter.take_while(|ch| *ch == '-').count();
@@ -242,7 +258,7 @@ impl Iterator for Lexer {
                     if self.skip_separator {
                         self.next()
                     } else {
-                        Some(Token::Separator)
+                        self.return_value(Token::Separator)
                     }
                 } else {
                     self.lex_operator()
@@ -253,10 +269,10 @@ impl Iterator for Lexer {
                 if let Some('=') = iter.peek().copied() {
                     self.chars.pop()?;
                     self.chars.pop()?;
-                    Some(Token::Assign)
+                    self.return_value(Token::Assign)
                 } else {
                     self.chars.pop()?;
-                    Some(Token::Colon)
+                    self.return_value(Token::Colon)
                 }
             }
             _ if Lexer::is_operator(peeked) => self.lex_operator(),
@@ -266,7 +282,7 @@ impl Iterator for Lexer {
                     for _ in 0..primitive_len {
                         self.chars.pop()?;
                     }
-                    Some(Token::Primitive)
+                    self.return_value(Token::Primitive)
                 } else if peeked.is_alphabetic() {
                     let mut ident: String = self
                         .chars
@@ -282,9 +298,9 @@ impl Iterator for Lexer {
                     if let Some(':') = self.chars.last().copied() {
                         self.chars.pop()?;
                         ident.push(':');
-                        Some(Token::Keyword(ident))
+                        self.return_value(Token::Keyword(ident))
                     } else {
-                        Some(Token::Identifier(ident))
+                        self.return_value(Token::Identifier(ident))
                     }
                 } else if peeked.is_digit(10) {
                     let iter = self.chars.iter().rev().copied();
@@ -300,7 +316,7 @@ impl Iterator for Lexer {
                             for _ in 0..total_len {
                                 self.chars.pop()?;
                             }
-                            Some(Token::LitDouble(number))
+                            self.return_value(Token::LitDouble(number))
                         }
                         _ => {
                             let repr: String = iter.take(int_part_len).collect();
@@ -308,9 +324,9 @@ impl Iterator for Lexer {
                                 self.chars.pop()?;
                             }
                             if let Ok(number) = repr.parse::<i64>() {
-                                Some(Token::LitInteger(number))
+                                self.return_value(Token::LitInteger(number))
                             } else {
-                                Some(Token::LitBigInteger(repr))
+                                self.return_value(Token::LitBigInteger(repr))
                             }
                         }
                     }
