@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use anyhow::Error;
 
-use som_lexer::{Lexer, Token, TokenCoords};
+use som_lexer::{Lexer, Token, SourceCoords};
 use som_parser::lang;
 
 use som_interpreter_bc::compiler;
@@ -48,7 +48,7 @@ pub fn interactive(
         let line = format!("ShellExpr{} = ( run: it = ( ^ ( {} ) ) )", counter, line);
 
         let start = Instant::now();
-        let tokens: Vec<(Token, TokenCoords)> = Lexer::new(line.as_str())
+        let tokens: Vec<(Token, SourceCoords)> = Lexer::new(line.as_str())
             .skip_comments(true)
             .skip_whitespace(true)
             .collect();

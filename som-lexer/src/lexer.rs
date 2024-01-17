@@ -1,4 +1,4 @@
-use crate::token::{Token, TokenCoords};
+use crate::token::{Token, SourceCoords};
 
 /// The lexer for the Simple Object Machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,7 +66,7 @@ impl Lexer {
         }
     }
 
-    fn lex_comment(&mut self) -> Option<(Token, TokenCoords)> {
+    fn lex_comment(&mut self) -> Option<(Token, SourceCoords)> {
         let mut output = String::new();
         self.chars.pop()?;
         loop {
@@ -83,7 +83,7 @@ impl Lexer {
         }
     }
 
-    fn lex_operator(&mut self) -> Option<(Token, TokenCoords)> {
+    fn lex_operator(&mut self) -> Option<(Token, SourceCoords)> {
         let iter = self.chars.iter().rev().copied();
         let length = iter.take_while(|ch| Lexer::is_operator(*ch)).count();
         match length {
@@ -163,13 +163,13 @@ impl Lexer {
     }
 
     // bad name
-    fn return_value(&self, token: Token) -> Option<(Token, TokenCoords)> {
-        Some((token, TokenCoords { line: self.cur_line, char_idx: self.next_char_idx - 1 }))
+    fn return_value(&self, token: Token) -> Option<(Token, SourceCoords)> {
+        Some((token, SourceCoords { line: self.cur_line, char_idx: self.next_char_idx - 1 }))
     }
 }
 
 impl Iterator for Lexer {
-    type Item = (Token, TokenCoords);
+    type Item = (Token, SourceCoords);
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut iter = self.chars.iter().rev().copied().peekable();

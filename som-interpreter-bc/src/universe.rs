@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use anyhow::{anyhow, Error};
 use som_lexer::Token;
-use som_lexer::TokenCoords;
+use som_lexer::SourceCoords;
 
 use crate::block::Block;
 use crate::class::Class;
@@ -241,7 +241,7 @@ impl Universe {
             let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
                 .skip_comments(true)
                 .skip_whitespace(true)
-                .collect::<Vec<(Token, TokenCoords)>>()
+                .collect::<Vec<(Token, SourceCoords)>>()
                 .iter()
                 .map(|s| s.0.clone())
                 .collect::<Vec<Token>>();
@@ -284,7 +284,7 @@ impl Universe {
             let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
                 .skip_comments(true)
                 .skip_whitespace(true)
-                .collect::<Vec<(Token, TokenCoords)>>()
+                .collect::<Vec<(Token, SourceCoords)>>()
                 .iter()
                 .map(|s| s.0.clone())
                 .collect::<Vec<Token>>();
@@ -378,7 +378,7 @@ impl Universe {
         let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
             .skip_comments(true)
             .skip_whitespace(true)
-            .collect::<Vec<(Token, TokenCoords)>>()
+            .collect::<Vec<(Token, SourceCoords)>>()
             .iter()
             .map(|s| s.0.clone())
             .collect::<Vec<Token>>();

@@ -5,7 +5,7 @@ use som_interpreter_bc::frame::FrameKind;
 use som_interpreter_bc::interpreter::Interpreter;
 use som_interpreter_bc::universe::Universe;
 use som_interpreter_bc::value::Value;
-use som_lexer::{Lexer, Token, TokenCoords};
+use som_lexer::{Lexer, Token, SourceCoords};
 use som_parser::lang;
 
 fn setup_universe() -> Universe {
@@ -169,7 +169,7 @@ fn basic_interpreter_tests() {
         let mut lexer = Lexer::new(line).skip_comments(true).skip_whitespace(true);
         // let tokens: Vec<Token> = lexer.by_ref().collect();
         let tokens: Vec<_> = lexer.by_ref()
-            .collect::<Vec<(Token, TokenCoords)>>()
+            .collect::<Vec<(Token, SourceCoords)>>()
             .iter()
             .map(|s| s.0.clone())
             .collect::<Vec<Token>>();
