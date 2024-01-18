@@ -17,11 +17,11 @@ pub struct ClassDef {
     /// The name of the superclass.
     pub super_class: Option<String>,
     /// The locals for instances of that class.
-    pub instance_locals: Vec<String>,
+    pub instance_locals: Vec<IdentifierStruct>,
     /// The methods declared for instances of that class.
     pub instance_methods: Vec<MethodDef>,
     /// The static locals for that class.
-    pub static_locals: Vec<String>,
+    pub static_locals: Vec<IdentifierStruct>,
     /// The static methods declared for that class.
     pub static_methods: Vec<MethodDef>,
 }
@@ -46,7 +46,7 @@ pub enum MethodKind {
     /// A binary operator method definiton.
     Operator {
         /// The binding name for the right-hand side.
-        rhs: String,
+        rhs: IdentifierStruct,
     },
 }
 
@@ -83,7 +83,7 @@ pub enum MethodBody {
     /// A primitive (meant to be implemented by the VM itself).
     Primitive,
     /// An actual body for the method, with locals.
-    Body { locals: Vec<String>, body: Body },
+    Body { locals: Vec<IdentifierStruct>, body: Body },
 }
 
 /// Represents the contents of a body (within a term or block).
@@ -125,9 +125,9 @@ pub struct Body {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     /// A reference to a binding (eg. `counter`).
-    Reference(String),
+    Reference(IdentifierStruct),
     /// An assignment to a binding (eg. `counter := 10`).
-    Assignment(String, Box<Expression>),
+    Assignment(IdentifierStruct, Box<Expression>),
     /// A message send (eg. `counter incrementBy: 5`).
     Message(Message),
     /// A binary operation (eg. `counter <= 5`).
@@ -138,6 +138,23 @@ pub enum Expression {
     Literal(Literal),
     /// A block (eg. `[ :value | counter incrementBy: value ]`).
     Block(Block),
+}
+
+// pub type Identifier = (String, usize, usize);
+#[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
+pub struct IdentifierStruct {
+    pub name: String,
+    pub line_idx: usize,
+    pub char_idx: usize
+}
+
+impl IdentifierStruct {
+    pub fn get_name(&self) -> String {
+        // let concatenated_string = format!("{}:{}:{}", &self.name, self.line_idx, self.char_idx);
+        // &concatenated_string
+        self.name.to_string() + &self.line_idx.to_string() + &self.char_idx.to_string() // TODO should likely return a ref to a stored name?
+    }
 }
 
 /// Represents a message send.
@@ -197,7 +214,7 @@ pub struct Block {
     /// Represents the parameters' names.
     pub parameters: Vec<String>,
     /// The names of the locals.
-    pub locals: Vec<String>,
+    pub locals: Vec<IdentifierStruct>,
     /// Represents the block's body.
     pub body: Body,
 }
@@ -227,6 +244,7 @@ pub struct Term {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     /// Represents a symbol literal (eg. `#foo`).
+    /// Also contains source information: its line number and position within that line.
     Symbol(String),
     /// Represents a string literal (eg. `'hello'`).
     String(String),

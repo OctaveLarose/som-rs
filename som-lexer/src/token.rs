@@ -64,7 +64,8 @@ pub enum Token {
     /// A symbol literal (`#foo`).
     LitSymbol(String),
     /// An identifier (`foo`).
-    Identifier(String),
+    /// Also contains source info (line number and position within that line)
+    Identifier(String, usize, usize),
     /// A keyword (`fromString:`).
     Keyword(String),
     /// A sequence of operators (eg: `>>>`).

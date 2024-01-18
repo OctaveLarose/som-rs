@@ -7,6 +7,8 @@ pub struct Lexer {
     pub(crate) skip_comments: bool,
     pub(crate) skip_whitespace: bool,
     pub(crate) skip_separator: bool,
+    cur_line: usize,
+    next_char_idx: usize
 }
 
 impl Lexer {
@@ -20,6 +22,8 @@ impl Lexer {
             skip_comments: false,
             skip_whitespace: false,
             skip_separator: false,
+            cur_line: 0,
+            next_char_idx: 0
         }
     }
 
@@ -166,6 +170,12 @@ impl Iterator for Lexer {
         let mut iter = self.chars.iter().rev().copied().peekable();
         let peeked = iter.peek().copied()?;
         match peeked {
+            '\n' => {
+                self.cur_line += 1;
+                self.next_char_idx = 0;
+                self.chars.pop()?;
+                self.next()
+            },
             _ if peeked.is_whitespace() => {
                 let count = iter.take_while(|c| c.is_whitespace()).count();
                 for _ in 0..count {
@@ -284,7 +294,7 @@ impl Iterator for Lexer {
                         ident.push(':');
                         Some(Token::Keyword(ident))
                     } else {
-                        Some(Token::Identifier(ident))
+                        Some(Token::Identifier(ident, self.cur_line, self.next_char_idx - 1))
                     }
                 } else if peeked.is_digit(10) {
                     let iter = self.chars.iter().rev().copied();

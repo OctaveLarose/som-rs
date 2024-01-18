@@ -35,7 +35,7 @@ pub fn exact_ident<'a, 'b: 'a>(string: &'b str) -> impl Parser<(), &'a [Token]> 
     move |input: &'a [Token]| {
         let (head, tail) = input.split_first()?;
         match head {
-            Token::Identifier(ref ident) if ident.as_str() == string => Some(((), tail)),
+            Token::Identifier(ref ident, _, _) if ident.as_str() == string => Some(((), tail)),
             _ => None,
         }
     }
@@ -117,11 +117,16 @@ pub fn operator<'a>() -> impl Parser<String, &'a [Token]> {
     single_operator().map(String::from).or(operator_sequence())
 }
 
-pub fn identifier<'a>() -> impl Parser<String, &'a [Token]> {
+pub fn identifier<'a>() -> impl Parser<IdentifierStruct, &'a [Token]> {
     move |input: &'a [Token]| {
         let (head, tail) = input.split_first()?;
         match head {
-            Token::Identifier(value) => Some((value.clone(), tail)),
+            Token::Identifier(value, line_idx, char_idx) => Some((
+                IdentifierStruct {
+                    name: value.clone(),
+                    line_idx: line_idx.clone(),
+                    char_idx: char_idx.clone(),
+                }, tail)),
             _ => None,
         }
     }
@@ -154,7 +159,7 @@ pub fn array<'a>() -> impl Parser<Vec<Literal>, &'a [Token]> {
             many(literal()),
             exact(Token::EndTerm),
         )
-        .parse(input)
+            .parse(input)
     }
 }
 
@@ -186,7 +191,7 @@ pub fn unary_send<'a>() -> impl Parser<Expression, &'a [Token]> {
                 .fold(receiver, |receiver, signature| {
                     Expression::Message(Message {
                         receiver: Box::new(receiver),
-                        signature,
+                        signature: signature.name,
                         values: Vec::new(),
                     })
                 })
@@ -214,7 +219,7 @@ pub fn positional_send<'a>() -> impl Parser<Expression, &'a [Token]> {
             if pairs.is_empty() {
                 receiver
             } else {
-                let (signature, values) = pairs.into_iter().unzip();
+                let (signature, values): (String, Vec<Expression>) = pairs.into_iter().unzip();
 
                 Expression::Message(Message {
                     receiver: Box::new(receiver),
@@ -234,12 +239,12 @@ pub fn body<'a>() -> impl Parser<Body, &'a [Token]> {
         })
 }
 
-pub fn locals<'a>() -> impl Parser<Vec<String>, &'a [Token]> {
+pub fn locals<'a>() -> impl Parser<Vec<IdentifierStruct>, &'a [Token]> {
     between(exact(Token::Or), many(identifier()), exact(Token::Or))
 }
 
 pub fn parameter<'a>() -> impl Parser<String, &'a [Token]> {
-    exact(Token::Colon).and_right(identifier())
+    exact(Token::Colon).and_right(identifier().map(|s| s.name))
 }
 
 pub fn parameters<'a>() -> impl Parser<Vec<String>, &'a [Token]> {
@@ -252,13 +257,13 @@ pub fn block<'a>() -> impl Parser<Expression, &'a [Token]> {
         default(parameters()).and(default(locals())).and(body()),
         exact(Token::EndBlock),
     )
-    .map(|((parameters, locals), body)| {
-        Expression::Block(Block {
-            parameters,
-            locals,
-            body,
+        .map(|((parameters, locals), body)| {
+            Expression::Block(Block {
+                parameters,
+                locals,
+                body,
+            })
         })
-    })
 }
 
 pub fn term<'a>() -> impl Parser<Expression, &'a [Token]> {
@@ -307,16 +312,16 @@ pub fn method_body<'a>() -> impl Parser<MethodBody, &'a [Token]> {
         default(locals()).and(body()),
         exact(Token::EndTerm),
     )
-    .map(|(locals, body)| MethodBody::Body { locals, body })
+        .map(|(locals, body)| MethodBody::Body { locals, body })
 }
 
 pub fn unary_method_def<'a>() -> impl Parser<MethodDef, &'a [Token]> {
     identifier()
         .and_left(exact(Token::Equal))
         .and(primitive().or(method_body()))
-        .map(|(signature, body)| MethodDef {
+        .map(|(identifier, body)| MethodDef {
             kind: MethodKind::Unary,
-            signature,
+            signature: identifier.name,
             body,
         })
 }
@@ -326,7 +331,7 @@ pub fn positional_method_def<'a>() -> impl Parser<MethodDef, &'a [Token]> {
         .and_left(exact(Token::Equal))
         .and(primitive().or(method_body()))
         .map(|(pairs, body)| {
-            let (signature, parameters) = pairs.into_iter().unzip();
+            let (signature, parameters) = pairs.into_iter().map(|s| (s.0, s.1.name)).unzip(); // TODO: not 100% sure about that one
 
             MethodDef {
                 kind: MethodKind::Positional { parameters },
@@ -365,13 +370,13 @@ pub fn class_def<'a>() -> impl Parser<ClassDef, &'a [Token]> {
             )),
             exact(Token::EndTerm),
         ))
-        .map(|((name, super_class), (instance_defns, static_defns))| {
+        .map(|((class_name, super_class), (instance_defns, static_defns))| {
             let (instance_locals, instance_methods) = instance_defns;
             let (static_locals, static_methods) = static_defns;
 
             ClassDef {
-                name,
-                super_class,
+                name: class_name.name,
+                super_class: super_class.and_then(|s| Some(s.name)),
                 instance_locals,
                 instance_methods,
                 static_locals,
