@@ -9,6 +9,7 @@ use indexmap::{IndexMap, IndexSet};
 use num_bigint::BigInt;
 
 use som_core::ast;
+use som_core::ast::IdentifierStruct;
 use som_core::bytecode::Bytecode;
 
 use crate::block::{Block, BlockInfo};
@@ -114,7 +115,7 @@ pub trait InnerGenCtxt: GenCtxt {
 struct BlockGenCtxt<'a> {
     pub outer: &'a mut dyn GenCtxt,
     pub args: IndexSet<String>,
-    pub locals: IndexSet<String>,
+    pub locals: IndexSet<IdentifierStruct>,
     pub literals: IndexSet<Literal>,
     pub body: Option<Vec<Bytecode>>,
 }
@@ -125,7 +126,7 @@ impl GenCtxt for BlockGenCtxt<'_> {
             "super" => "self",
             name => name,
         };
-        (self.locals.get_index_of(name))
+        (self.locals.iter().position(|s| s.name == name))
             .map(|idx| FoundVar::Local(0, idx as u8))
             .or_else(|| (self.args.get_index_of(name)).map(|idx| FoundVar::Argument(0, idx as u8)))
             .or_else(|| {
@@ -170,7 +171,7 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
     }
 
     fn push_local(&mut self, name: String) -> usize {
-        let (idx, _) = self.locals.insert_full(name);
+        let (idx, _) = self.locals.insert_full(IdentifierStruct { name, line_idx: 0, char_idx: 0 });
         idx
     }
 
@@ -369,8 +370,8 @@ impl MethodCodegen for ast::Body {
 impl MethodCodegen for ast::Expression {
     fn codegen(&self, ctxt: &mut dyn InnerGenCtxt) -> Option<()> {
         match self {
-            ast::Expression::Reference(name) => {
-                match ctxt.find_var(name.as_str()) {
+            ast::Expression::Reference(identifier) => {
+                match ctxt.find_var(identifier.name.as_str()) {
                     Some(FoundVar::Local(up_idx, idx)) => {
                         ctxt.push_instr(Bytecode::PushLocal(up_idx, idx))
                     }
@@ -379,10 +380,10 @@ impl MethodCodegen for ast::Expression {
                     }
                     Some(FoundVar::Field(idx)) => ctxt.push_instr(Bytecode::PushField(idx)),
                     None => {
-                        match name.as_str() {
+                        match identifier.name.as_str() {
                             "nil" => ctxt.push_instr(Bytecode::PushNil),
                             _ => {
-                                let name = ctxt.intern_symbol(name);
+                                let name = ctxt.intern_symbol(identifier.name.as_str());
                                 let idx = ctxt.push_literal(Literal::Symbol(name));
                                 ctxt.push_instr(Bytecode::PushGlobal(idx as u8));
                             }
@@ -391,10 +392,10 @@ impl MethodCodegen for ast::Expression {
                 }
                 Some(())
             }
-            ast::Expression::Assignment(name, expr) => {
+            ast::Expression::Assignment(identifier, expr) => {
                 expr.codegen(ctxt)?;
                 ctxt.push_instr(Bytecode::Dup);
-                match ctxt.find_var(name.as_str())? {
+                match ctxt.find_var(identifier.name.as_str())? {
                     FoundVar::Local(up_idx, idx) => {
                         ctxt.push_instr(Bytecode::PopLocal(up_idx, idx))
                     }
@@ -581,7 +582,7 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef) -> Option<Meth
             }
         }
         ast::MethodKind::Operator { rhs } => {
-            ctxt.push_arg(rhs.clone());
+            ctxt.push_arg(rhs.name.clone());
         }
     }
 
@@ -607,7 +608,7 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef) -> Option<Meth
                     let locals = std::mem::take(&mut ctxt.inner.locals);
                     locals
                         .into_iter()
-                        .map(|name| ctxt.intern_symbol(&name))
+                        .map(|identifier| ctxt.intern_symbol(&identifier.name))
                         .collect()
                 };
                 let body = ctxt.inner.body.unwrap_or_default();
@@ -658,7 +659,7 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block) -> Option<Block> {
         let locals = std::mem::take(&mut ctxt.locals);
         locals
             .into_iter()
-            .map(|name| ctxt.intern_symbol(&name))
+            .map(|identifier| ctxt.intern_symbol(&identifier.name))
             .collect()
     };
     let literals = ctxt.literals.into_iter().collect();
@@ -707,7 +708,7 @@ pub fn compile_class(
     locals.extend(
         defn.static_locals
             .iter()
-            .map(|name| interner.intern(name.as_str())),
+            .map(|identifier| interner.intern(identifier.name.as_str())),
     );
 
     let mut static_class_ctxt = ClassGenCtxt {
@@ -786,7 +787,7 @@ pub fn compile_class(
     locals.extend(
         defn.instance_locals
             .iter()
-            .map(|name| interner.intern(name.as_str())),
+            .map(|identifier| interner.intern(identifier.name.as_str())),
     );
 
     let mut instance_class_ctxt = ClassGenCtxt {

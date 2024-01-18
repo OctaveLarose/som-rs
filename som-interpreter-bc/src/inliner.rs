@@ -36,9 +36,9 @@ impl PrimMessageInliner for ast::Expression {
     fn inline_expr(&self, ctxt: &mut dyn InnerGenCtxt, block_expr: &ast::Expression) -> Option<()> {
         match block_expr {
             ast::Expression::Block(block) => {
-                for block_local in &block.locals {
-                    ctxt.push_local(String::from(block_local)); // breaks shadowing
-                }
+                // for block_local in &block.locals {
+                //     ctxt.push_local(block_local); // breaks shadowing
+                // }
 
                 // TODO need to remove those POPs somehow.
                 if let Some((last, rest)) = block.body.exprs.split_last() {

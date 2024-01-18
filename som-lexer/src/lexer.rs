@@ -294,7 +294,7 @@ impl Iterator for Lexer {
                         ident.push(':');
                         Some(Token::Keyword(ident))
                     } else {
-                        Some(Token::Identifier(ident, self.cur_line, self.next_char_idx - 1))
+                        Some(Token::Identifier(ident, self.cur_line, self.next_char_idx))
                     }
                 } else if peeked.is_digit(10) {
                     let iter = self.chars.iter().rev().copied();

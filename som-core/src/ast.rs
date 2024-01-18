@@ -141,8 +141,7 @@ pub enum Expression {
 }
 
 // pub type Identifier = (String, usize, usize);
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IdentifierStruct {
     pub name: String,
     pub line_idx: usize,
@@ -150,10 +149,16 @@ pub struct IdentifierStruct {
 }
 
 impl IdentifierStruct {
-    pub fn get_name(&self) -> String {
+    pub fn get_full_name(&self) -> String {
         // let concatenated_string = format!("{}:{}:{}", &self.name, self.line_idx, self.char_idx);
         // &concatenated_string
-        self.name.to_string() + &self.line_idx.to_string() + &self.char_idx.to_string() // TODO should likely return a ref to a stored name?
+        self.name.to_string() + ":" + &self.line_idx.to_string() + ":" + &self.char_idx.to_string() // TODO should likely return a ref to a stored name?
+    }
+}
+
+impl PartialEq<str> for IdentifierStruct {
+    fn eq(&self, other: &str) -> bool {
+        self.name == other
     }
 }
 
