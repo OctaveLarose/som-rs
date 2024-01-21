@@ -22,7 +22,7 @@ impl Lexer {
             skip_comments: false,
             skip_whitespace: false,
             skip_separator: false,
-            cur_line: 0,
+            cur_line: 1, // 1-indexed
             next_char_idx: 0
         }
     }
@@ -71,6 +71,9 @@ impl Lexer {
         self.chars.pop()?;
         loop {
             let ch = self.chars.pop()?;
+            if ch == '\n' {
+                self.cur_line += 1
+            }
             if ch == '"' {
                 break if self.skip_comments {
                     self.next()
@@ -169,6 +172,7 @@ impl Iterator for Lexer {
     fn next(&mut self) -> Option<Self::Item> {
         let mut iter = self.chars.iter().rev().copied().peekable();
         let peeked = iter.peek().copied()?;
+        self.next_char_idx += 1;
         match peeked {
             '\n' => {
                 self.cur_line += 1;
@@ -177,10 +181,12 @@ impl Iterator for Lexer {
                 self.next()
             },
             _ if peeked.is_whitespace() => {
-                let count = iter.take_while(|c| c.is_whitespace()).count();
+                let mut newlines_count = 0;
+                let count = iter.take_while(|c| { if *c == '\n' { newlines_count += 1} c.is_whitespace()}).count();
                 for _ in 0..count {
                     self.chars.pop()?;
                 }
+                self.cur_line += newlines_count;
                 if self.skip_whitespace {
                     self.next()
                 } else {
@@ -285,6 +291,11 @@ impl Iterator for Lexer {
                         .copied()
                         .take_while(|c| c.is_alphanumeric() || *c == '_')
                         .collect();
+
+                    if ident == "respondsTo" {
+                        dbg!("wow");
+                    }
+
                     let ident_len = ident.chars().count();
                     for _ in 0..ident_len {
                         self.chars.pop()?;
@@ -294,7 +305,7 @@ impl Iterator for Lexer {
                         ident.push(':');
                         Some(Token::Keyword(ident))
                     } else {
-                        Some(Token::Identifier(ident, self.cur_line, self.next_char_idx))
+                        Some(Token::Identifier(ident, self.cur_line, self.next_char_idx - 1))
                     }
                 } else if peeked.is_digit(10) {
                     let iter = self.chars.iter().rev().copied();
