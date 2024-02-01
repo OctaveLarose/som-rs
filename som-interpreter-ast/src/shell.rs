@@ -15,7 +15,7 @@ use som_interpreter_ast::universe::Universe;
 /// Launches an interactive Read-Eval-Print-Loop within the given universe.
 pub fn interactive(_universe: &mut Universe, _verbose: bool) -> Result<(), Error> {
     panic!("I broke the shell and I'm too lazy to fix it but it's definitely doable");
-    
+
     /*let stdin = io::stdin();
     let mut stdin = stdin.lock();
     let stdout = io::stdout();
@@ -81,7 +81,7 @@ pub fn interactive(_universe: &mut Universe, _verbose: bool) -> Result<(), Error
         //     holder: universe.system_class(),
         //     self_value: Value::System,
         // };
-        let nbr_locals = 1; // idk. maybe 0? 
+        let nbr_locals = 1; // idk. maybe 0?
         let nbr_params = 1; // idk
         let output = universe.with_frame(Value::System, nbr_locals, nbr_params,|universe| {
             // todo: by removing bindings, i likely broke the shell. but i don't really care about the shell, so i'll fix it way later.

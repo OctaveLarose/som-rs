@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use som_core::ast;
 use som_core::ast::MethodBody;
 
@@ -9,7 +7,6 @@ use crate::frame::Frame;
 use crate::method::{Method, MethodKind};
 use crate::universe::Universe;
 use crate::value::Value;
-use crate::SOMRef;
 
 /// Represents the kinds of possible returns from an invocation.
 #[derive(Debug)]
@@ -17,7 +14,7 @@ pub enum Return {
     /// A local return, the value is for the immediate caller.
     Local(Value),
     /// A non-local return, the value is for the parent of the referenced stack frame.
-    NonLocal(Value, SOMRef<Frame>),
+    NonLocal(Value, *mut Frame),
     /// An exception, expected to bubble all the way up.
     Exception(String),
     /// A request to restart execution from the top of the closest body.
@@ -27,26 +24,12 @@ pub enum Return {
 /// The trait for invoking methods and primitives.
 pub trait Invoke {
     /// Invoke within the given universe and with the given arguments.
-    fn invoke(&self, universe: &mut Universe, args: Vec<Value>) -> Return;
+    fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return;
 }
 
 impl Invoke for Method {
-    fn invoke(&self, universe: &mut Universe, args: Vec<Value>) -> Return {
-        // println!("--- Invoking \"{:1}\" ({:2})", &self.signature, &self.holder.upgrade().unwrap().borrow().name);
-        // println!("--- ...with args: {:?}", &args);
-        //
-        //
-        // if !universe.frames.is_empty() {
-        //     match &universe.current_method_frame().as_ref().borrow().kind {
-        //         FrameKind::Block { .. } => {}
-        //         FrameKind::Method { signature, holder, .. } => {
-        //             println!("We're in {:?} ({:?})", universe.lookup_symbol(signature.clone()),
-        //                      holder.borrow().name)
-        //         }
-        //     }
-        // }
-
-        let output = match self.kind() {
+    fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return {
+        let output = match &mut self.kind {
             MethodKind::Defined(method) => {
                 let nbr_params = args.len();
 
@@ -60,7 +43,15 @@ impl Invoke for Method {
                     };
                     (receiver, iter.collect::<Vec<_>>())
                 };
-
+                // let holder = match self.holder.upgrade() {
+                //     Some(holder) => holder,
+                //     None => {
+                //         return Return::Exception(
+                //             "cannot invoke this method because its holder has been collected"
+                //                 .to_string(),
+                //         );
+                //     }
+                // };
                 let nbr_locals = match &method.body {
                     MethodBody::Body { locals_nbr, .. } => *locals_nbr,
                     MethodBody::Primitive => unreachable!()
@@ -95,86 +86,65 @@ impl Invoke for Method {
 }
 
 impl Invoke for ast::GenericMethodDef {
-    fn invoke(&self, universe: &mut Universe, args: Vec<Value>) -> Return {
+    fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return {
         let current_frame = universe.current_frame().clone();
-        // if &self.signature == "initialize:" {
-        //     dbg!(&self.body);
-        // std::process::exit(1);
-        // }
-        // if self.signature == "link" {
-        //     dbg!(&self.body);
-        // }
-
-
-        match &self.kind {
-            ast::MethodKind::Unary => {}
-            ast::MethodKind::Positional { .. } => current_frame
-                .borrow_mut()
-                .params
-                .extend(args),
-            ast::MethodKind::Operator { .. } => {
-                let rhs_value = match args.into_iter().next() {
-                    Some(value) => value,
-                    None => {
-                        // This should never happen in theory (the parser would have caught the missing rhs).
-                        return Return::Exception(format!(
-                            "no right-hand side for operator call ?"
-                        ));
-                    }
-                };
-                current_frame
-                    .borrow_mut()
-                    .params
-                    .push(rhs_value);
-            }
-        }
-        match &self.body {
-            ast::MethodBody::Body { body, .. } => {
-                loop {
-                    match body.evaluate(universe) {
-                        Return::NonLocal(value, frame) => {
-                            if Rc::ptr_eq(&current_frame, &frame) {
-                                break Return::Local(value);
-                            } else {
-                                break Return::NonLocal(value, frame);
-                            }
+        unsafe {
+            match &self.kind {
+                ast::MethodKind::Unary => {}
+                ast::MethodKind::Positional { .. } => (*current_frame).params.extend(args),
+                ast::MethodKind::Operator { .. } => {
+                    let rhs_value = match args.into_iter().next() {
+                        Some(value) => value,
+                        None => {
+                            // This should never happen in theory (the parser would have caught the missing rhs).
+                            return Return::Exception(format!(
+                                "no right-hand side for operator call ?"
+                            ));
                         }
-                        Return::Local(_) => break Return::Local(current_frame.borrow().get_self()),
-                        Return::Exception(msg) => break Return::Exception(msg),
-                        Return::Restart => continue,
-                    }
+                    };
+                    (*current_frame).params.push(rhs_value);
                 }
             }
-            ast::MethodBody::Primitive => Return::Exception(format!(
-                "unimplemented primitive: {}>>#{}",
-                current_frame
-                    .borrow()
-                    .get_self()
-                    .class(universe)
-                    .borrow()
-                    .name(),
-                self.signature,
-            )),
+            match &mut self.body {
+                ast::MethodBody::Body { body, .. } => {
+                    // (*current_frame)
+                    //     .bindings
+                    //     .extend(locals.iter().cloned().zip(std::iter::repeat(Value::Nil)));
+                    loop {
+                        match body.evaluate(universe) {
+                            Return::NonLocal(value, frame) => {
+                                if std::ptr::eq(current_frame, frame) {
+                                    break Return::Local(value);
+                                } else {
+                                    break Return::NonLocal(value, frame);
+                                }
+                            }
+                            Return::Local(_) => break Return::Local((*current_frame).get_self()),
+                            Return::Exception(msg) => break Return::Exception(msg),
+                            Return::Restart => continue,
+                        }
+                    }
+                }
+                ast::MethodBody::Primitive => Return::Exception(format!(
+                    "unimplemented primitive: {}>>#{}",
+                    (*current_frame)
+                        .get_self()
+                        .class(universe)
+                        .borrow()
+                        .name(),
+                    self.signature,
+                )),
+            }
         }
     }
 }
 
 impl Invoke for Block {
-    fn invoke(&self, universe: &mut Universe, args: Vec<Value>) -> Return {
-        // println!("Invoking a block.");
-        // println!("--- ...with args: {:?}", &args);
-
-        // dbg!(&self.block.body);
-
-        let current_frame = universe.current_frame();
-        current_frame.borrow_mut().params.extend(args);
-
-        // dbg!(&current_frame.borrow_mut().params);
-        // dbg!(&self.block.parameters);
-        // dbg!("--");
-
-        let l = self.block.body.evaluate(universe);
-        // println!("...exiting a block.");
-        l
+    fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return {
+        unsafe {
+            let current_frame = universe.current_frame();
+            (*current_frame).params.extend(args);
+            self.block.body.evaluate(universe)
+        }
     }
 }

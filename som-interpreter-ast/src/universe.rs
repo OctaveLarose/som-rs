@@ -483,12 +483,14 @@ impl Universe {
     }
 
     /// Get the current frame.
-    pub fn current_frame(&self) -> &SOMRef<Frame> {
-        self.frames.last().expect("no frames left")
+    pub fn current_frame(&self) -> *mut Frame {
+        // self.frames.last().expect("no frames left")
+        let f = self.frames.last().expect("no frames left");
+        f.as_ptr()
     }
 
     /// Get the method invocation frame for the current frame.
-    pub fn current_method_frame(&self) -> SOMRef<Frame> {
+    pub unsafe fn current_method_frame(&self) -> *mut Frame {
         Frame::method_frame(self.current_frame())
     }
 
@@ -502,23 +504,36 @@ impl Universe {
         self.interner.lookup(symbol)
     }
 
+/*    /// Search for a local binding.
+    pub unsafe fn lookup_local(&self, name: impl AsRef<str>) -> Option<Value> {
+        let name = name.as_ref();
+        match name {
+            "self" | "super" => unsafe {
+                let frame = self.current_frame();
+                let self_value = (*frame).get_self();
+                Some(self_value)
+            }
+            name => (*self.current_frame()).lookup_local(name),
+        }
+    }*/
+
     /// Search for a local binding.
-    pub fn lookup_local(&self, idx: usize) -> Option<Value> {
-        self.current_frame().borrow().lookup_local(idx)
+    pub unsafe fn lookup_local(&self, idx: usize) -> Option<Value> {
+        (*self.current_frame()).lookup_local(idx)
     }
 
     /// Look up a variable we know to have been defined in another scope.
-    pub fn lookup_non_local(&self, idx: usize, target_scope: usize) -> Option<Value> {
-        self.current_frame().borrow().lookup_non_local(idx, target_scope)
+    pub unsafe fn lookup_non_local(&self, idx: usize, target_scope: usize) -> Option<Value> {
+        (*self.current_frame()).lookup_non_local(idx, target_scope)
     }
 
     /// Look up a field.
-    pub fn lookup_field(&self, idx: usize) -> Option<Value> {
-        self.current_frame().borrow().lookup_field(idx)
+    pub unsafe fn lookup_field(&self, idx: usize) -> Option<Value> {
+        (*self.current_frame()).lookup_field(idx)
     }
 
-    pub fn lookup_arg(&self, idx: usize, scope: usize) -> Option<Value> {
-        self.current_frame().borrow().lookup_arg(idx, scope)
+    pub unsafe fn lookup_arg(&self, idx: usize, scope: usize) -> Option<Value> {
+        (*self.current_frame()).lookup_arg(idx, scope)
     }
 
     /// Returns whether a global binding of the specified name exists.
@@ -534,20 +549,20 @@ impl Universe {
     }
 
     /// Assign a value to a local binding.
-    pub fn assign_local(&mut self, idx: usize, value: &Value) -> Option<()> {
-        self.current_frame().borrow_mut().assign_local(idx, value)
+    pub unsafe fn assign_local(&mut self, idx: usize, value: &Value) -> Option<()> {
+        (*self.current_frame()).assign_local(idx, value)
     }
 
-    pub fn assign_non_local(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
-        self.current_frame().borrow_mut().assign_non_local(idx, scope, value)
+    pub unsafe fn assign_non_local(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
+        (*self.current_frame()).assign_non_local(idx, scope, value)
     }
 
-    pub fn assign_field(&mut self, idx: usize, value: &Value) -> Option<()> {
-        self.current_frame().borrow_mut().assign_field(idx, value)
+    pub unsafe fn assign_field(&mut self, idx: usize, value: &Value) -> Option<()> {
+        (*self.current_frame()).assign_field(idx, value)
     }
 
-    pub fn assign_arg(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
-        self.current_frame().borrow_mut().assign_arg(idx, scope, value)
+    pub unsafe fn assign_arg(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
+        (*self.current_frame()).assign_arg(idx, scope, value)
     }
 
     /// Assign a value to a global binding.
@@ -560,14 +575,15 @@ impl Universe {
 
 impl Universe {
     /// Call `escapedBlock:` on the given value, if it is defined.
-    pub fn escaped_block(&mut self, value: Value, block: Rc<Block>) -> Option<Return> {
-        let initialize = value.lookup_method(self, "escapedBlock:")?;
+    pub fn escaped_block(&mut self, _value: Value, _block: SOMRef<Block>) -> Option<Return> {
+        todo!()
+        // let initialize = value.lookup_method(self, "escapedBlock:")?;
 
-        Some(initialize.invoke(self, vec![value, Value::Block(block)]))
+        // Some(initialize.clone().borrow_mut().invoke(self, vec![value, Value::Block(block)]))
     }
 
     /// Call `doesNotUnderstand:` on the given value, if it is defined.
-    pub fn does_not_understand(
+    pub unsafe fn does_not_understand(
         &mut self,
         _value: Value,
         symbol: impl AsRef<str>,
@@ -584,11 +600,11 @@ impl Universe {
     }
 
     /// Call `unknownGlobal:` on the given value, if it is defined.
-    pub fn unknown_global(&mut self, value: Value, name: impl AsRef<str>) -> Option<Return> {
+    pub unsafe fn unknown_global(&mut self, value: Value, name: impl AsRef<str>) -> Option<Return> {
         let sym = self.intern_symbol(name.as_ref());
         let method = value.lookup_method(self, "unknownGlobal:")?;
 
-        match method.invoke(self, vec![value, Value::Symbol(sym)]) {
+        match (*method.clone()).invoke(self, vec![value, Value::Symbol(sym)]) {
             Return::Local(value) | Return::NonLocal(value, _) => Some(Return::Local(value)),
             Return::Exception(err) => Some(Return::Exception(format!(
                 "(from 'System>>#unknownGlobal:') {}",
@@ -605,7 +621,7 @@ impl Universe {
         let initialize = Value::System.lookup_method(self, "initialize:")?;
         let args = Value::Array(Rc::new(RefCell::new(args)));
 
-        Some(initialize.invoke(self, vec![Value::System, args]))
+        unsafe { Some((*initialize.clone()).invoke(self, vec![Value::System, args])) }
     }
 }
 

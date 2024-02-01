@@ -88,8 +88,8 @@ fn perform(universe: &mut Universe, args: Vec<Value>) -> Return {
     let method = object.lookup_method(universe, signature);
 
     match method {
-        Some(invokable) => invokable.invoke(universe, vec![object]),
-        None => {
+        Some(invokable) => unsafe { (*invokable).invoke(universe, vec![object]) },
+        None => unsafe {
             let signature = signature.to_string();
             universe
                 .does_not_understand(object.clone(), signature.as_str(), vec![object.clone()])
@@ -119,13 +119,13 @@ fn perform_with_arguments(universe: &mut Universe, args: Vec<Value>) -> Return {
     let method = object.lookup_method(universe, signature);
 
     match method {
-        Some(invokable) => {
+        Some(invokable) => unsafe {
             let args = std::iter::once(object)
                 .chain(arr.replace(Vec::default()).into_iter())
                 .collect();
-            invokable.invoke(universe, args)
+            (*invokable).invoke(universe, args)
         }
-        None => {
+        None => unsafe {
             let signature = signature.to_string();
             let args = std::iter::once(object.clone())
                 .chain(arr.replace(Vec::default()).into_iter())
@@ -157,22 +157,24 @@ fn perform_in_super_class(universe: &mut Universe, args: Vec<Value>) -> Return {
     let signature = universe.lookup_symbol(sym);
     let method = class.borrow().lookup_method(signature);
 
-    match method {
-        Some(invokable) => invokable.invoke(universe, vec![object]),
-        None => {
-            let signature = signature.to_string();
-            let args = vec![object.clone()];
-            universe
-                .does_not_understand(Value::Class(class), signature.as_str(), args)
-                .unwrap_or_else(|| {
-                    Return::Exception(format!(
-                        "'{}': method '{}' not found for '{}'",
-                        SIGNATURE,
-                        signature,
-                        object.to_string(universe)
-                    ))
-                    // Return::Local(Value::Nil)
-                })
+    unsafe {
+        match method {
+            Some(invokable) => (*invokable).invoke(universe, vec![object]),
+            None => {
+                let signature = signature.to_string();
+                let args = vec![object.clone()];
+                universe
+                    .does_not_understand(Value::Class(class), signature.as_str(), args)
+                    .unwrap_or_else(|| {
+                        Return::Exception(format!(
+                            "'{}': method '{}' not found for '{}'",
+                            SIGNATURE,
+                            signature,
+                            object.to_string(universe)
+                        ))
+                        // Return::Local(Value::Nil)
+                    })
+            }
         }
     }
 }
@@ -190,29 +192,31 @@ fn perform_with_arguments_in_super_class(universe: &mut Universe, args: Vec<Valu
     let signature = universe.lookup_symbol(sym);
     let method = class.borrow().lookup_method(signature);
 
-    match method {
-        Some(invokable) => {
-            let args = std::iter::once(object)
-                .chain(arr.replace(Vec::default()).into_iter())
-                .collect();
-            invokable.invoke(universe, args)
-        }
-        None => {
-            let args = std::iter::once(object.clone())
-                .chain(arr.replace(Vec::default()).into_iter())
-                .collect();
-            let signature = signature.to_string();
-            universe
-                .does_not_understand(Value::Class(class), signature.as_str(), args)
-                .unwrap_or_else(|| {
-                    Return::Exception(format!(
-                        "'{}': method '{}' not found for '{}'",
-                        SIGNATURE,
-                        signature,
-                        object.to_string(universe)
-                    ))
-                    // Return::Local(Value::Nil)
-                })
+    unsafe {
+        match method {
+            Some(invokable) => {
+                let args = std::iter::once(object)
+                    .chain(arr.replace(Vec::default()).into_iter())
+                    .collect();
+                (*invokable).invoke(universe, args)
+            }
+            None => {
+                let args = std::iter::once(object.clone())
+                    .chain(arr.replace(Vec::default()).into_iter())
+                    .collect();
+                let signature = signature.to_string();
+                universe
+                    .does_not_understand(Value::Class(class), signature.as_str(), args)
+                    .unwrap_or_else(|| {
+                        Return::Exception(format!(
+                            "'{}': method '{}' not found for '{}'",
+                            SIGNATURE,
+                            signature,
+                            object.to_string(universe)
+                        ))
+                        // Return::Local(Value::Nil)
+                    })
+            }
         }
     }
 }

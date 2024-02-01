@@ -7,7 +7,7 @@ use crate::value::Value;
 pub struct IfTrueIfFalseNode {}
 
 impl Invoke for IfTrueIfFalseNode {
-    fn invoke(&self, universe: &mut Universe, args: Vec<Value>) -> Return {
+    fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return {
         let cond_block_val = args.get(0).unwrap();
         let body_block_arg = args.get(1).unwrap();
         let body_block_arg2 = args.get(2).unwrap();
@@ -30,9 +30,9 @@ impl Invoke for IfTrueIfFalseNode {
                 Value::Block(b) => {
                     universe.with_frame(
                         Value::Block(Rc::clone(&b)),
-                        b.block.nbr_locals,
+                        b.borrow().block.nbr_locals,
                         0,
-                        |universe| b.invoke(universe, vec![]),
+                        |universe| b.borrow_mut().invoke(universe, vec![]),
                     )
                 },
                 a => Return::Local(a.clone()),
@@ -43,9 +43,9 @@ impl Invoke for IfTrueIfFalseNode {
                 Value::Block(b) => {
                     universe.with_frame(
                         Value::Block(Rc::clone(&b)),
-                        b.block.nbr_locals,
+                        b.borrow().block.nbr_locals,
                         0,
-                        |universe| b.invoke(universe, vec![]),
+                        |universe| b.borrow_mut().invoke(universe, vec![]),
                     )
                 },
                 a => Return::Local(a.clone()),

@@ -10,7 +10,7 @@ pub struct WhileNode {
 }
 
 impl Invoke for WhileNode {
-    fn invoke(&self, universe: &mut Universe, args: Vec<Value>) -> Return {
+    fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return {
         let cond_block_val = args.get(0).unwrap();
         let body_block_arg = args.get(1).unwrap();
 
@@ -22,9 +22,9 @@ impl Invoke for WhileNode {
         loop {
             let cond_block_return = universe.with_frame(
                 Value::Block(Rc::clone(&cond_block)),
-                cond_block.block.nbr_locals,
+                cond_block.borrow().block.nbr_locals,
                 0,
-                |universe| cond_block.invoke(universe, vec![]),
+                |universe| cond_block.borrow_mut().invoke(universe, vec![]),
             );
 
             let bool_val = match cond_block_return {
@@ -37,9 +37,9 @@ impl Invoke for WhileNode {
             } else {
                 let ret_val = universe.with_frame(
                     Value::Block(Rc::clone(&body_block)),
-                    body_block.block.nbr_locals,
+                    body_block.borrow().block.nbr_locals,
                     0,
-                    |universe| body_block.invoke(universe, vec![]),
+                    |universe| body_block.borrow_mut().invoke(universe, vec![]),
                 );
 
                 match ret_val {

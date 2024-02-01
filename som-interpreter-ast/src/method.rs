@@ -8,10 +8,18 @@ use crate::specialized::while_node::WhileNode;
 use crate::specialized::if_node::IfNode;
 use crate::specialized::if_true_if_false_node::IfTrueIfFalseNode;
 
+// #[derive(Clone)]
+// pub struct MethodEnv {
+//     pub ast: ast::MethodDef,
+//     pub inline_cache: Vec<Option<(*const Class, SOMRef<Method>)>>
+//     // pub inline_cache: RefCell<Vec<Option<(*const Class, SOMRef<Method>)>>>
+// }
+
 /// The kind of a class method.
 #[derive(Clone)]
 pub enum MethodKind {
     /// A user-defined method from the AST.
+    // Defined(MethodEnv),
     Defined(ast::GenericMethodDef),
     /// An interpreter primitive.
     Primitive(PrimitiveFn),

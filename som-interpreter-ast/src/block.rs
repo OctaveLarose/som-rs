@@ -8,12 +8,21 @@ use crate::universe::Universe;
 use crate::SOMRef;
 
 /// Represents an executable block.
-#[derive(Clone)]
 pub struct Block {
     /// Reference to the captured stack frame.
-    pub frame: SOMRef<Frame>,
+    pub frame: *mut Frame,
     /// Block definition from the AST.
     pub block: ast::Block
+}
+
+impl Clone for Block {
+    fn clone(&self) -> Self {
+        todo!()
+    }
+
+    fn clone_from(&mut self, _source: &Self) {
+        todo!()
+    }
 }
 
 impl Block {

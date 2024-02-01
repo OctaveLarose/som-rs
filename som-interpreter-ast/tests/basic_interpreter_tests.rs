@@ -165,7 +165,7 @@ fn basic_interpreter_tests() {
             "could not fully tokenize test expression"
         );
 
-        let ast = som_parser::apply(lang::expression(), tokens.as_slice()).unwrap();
+        let mut ast = som_parser::apply(lang::expression(), tokens.as_slice()).unwrap();
 
         // let signature = universe.intern_symbol(expr.split(' ').skip(1).next().unwrap_or("unknown"));
 

@@ -25,15 +25,16 @@ pub mod block1 {
         // let block_self = block.frame.borrow().get_self();
         let block_self = Value::Block(block.clone());
         let block_args = vec![];
+        let nbr_locals = block.borrow().block.nbr_locals;
 
         universe.with_frame(
             // FrameKind::Block {
             //     block: block.clone(),
             // },
             block_self,
-            block.block.nbr_locals,
+            nbr_locals,
             1,
-            |universe| block.invoke(universe, block_args),
+            |universe| block.borrow_mut().invoke(universe, block_args),
         )
     }
 
@@ -79,15 +80,17 @@ pub mod block2 {
 
         let block_self = Value::Block(block.clone());
         let block_args = Vec::from([a]);
+        
+        let nbr_locals = block.borrow().block.nbr_locals;
 
         universe.with_frame(
             // FrameKind::Block {
             //     block: block.clone(),
             // },
             block_self,
-            block.block.nbr_locals,
+            nbr_locals,
             2,
-            |universe| block.invoke(universe, block_args),
+            |universe| block.borrow_mut().invoke(universe, block_args),
         )
     }
 
@@ -129,14 +132,16 @@ pub mod block3 {
         let block_self = Value::Block(block.clone());
         let block_args = Vec::from([a, b]);
 
+        let nbr_locals = block.borrow().block.nbr_locals;
+        
         universe.with_frame(
             // FrameKind::Block {
             //     block: block.clone(),
             // },
             block_self,
-            block.block.nbr_locals,
+            nbr_locals,
             3,
-            |universe| block.invoke(universe, block_args),
+            |universe| block.borrow_mut().invoke(universe, block_args),
         )
     }
 

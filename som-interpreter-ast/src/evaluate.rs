@@ -20,137 +20,134 @@ macro_rules! propagate {
 /// The trait for evaluating AST nodes.
 pub trait Evaluate {
     /// Evaluate the node within a given universe.
-    fn evaluate(&self, universe: &mut Universe) -> Return;
+    fn evaluate(&mut self, universe: &mut Universe) -> Return;
 }
 
 impl Evaluate for ast::Expression {
-    fn evaluate(&self, universe: &mut Universe) -> Return {
-        match self {
-            Self::LocalVarWrite(idx, expr) => {
-                // TODO: this doesn't call the fastest path for evaluate, still has to dispatch the right expr even though it's always a var write. potential minor speedup there
-                let value = propagate!(expr.evaluate(universe));
-                universe.assign_local(*idx, &value)
-                    .map(|_| Return::Local(value))
-                    .unwrap_or_else(||
-                        Return::Exception(format!("local var write: idx '{}' not found", idx)))
-            },
-            Self::NonLocalVarWrite(scope, idx, expr) => {
-                let value = propagate!(expr.evaluate(universe));
-                universe.assign_non_local(*idx, *scope, &value)
-                    .map(|_| Return::Local(value))
-                    .unwrap_or_else(||
-                        Return::Exception(format!("non local var write: idx '{}' not found", idx)))
-            },
-            Self::FieldWrite(idx, expr) => {
-                let value = propagate!(expr.evaluate(universe));
-                universe.assign_field(*idx, &value)
-                    .map(|_| Return::Local(value))
-                    .unwrap_or_else(||
-                        Return::Exception(format!("field write: idx '{}' not found", idx)))
-            },
-            Self::ArgWrite(scope, idx, expr) => {
-                let value = propagate!(expr.evaluate(universe));
-                universe.assign_arg(*idx, *scope, &value)
-                    .map(|_| Return::Local(value))
-                    .unwrap_or_else(||
-                        Return::Exception(format!("arg write: idx '{}', scope '{}' not found", idx, scope)))
-            },
-            Self::GlobalWrite(name, expr) => {
-                let value = propagate!(expr.evaluate(universe));
-                universe.assign_global(name, &value)
-                    .map(|_| Return::Local(value))
-                    .unwrap_or_else(|| {
-                        Return::Exception(format!("global variable '{}' not found to assign to", name))
-                    })
-            },
-            Self::BinaryOp(bin_op) => bin_op.evaluate(universe),
-            Self::Block(blk) => blk.evaluate(universe),
-            Self::Exit(expr, _scope) => {
-                let value = propagate!(expr.evaluate(universe));
-                let frame = universe.current_method_frame();
-                let has_not_escaped = universe
-                    .frames
-                    .iter()
-                    .rev()
-                    .any(|live_frame| Rc::ptr_eq(&live_frame, &frame));
-                if has_not_escaped {
-                    Return::NonLocal(value, frame)
-                    // todo i thought this code would work, but it doesn't! can and should be fixed.
-                    // match scope {
-                    //     0 => Return::Local(value),
-                    //     _ => Return::NonLocal(value, frame)
-                    // }
-                } else {
-                    // Block has escaped its method frame.
-                    let instance = frame.borrow().get_self();
-                    let frame = universe.current_frame();
-                    let block = match frame.borrow().params.get(0) {
-                        Some(Value::Block(b)) => b.clone(),
-                        _ => {
-                            // Should never happen, because `universe.current_frame()` would
-                            // have been equal to `universe.current_method_frame()`.
-                            return Return::Exception(format!(
-                                "A method frame has escaped itself ??"
-                            ));
-                        }
-                    };
-                    universe.escaped_block(instance, block).unwrap_or_else(|| {
-                        // TODO: should we call `doesNotUnderstand:` here ?
-                        Return::Exception(
-                            "A block has escaped and `escapedBlock:` is not defined on receiver"
-                                .to_string(),
-                        )
-                    })
+    fn evaluate(&mut self, universe: &mut Universe) -> Return {
+        unsafe {
+            match self {
+                Self::LocalVarWrite(idx, expr) => {
+                    // TODO: this doesn't call the fastest path for evaluate, still has to dispatch the right expr even though it's always a var write. potential minor speedup there
+                    let value = propagate!(expr.evaluate(universe));
+                    universe.assign_local(*idx, &value)
+                        .map(|_| Return::Local(value))
+                        .unwrap_or_else(||
+                            Return::Exception(format!("local var write: idx '{}' not found", idx)))
+                },
+                Self::NonLocalVarWrite(scope, idx, expr) => {
+                    let value = propagate!(expr.evaluate(universe));
+                    universe.assign_non_local(*idx, *scope, &value)
+                        .map(|_| Return::Local(value))
+                        .unwrap_or_else(||
+                            Return::Exception(format!("non local var write: idx '{}' not found", idx)))
+                },
+                Self::FieldWrite(idx, expr) => {
+                    let value = propagate!(expr.evaluate(universe));
+                    universe.assign_field(*idx, &value)
+                        .map(|_| Return::Local(value))
+                        .unwrap_or_else(||
+                            Return::Exception(format!("field write: idx '{}' not found", idx)))
+                },
+                Self::ArgWrite(scope, idx, expr) => {
+                    let value = propagate!(expr.evaluate(universe));
+                    universe.assign_arg(*idx, *scope, &value)
+                        .map(|_| Return::Local(value))
+                        .unwrap_or_else(||
+                            Return::Exception(format!("arg write: idx '{}', scope '{}' not found", idx, scope)))
+                },
+                Self::GlobalWrite(name, expr) => {
+                    let value = propagate!(expr.evaluate(universe));
+                    universe.assign_global(&name, &value)
+                        .map(|_| Return::Local(value))
+                        .unwrap_or_else(|| {
+                            Return::Exception(format!("global variable '{}' not found to assign to", name))
+                        })
+                },
+                Self::BinaryOp(bin_op) => bin_op.evaluate(universe),
+                Self::Block(blk) => blk.evaluate(universe),
+                Self::Exit(expr, _scope) => {
+                    let value = propagate!(expr.evaluate(universe));
+                    let frame = universe.current_method_frame();
+                    let has_not_escaped = universe
+                        .frames
+                        .iter()
+                        .rev()
+                        .any(|live_frame| std::ptr::eq(live_frame.as_ptr(), frame));
+                    if has_not_escaped {
+                        Return::NonLocal(value, frame)
+                    } else {
+                        // Block has escaped its method frame.
+                        let instance = (*frame).get_self();
+                        let frame = universe.current_frame();
+                        let block = match (*frame).params.get(0) {
+                            Some(Value::Block(b)) => b.clone(),
+                            _ => {
+                                // Should never happen, because `universe.current_frame()` would
+                                // have been equal to `universe.current_method_frame()`.
+                                return Return::Exception(format!(
+                                    "A method frame has escaped itself ??"
+                                ));
+                            }
+                        };
+                        universe.escaped_block(instance, block).unwrap_or_else(|| {
+                            // TODO: should we call `doesNotUnderstand:` here ?
+                            Return::Exception(
+                                "A block has escaped and `escapedBlock:` is not defined on receiver"
+                                    .to_string(),
+                            )
+                        })
+                    }
                 }
+                Self::Literal(literal) => literal.evaluate(universe),
+                Self::LocalVarRead(idx) => {
+                    universe.lookup_local(*idx)
+                        .map(|v| Return::Local(v.clone()))
+                        .unwrap_or_else(||
+                            Return::Exception(format!("local var read: idx '{}' not found", idx)))
+                },
+                Self::NonLocalVarRead(scope, idx) => {
+                    universe.lookup_non_local(*idx, *scope)
+                        .map(Return::Local)
+                        .unwrap_or_else(|| {
+                            Return::Exception(format!("non local var read: idx '{}' not found", idx))
+                        })
+                },
+                Self::FieldRead(idx) => {
+                    universe.lookup_field(*idx)
+                        .map(Return::Local)
+                        .unwrap_or_else(|| {
+                            Return::Exception(format!("field read: idx '{}' not found", idx))
+                        })
+                },
+                Self::ArgRead(scope, idx) => {
+                    universe.lookup_arg(*idx, *scope)
+                        .map(Return::Local)
+                        .unwrap_or_else(|| {
+                            Return::Exception(format!("arg read: idx '{}', scope '{}' not found", idx, scope))
+                        })
+                },
+                Self::GlobalRead(name) => universe.lookup_global(&name)
+                    .map(Return::Local)
+                    .or_else(|| {
+                        let frame = universe.current_frame();
+                        let self_value = (*frame).get_self();
+                        universe.unknown_global(self_value, name.as_str())
+                    })
+                    .unwrap_or_else(|| Return::Exception(format!("global variable '{}' not found", name))),
+                Self::Message(msg) => msg.evaluate(universe),
             }
-            Self::Literal(literal) => literal.evaluate(universe),
-            Self::LocalVarRead(idx) => {
-                universe.lookup_local(*idx)
-                    .map(|v| Return::Local(v.clone()))
-                    .unwrap_or_else(||
-                        Return::Exception(format!("local var read: idx '{}' not found", idx)))
-            },
-            Self::NonLocalVarRead(scope, idx) => {
-                universe.lookup_non_local(*idx, *scope)
-                    .map(Return::Local)
-                    .unwrap_or_else(|| {
-                        Return::Exception(format!("non local var read: idx '{}' not found", idx))
-                    })
-            },
-            Self::FieldRead(idx) => {
-                universe.lookup_field(*idx)
-                    .map(Return::Local)
-                    .unwrap_or_else(|| {
-                        Return::Exception(format!("field read: idx '{}' not found", idx))
-                    })
-            },
-            Self::ArgRead(scope, idx) => {
-                universe.lookup_arg(*idx, *scope)
-                    .map(Return::Local)
-                    .unwrap_or_else(|| {
-                        Return::Exception(format!("arg read: idx '{}', scope '{}' not found", idx, scope))
-                    })
-            },
-            Self::GlobalRead(name) => universe.lookup_global(name)
-                .map(Return::Local)
-                .or_else(|| {
-                    let frame = universe.current_frame();
-                    let self_value = frame.borrow().get_self();
-                    universe.unknown_global(self_value, name.as_str())
-                })
-                .unwrap_or_else(|| Return::Exception(format!("global variable '{}' not found", name))),
-            Self::Message(msg) => msg.evaluate(universe),
         }
     }
 }
 
 impl Evaluate for ast::BinaryOp {
-    fn evaluate(&self, universe: &mut Universe) -> Return {
-        let (lhs, invokable) = match self.lhs.as_ref() {
-            ast::Expression::GlobalRead(ident) if ident == "super" => {
+    fn evaluate(&mut self, universe: &mut Universe) -> Return {
+        let (lhs, invokable) = match self.lhs.as_mut() {
+            ast::Expression::GlobalRead(ident) if ident == "super" => unsafe {
                 let frame = universe.current_frame();
-                let lhs = frame.borrow().get_self();
-                let holder = frame.borrow().get_method_holder();
+                let lhs = (*frame).get_self();
+                let holder = (*frame).get_method_holder();
                 let super_class = match holder.borrow().super_class() {
                     Some(class) => class,
                     None => {
@@ -178,24 +175,26 @@ impl Evaluate for ast::BinaryOp {
         // );
 
         if let Some(invokable) = invokable {
-            invokable.invoke(universe, vec![lhs, rhs])
+            unsafe { (*invokable).invoke(universe, vec![lhs, rhs]) }
         } else {
-            universe
-                .does_not_understand(lhs.clone(), &self.op, vec![rhs])
-                .unwrap_or_else(|| {
-                    Return::Exception(format!(
-                        "could not find method '{}>>#{}'",
-                        lhs.class(universe).borrow().name(),
-                        self.op
-                    ))
-                    // Return::Local(Value::Nil)
-                })
+            unsafe {
+                universe
+                    .does_not_understand(lhs.clone(), &self.op, vec![rhs])
+                    .unwrap_or_else(|| {
+                        Return::Exception(format!(
+                            "could not find method '{}>>#{}'",
+                            lhs.class(universe).borrow().name(),
+                            self.op
+                        ))
+                        // Return::Local(Value::Nil)
+                    })
+            }
         }
     }
 }
 
 impl Evaluate for ast::Literal {
-    fn evaluate(&self, universe: &mut Universe) -> Return {
+    fn evaluate(&mut self, universe: &mut Universe) -> Return {
         match self {
             Self::Array(array) => {
                 let mut output = Vec::with_capacity(array.len());
@@ -218,25 +217,25 @@ impl Evaluate for ast::Literal {
 }
 
 impl Evaluate for ast::Term {
-    fn evaluate(&self, universe: &mut Universe) -> Return {
+    fn evaluate(&mut self, universe: &mut Universe) -> Return {
         self.body.evaluate(universe)
     }
 }
 
 impl Evaluate for ast::Block {
-    fn evaluate(&self, universe: &mut Universe) -> Return {
+    fn evaluate(&mut self, universe: &mut Universe) -> Return {
         let frame = universe.current_frame();
         // TODO: avoid cloning the whole block's AST.
-        Return::Local(Value::Block(Rc::new(Block {
+        Return::Local(Value::Block(Rc::new(RefCell::new(Block {
             block: self.clone(),
-            frame: frame.clone(),
-        })))
+            frame,
+        }))))
     }
 }
 
 impl Evaluate for ast::Message {
-    fn evaluate(&self, universe: &mut Universe) -> Return {
-        let (receiver, invokable) = match self.receiver.as_ref() {
+    fn evaluate(&mut self, universe: &mut Universe) -> Return {
+        let (receiver, invokable) = match self.receiver.as_mut() {
             // ast::Expression::Reference(ident) if ident == "self" => {
             //     let frame = universe.current_frame();
             //     let receiver = frame.borrow().get_self();
@@ -244,10 +243,10 @@ impl Evaluate for ast::Message {
             //     let invokable = holder.borrow().lookup_method(&self.signature);
             //     (receiver, invokable)
             // }
-            ast::Expression::GlobalRead(ident) if ident == "super" => {
+            ast::Expression::GlobalRead(ident) if ident == "super" => unsafe {
                 let frame = universe.current_frame();
-                let receiver = frame.borrow().get_self();
-                let holder = frame.borrow().get_method_holder();
+                let receiver = (*frame).get_self();
+                let holder = (*frame).get_method_holder();
                 let super_class = match holder.borrow().super_class() {
                     Some(class) => class,
                     None => {
@@ -268,7 +267,7 @@ impl Evaluate for ast::Message {
         let args = {
             let mut output = Vec::with_capacity(self.values.len() + 1);
             output.push(receiver.clone());
-            for expr in &self.values {
+            for expr in &mut self.values {
                 let value = propagate!(expr.evaluate(universe));
                 output.push(value);
             }
@@ -283,8 +282,8 @@ impl Evaluate for ast::Message {
         // );
 
         let value = match invokable {
-            Some(invokable) => invokable.invoke(universe, args),
-            None => {
+            Some(invokable) => unsafe {(*invokable).invoke(universe, args)},
+            None => unsafe {
                 let mut args = args;
                 args.remove(0);
                 universe
@@ -305,9 +304,9 @@ impl Evaluate for ast::Message {
 }
 
 impl Evaluate for ast::Body {
-    fn evaluate(&self, universe: &mut Universe) -> Return {
+    fn evaluate(&mut self, universe: &mut Universe) -> Return {
         let mut last_value = Value::Nil;
-        for expr in &self.exprs {
+        for expr in &mut self.exprs {
             last_value = propagate!(expr.evaluate(universe));
         }
         Return::Local(last_value)

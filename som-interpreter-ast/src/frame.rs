@@ -1,11 +1,8 @@
-use std::cell::{RefCell};
-use std::rc::Rc;
-
 use crate::class::Class;
 use crate::value::Value;
 use crate::SOMRef;
 
-/// The kind of a given frame.
+// /// The kind of a given frame.
 // #[cfg(feature = "frame-debug-info")]
 // #[derive(Debug, Clone)]
 // pub enum FrameKind {
@@ -64,15 +61,15 @@ impl Frame {
     // }
 
     /// Get the self value for this frame.
-    pub fn get_self(&self) -> Value {
+    pub unsafe fn get_self(&self) -> Value {
         match self.params.get(0).unwrap() {
-            Value::Block(b) => b.frame.borrow().get_self(),
+            Value::Block(b) => (*b.borrow().frame).get_self(),
             s => s.clone()
         }
     }
 
     /// Get the holder for this current method.
-    pub fn get_method_holder(&self) -> SOMRef<Class> {
+    pub unsafe fn get_method_holder(&self) -> SOMRef<Class> {
         let ours = match self.get_self() {
             Value::Class(c) => c,
             v => panic!("self value not a class, but {:?}", v)
@@ -95,21 +92,21 @@ impl Frame {
         self.locals.get(idx).cloned()
     }
 
-    pub fn lookup_non_local(&self, idx: usize, scope: usize) -> Option<Value> {
-        self.nth_frame_back(scope).borrow().lookup_local(idx)
+    pub unsafe fn lookup_non_local(&self, idx: usize, scope: usize) -> Option<Value> {
+        (*self.nth_frame_back(scope)).lookup_local(idx)
     }
-    
+
     pub fn assign_local(&mut self, idx: usize, value: &Value) -> Option<()> {
         let local = self.locals.get_mut(idx).unwrap();
         *local = value.clone();
         Some(())
     }
 
-    pub fn assign_non_local(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
-        self.nth_frame_back(scope).borrow_mut().assign_local(idx, value)
+    pub unsafe fn assign_non_local(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
+        (*self.nth_frame_back(scope)).assign_local(idx, value)
     }
 
-    pub fn lookup_arg(&self, idx: usize, scope: usize) -> Option<Value> {
+    pub unsafe fn lookup_arg(&self, idx: usize, scope: usize) -> Option<Value> {
         match (idx, scope) {
             (0, 0) => Some(self.get_self()),
             (_, 0) => self.lookup_local_arg(idx),
@@ -121,8 +118,8 @@ impl Frame {
         self.params.get(idx).cloned()
     }
 
-    pub fn lookup_non_local_arg(&self, idx: usize, scope: usize) -> Option<Value> {
-        self.nth_frame_back(scope).borrow().lookup_local_arg(idx)
+    pub unsafe fn lookup_non_local_arg(&self, idx: usize, scope: usize) -> Option<Value> {
+        (*self.nth_frame_back(scope)).lookup_local_arg(idx)
     }
 
     pub fn assign_arg_local(&mut self, idx: usize, value: &Value) -> Option<()> {
@@ -131,14 +128,14 @@ impl Frame {
         return Some(());
     }
 
-    pub fn assign_arg(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
+    pub unsafe fn assign_arg(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
         match scope {
             0 => self.assign_arg_local(idx, value),
-            _ => self.nth_frame_back(scope).borrow_mut().assign_arg_local(idx, value)
+            _ => (*self.nth_frame_back(scope)).assign_arg_local(idx, value)
         }
     }
 
-    pub fn lookup_field(&self, idx: usize) -> Option<Value> {
+    pub unsafe fn lookup_field(&self, idx: usize) -> Option<Value> {
         match self.get_self() {
             Value::Instance(i) => { i.borrow_mut().lookup_local(idx) }
             Value::Class(c) => { c.borrow().class().borrow_mut().lookup_local(idx) }
@@ -146,7 +143,7 @@ impl Frame {
         }
     }
 
-    pub fn assign_field(&self, idx: usize, value: &Value) -> Option<()> {
+    pub unsafe fn assign_field(&self, idx: usize, value: &Value) -> Option<()> {
         match self.get_self() {
             Value::Instance(i) => { i.borrow_mut().assign_local(idx, value.clone()) }
             Value::Class(c) => { c.borrow().class().borrow_mut().assign_local(idx, &value) }
@@ -154,17 +151,17 @@ impl Frame {
         }
     }
 
-    pub fn nth_frame_back(&self, n: usize) -> SOMRef<Frame> {
-        let mut target_frame: Rc<RefCell<Frame>> = match self.params.get(0).unwrap() {
+    pub unsafe fn nth_frame_back(&self, n: usize) -> *mut Frame {
+        let mut target_frame: *mut Frame = match self.params.get(0).unwrap() {
             Value::Block(block) => {
-                Rc::clone(&block.frame)
+                block.borrow().frame
             }
             v => panic!("attempting to access a non local var/arg from a method instead of a block: self wasn't blockself but {:?}.", v)
         };
         for _ in 1..n {
-            target_frame = match Rc::clone(&target_frame).borrow().params.get(0).unwrap() {
+            target_frame = match (*target_frame).params.get(0).unwrap() {
                 Value::Block(block) => {
-                    Rc::clone(&block.frame)
+                    block.borrow().frame
                 }
                 v => panic!("attempting to access a non local var/arg from a method instead of a block (but the original frame we were in was a block): self wasn't blockself but {:?}.", v)
             };
@@ -173,11 +170,11 @@ impl Frame {
     }
 
         /// Get the method invocation frame for that frame.
-    pub fn method_frame(frame: &SOMRef<Frame>) -> SOMRef<Frame> {
-        if let Value::Block(b) = frame.borrow().params.get(0).unwrap() {
-            Frame::method_frame(&b.frame)
+    pub unsafe fn method_frame(frame: *mut Frame) -> *mut Frame {
+        if let Value::Block(b) = (*frame).params.get(0).unwrap() {
+            Frame::method_frame(b.borrow().frame)
         } else {
-            Rc::clone(frame)
+            frame
         }
     }
 }
