@@ -538,7 +538,7 @@ impl Universe {
     pub fn escaped_block(&mut self, value: Value, block: Rc<Block>) -> Option<Return> {
         let initialize = value.lookup_method(self, "escapedBlock:")?;
 
-        Some(initialize.invoke(self, vec![value, Value::Block(block)]))
+        Some(initialize.clone().borrow_mut().invoke(self, vec![value, Value::Block(block)]))
     }
 
     /// Call `doesNotUnderstand:` on the given value, if it is defined.
@@ -553,7 +553,7 @@ impl Universe {
         let sym = Value::Symbol(sym);
         let args = Value::Array(Rc::new(RefCell::new(args)));
 
-        Some(initialize.invoke(self, vec![value, sym, args]))
+        Some(initialize.clone().borrow_mut().invoke(self, vec![value, sym, args]))
     }
 
     /// Call `unknownGlobal:` on the given value, if it is defined.
@@ -561,7 +561,7 @@ impl Universe {
         let sym = self.intern_symbol(name.as_ref());
         let method = value.lookup_method(self, "unknownGlobal:")?;
 
-        match method.invoke(self, vec![value, Value::Symbol(sym)]) {
+        match method.clone().borrow_mut().invoke(self, vec![value, Value::Symbol(sym)]) {
             Return::Local(value) | Return::NonLocal(value, _) => Some(Return::Local(value)),
             Return::Exception(err) => Some(Return::Exception(format!(
                 "(from 'System>>#unknownGlobal:') {}",
@@ -578,7 +578,7 @@ impl Universe {
         let initialize = Value::System.lookup_method(self, "initialize:")?;
         let args = Value::Array(Rc::new(RefCell::new(args)));
 
-        Some(initialize.invoke(self, vec![Value::System, args]))
+        Some(initialize.clone().borrow_mut().invoke(self, vec![Value::System, args]))
     }
 }
 

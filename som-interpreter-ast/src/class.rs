@@ -33,7 +33,7 @@ pub struct Class {
     /// The class' locals.
     pub locals: IndexMap<String, Value>,
     /// The class' methods/invokables.
-    pub methods: IndexMap<String, Rc<Method>>,
+    pub methods: IndexMap<String, Rc<RefCell<Method>>>,
     /// Is this class a static one ?
     pub is_static: bool,
 }
@@ -85,7 +85,7 @@ impl Class {
             is_static: false,
         }));
 
-        let mut static_methods: IndexMap<String, Rc<Method>> = defn
+        let mut static_methods: IndexMap<String, Rc<RefCell<Method>>> = defn
             .static_methods
             .iter()
             .map(|method| {
@@ -99,7 +99,7 @@ impl Class {
                     signature: signature.clone(),
                     holder: Rc::downgrade(&static_class),
                 };
-                (signature, Rc::new(method))
+                (signature, Rc::new(RefCell::new(method)))
             })
             .collect();
 
@@ -117,11 +117,11 @@ impl Class {
                     signature: signature.to_string(),
                     holder: Rc::downgrade(&static_class),
                 };
-                static_methods.insert(signature.to_string(), Rc::new(method));
+                static_methods.insert(signature.to_string(), Rc::new(RefCell::new(method)));
             }
         }
 
-        let mut instance_methods: IndexMap<String, Rc<Method>> = defn
+        let mut instance_methods: IndexMap<String, Rc<RefCell<Method>>> = defn
             .instance_methods
             .iter()
             .map(|method| {
@@ -135,7 +135,7 @@ impl Class {
                     signature: signature.clone(),
                     holder: Rc::downgrade(&instance_class),
                 };
-                (signature, Rc::new(method))
+                (signature, Rc::new(RefCell::new(method)))
             })
             .collect();
 
@@ -153,7 +153,7 @@ impl Class {
                     signature: signature.to_string(),
                     holder: Rc::downgrade(&instance_class),
                 };
-                instance_methods.insert(signature.to_string(), Rc::new(method));
+                instance_methods.insert(signature.to_string(), Rc::new(RefCell::new(method)));
             }
         }
 
@@ -199,7 +199,7 @@ impl Class {
     }
 
     /// Search for a given method within this class.
-    pub fn lookup_method(&self, signature: impl AsRef<str>) -> Option<Rc<Method>> {
+    pub fn lookup_method(&self, signature: impl AsRef<str>) -> Option<Rc<RefCell<Method>>> {
         let signature = signature.as_ref();
         self.methods.get(signature).cloned().or_else(|| {
             self.super_class

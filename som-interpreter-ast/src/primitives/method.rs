@@ -18,7 +18,7 @@ fn holder(_: &mut Universe, args: Vec<Value>) -> Return {
         Value::Invokable(invokable) => invokable,
     ]);
 
-    match invokable.holder().upgrade() {
+    match invokable.clone().borrow().holder().upgrade() {
         Some(holder) => Return::Local(Value::Class(holder)),
         None => Return::Exception(format!(
             "'{}': method sholder has been collected",
@@ -34,7 +34,7 @@ fn signature(universe: &mut Universe, args: Vec<Value>) -> Return {
         Value::Invokable(invokable) => invokable,
     ]);
 
-    let sym = universe.intern_symbol(invokable.signature());
+    let sym = universe.intern_symbol(invokable.borrow().signature());
     Return::Local(Value::Symbol(sym))
 }
 
@@ -50,7 +50,7 @@ fn invoke_on_with(universe: &mut Universe, args: Vec<Value>) -> Return {
     let args = std::iter::once(receiver.clone())
         .chain(args.borrow().iter().cloned())
         .collect();
-    invokable.invoke(universe, args)
+    invokable.clone().borrow_mut().invoke(universe, args)
 }
 
 /// Search for an instance primitive matching the given signature.

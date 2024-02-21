@@ -120,7 +120,7 @@ impl Evaluate for ast::BinaryOp {
         // );
 
         if let Some(invokable) = invokable {
-            invokable.invoke(universe, vec![lhs, rhs])
+            invokable.clone().borrow_mut().invoke(universe, vec![lhs, rhs])
         } else {
             universe
                 .does_not_understand(lhs.clone(), &self.op, vec![rhs])
@@ -225,7 +225,7 @@ impl Evaluate for ast::Message {
         // );
 
         let value = match invokable {
-            Some(invokable) => invokable.invoke(universe, args),
+            Some(invokable) => invokable.clone().borrow_mut().invoke(universe, args),
             None => {
                 let mut args = args;
                 args.remove(0);
