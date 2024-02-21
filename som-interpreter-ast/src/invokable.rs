@@ -32,7 +32,7 @@ pub trait Invoke {
 
 impl Invoke for Method {
     fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return {
-        let output = match self.kind() {
+        let output = match &mut self.kind {
             MethodKind::Defined(method) => {
                 let (self_value, params) = {
                     let mut iter = args.into_iter();
@@ -44,7 +44,7 @@ impl Invoke for Method {
                     };
                     (receiver, iter.collect::<Vec<_>>())
                 };
-                let holder = match self.holder().upgrade() {
+                let holder = match self.holder.upgrade() {
                     Some(holder) => holder,
                     None => {
                         return Return::Exception(

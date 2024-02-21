@@ -33,7 +33,7 @@ pub struct Class {
     /// The class' locals.
     pub locals: IndexMap<String, Value>,
     /// The class' methods/invokables.
-    pub methods: IndexMap<String, Rc<RefCell<Method>>>,
+    pub methods: IndexMap<String, SOMRef<Method>>,
     /// Is this class a static one ?
     pub is_static: bool,
 }
@@ -85,7 +85,7 @@ impl Class {
             is_static: false,
         }));
 
-        let mut static_methods: IndexMap<String, Rc<RefCell<Method>>> = defn
+        let mut static_methods: IndexMap<String, SOMRef<Method>> = defn
             .static_methods
             .iter()
             .map(|method| {
@@ -121,7 +121,7 @@ impl Class {
             }
         }
 
-        let mut instance_methods: IndexMap<String, Rc<RefCell<Method>>> = defn
+        let mut instance_methods: IndexMap<String, SOMRef<Method>> = defn
             .instance_methods
             .iter()
             .map(|method| {
@@ -199,7 +199,7 @@ impl Class {
     }
 
     /// Search for a given method within this class.
-    pub fn lookup_method(&self, signature: impl AsRef<str>) -> Option<Rc<RefCell<Method>>> {
+    pub fn lookup_method(&self, signature: impl AsRef<str>) -> Option<SOMRef<Method>> {
         let signature = signature.as_ref();
         self.methods.get(signature).cloned().or_else(|| {
             self.super_class

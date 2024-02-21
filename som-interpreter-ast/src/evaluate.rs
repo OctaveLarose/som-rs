@@ -169,10 +169,10 @@ impl Evaluate for ast::Block {
     fn evaluate(&self, universe: &mut Universe) -> Return {
         let frame = universe.current_frame();
         // TODO: avoid cloning the whole block's AST.
-        Return::Local(Value::Block(Rc::new(Block {
+        Return::Local(Value::Block(Rc::new(RefCell::new(Block {
             block: self.clone(),
             frame: frame.clone(),
-        })))
+        }))))
     }
 }
 

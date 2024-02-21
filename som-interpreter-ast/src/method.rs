@@ -8,8 +8,8 @@ use crate::{SOMRef, SOMWeakRef};
 // #[derive(Clone)]
 // pub struct MethodEnv {
 //     pub ast: ast::MethodDef,
-//     pub inline_cache: Vec<Option<(*const Class, Rc<RefCell<Method>>)>>
-//     // pub inline_cache: RefCell<Vec<Option<(*const Class, Rc<RefCell<Method>>)>>>
+//     pub inline_cache: Vec<Option<(*const Class, SOMRef<Method>)>>
+//     // pub inline_cache: RefCell<Vec<Option<(*const Class, SOMRef<Method>)>>>
 // }
 
 /// The kind of a class method.

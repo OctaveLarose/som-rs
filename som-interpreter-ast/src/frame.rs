@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use crate::block::Block;
 use crate::class::Class;
@@ -13,7 +12,7 @@ pub enum FrameKind {
     /// A frame created from a block evaluation.
     Block {
         /// The block instance for the current frame.
-        block: Rc<Block>,
+        block: SOMRef<Block>,
     },
     /// A frame created from a method invocation.
     Method {
@@ -53,7 +52,7 @@ impl Frame {
     pub fn get_self(&self) -> Value {
         match &self.kind {
             FrameKind::Method { self_value, .. } => self_value.clone(),
-            FrameKind::Block { block, .. } => block.frame.borrow().get_self(),
+            FrameKind::Block { block, .. } => block.borrow().frame.borrow().get_self(),
         }
     }
 
@@ -61,7 +60,7 @@ impl Frame {
     pub fn get_method_holder(&self) -> SOMRef<Class> {
         match &self.kind {
             FrameKind::Method { holder, .. } => holder.clone(),
-            FrameKind::Block { block, .. } => block.frame.borrow().get_method_holder(),
+            FrameKind::Block { block, .. } => block.borrow().frame.borrow().get_method_holder(),
         }
     }
 
@@ -69,7 +68,7 @@ impl Frame {
     pub fn get_method_signature(&self) -> Interned {
         match &self.kind {
             FrameKind::Method { signature, .. } => *signature,
-            FrameKind::Block { block, .. } => block.frame.borrow().get_method_signature(),
+            FrameKind::Block { block, .. } => block.borrow().frame.borrow().get_method_signature(),
         }
     }
 
@@ -89,7 +88,7 @@ impl Frame {
                     self_value.lookup_local(name)
                 }
             }
-            FrameKind::Block { block, .. } => block.frame.borrow().lookup_local(name),
+            FrameKind::Block { block, .. } => block.borrow().frame.borrow().lookup_local(name),
         }
     }
 
@@ -110,14 +109,14 @@ impl Frame {
                     self_value.assign_local(name, value)
                 }
             }
-            FrameKind::Block { block, .. } => block.frame.borrow_mut().assign_local(name, value),
+            FrameKind::Block { block, .. } => block.borrow().frame.borrow_mut().assign_local(name, value),
         }
     }
 
     /// Get the method invocation frame for that frame.
     pub fn method_frame(frame: &SOMRef<Frame>) -> SOMRef<Frame> {
         match frame.borrow().kind() {
-            FrameKind::Block { block, .. } => Frame::method_frame(&block.frame),
+            FrameKind::Block { block, .. } => Frame::method_frame(&block.borrow().frame),
             FrameKind::Method { .. } => frame.clone(),
         }
     }
