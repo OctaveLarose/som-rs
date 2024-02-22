@@ -80,7 +80,7 @@ fn perform(universe: &mut Universe, args: Vec<Value>) -> Return {
     let method = object.lookup_method(universe, signature);
 
     match method {
-        Some(invokable) => invokable.borrow_mut().invoke(universe, vec![object]),
+        Some(invokable) => invokable.borrow().invoke(universe, vec![object]),
         None => {
             let signature = signature.to_string();
             universe
@@ -115,7 +115,7 @@ fn perform_with_arguments(universe: &mut Universe, args: Vec<Value>) -> Return {
             let args = std::iter::once(object)
                 .chain(arr.replace(Vec::default()).into_iter())
                 .collect();
-            invokable.borrow_mut().invoke(universe, args)
+            invokable.borrow().invoke(universe, args)
         }
         None => {
             let signature = signature.to_string();
@@ -150,7 +150,7 @@ fn perform_in_super_class(universe: &mut Universe, args: Vec<Value>) -> Return {
     let method = class.borrow().lookup_method(signature);
 
     match method {
-        Some(invokable) => invokable.borrow_mut().invoke(universe, vec![object]),
+        Some(invokable) => invokable.borrow().invoke(universe, vec![object]),
         None => {
             let signature = signature.to_string();
             let args = vec![object.clone()];

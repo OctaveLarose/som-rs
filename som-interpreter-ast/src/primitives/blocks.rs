@@ -28,7 +28,7 @@ pub mod block1 {
             FrameKind::Block {
                 block: block.clone(),
             },
-            |universe| block.borrow_mut().invoke(universe, block_args),
+            |universe| block.borrow().invoke(universe, block_args),
         )
     }
 
@@ -77,7 +77,7 @@ pub mod block2 {
             FrameKind::Block {
                 block: block.clone(),
             },
-            |universe| block.borrow_mut().invoke(universe, block_args),
+            |universe| block.borrow().invoke(universe, block_args),
         )
     }
 
@@ -120,7 +120,7 @@ pub mod block3 {
             FrameKind::Block {
                 block: block.clone(),
             },
-            |universe| block.borrow_mut().invoke(universe, block_args),
+            |universe| block.borrow().invoke(universe, block_args),
         )
     }
 
