@@ -51,7 +51,7 @@ fn invoke_on_with(universe: &mut Universe, args: Vec<Value>) -> Return {
     let args = std::iter::once(receiver.clone())
         .chain(args.borrow().iter().cloned())
         .collect();
-    let res = invokable.borrow().invoke(universe, args);
+    let res = invokable.borrow_mut().invoke(universe, args);
     res
 }
 

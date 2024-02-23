@@ -27,12 +27,12 @@ pub enum Return {
 /// The trait for invoking methods and primitives.
 pub trait Invoke {
     /// Invoke within the given universe and with the given arguments.
-    fn invoke(&self, universe: &mut Universe, args: Vec<Value>) -> Return;
+    fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return;
 }
 
 impl Invoke for Method {
-    fn invoke(&self, universe: &mut Universe, args: Vec<Value>) -> Return {
-        let output = match self.kind() {
+    fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return {
+        let output = match &mut self.kind {
             MethodKind::Defined(method) => {
                 let (self_value, params) = {
                     let mut iter = args.into_iter();
@@ -81,7 +81,7 @@ impl Invoke for Method {
 }
 
 impl Invoke for ast::MethodDef {
-    fn invoke(&self, universe: &mut Universe, args: Vec<Value>) -> Return {
+    fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return {
         let current_frame = universe.current_frame().clone();
         match &self.kind {
             ast::MethodKind::Unary => {}
@@ -141,7 +141,7 @@ impl Invoke for ast::MethodDef {
 }
 
 impl Invoke for Block {
-    fn invoke(&self, universe: &mut Universe, args: Vec<Value>) -> Return {
+    fn invoke(&mut self, universe: &mut Universe, args: Vec<Value>) -> Return {
         let current_frame = universe.current_frame();
         current_frame.borrow_mut().bindings.extend(
             self.block

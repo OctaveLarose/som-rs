@@ -88,7 +88,10 @@ impl Frame {
                     self_value.lookup_local(name)
                 }
             }
-            FrameKind::Block { block, .. } => block.borrow().frame.borrow().lookup_local(name),
+            FrameKind::Block { block, .. } => {
+                let _b = block;
+                block.borrow().frame.borrow().lookup_local(name)
+            },
         }
     }
 
