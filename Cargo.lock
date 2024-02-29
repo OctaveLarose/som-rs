@@ -290,22 +290,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "som-interpreter-bc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "indexmap",
- "jemallocator",
- "num-bigint",
- "num-traits",
- "rand",
- "som-core",
- "som-lexer",
- "som-parser-symbols",
- "structopt",
-]
-
-[[package]]
 name = "som-lexer"
 version = "0.1.0"
 
@@ -319,14 +303,6 @@ version = "0.1.0"
 dependencies = [
  "som-core",
  "som-lexer",
- "som-parser-core",
-]
-
-[[package]]
-name = "som-parser-text"
-version = "0.1.0"
-dependencies = [
- "som-core",
  "som-parser-core",
 ]
 

@@ -177,23 +177,24 @@ pub fn keyword<'a>() -> impl Parser<String, &'a [Token]> {
     }
 }
 
-pub fn unary_send<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn unary_send<'a>() -> impl Parser<Node, &'a [Token]> {
     opaque!(primary())
         .and(many(identifier()))
         .map(|(receiver, signatures)| {
             signatures
                 .into_iter()
                 .fold(receiver, |receiver, signature| {
+                    Node::ExpressionNode(
                     Expression::Message(Message {
                         receiver: Box::new(receiver),
                         signature,
                         values: Vec::new(),
-                    })
+                    }))
                 })
         })
 }
 
-pub fn binary_send<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn binary_send<'a>() -> impl Parser<Node, &'a [Token]> {
     unary_send()
         .and(many(operator().and(unary_send().map(Box::new))))
         .map(|(lhs, operands)| {
@@ -246,18 +247,19 @@ pub fn parameters<'a>() -> impl Parser<Vec<String>, &'a [Token]> {
     some(parameter()).and_left(exact(Token::Or))
 }
 
-pub fn block<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn block<'a>() -> impl Parser<Node, &'a [Token]> {
     between(
         exact(Token::NewBlock),
         default(parameters()).and(default(locals())).and(body()),
         exact(Token::EndBlock),
     )
     .map(|((parameters, locals), body)| {
+        Node::ExpressionNode(
         Expression::Block(Block {
             parameters,
             locals,
             body,
-        })
+        }))
     })
 }
 
@@ -269,17 +271,17 @@ pub fn term<'a>() -> impl Parser<Expression, &'a [Token]> {
     )
 }
 
-pub fn exit<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn exit<'a>() -> impl Parser<Node, &'a [Token]> {
     exact(Token::Exit)
         .and_right(statement())
         .map(|expr| Expression::Exit(Box::new(expr)))
 }
 
-pub fn expression<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn expression<'a>() -> impl Parser<Node, &'a [Token]> {
     positional_send()
 }
 
-pub fn primary<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn primary<'a>() -> impl Parser<Node, &'a [Token]> {
     (identifier().map(Expression::Reference))
         .or(term())
         .or(block())
@@ -293,7 +295,7 @@ pub fn assignment<'a>() -> impl Parser<Expression, &'a [Token]> {
         .map(|(name, expr)| Expression::Assignment(name, Box::new(expr)))
 }
 
-pub fn statement<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn statement<'a>() -> impl Parser<Node, &'a [Token]> {
     assignment().or(expression())
 }
 

@@ -1,3 +1,7 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+use crate::ast;
+
 /// Represents a class definition.
 ///
 /// Example:
@@ -156,7 +160,7 @@ pub enum Expression {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Message {
     /// The object to which the message is sent to.
-    pub receiver: Box<Expression>,
+    pub receiver: Box<Node>,
     /// The signature of the message (eg. "ifTrue:ifFalse:").
     pub signature: String,
     /// The list of dynamic values that are passed.
@@ -174,9 +178,9 @@ pub struct BinaryOp {
     /// Represents the operator symbol.
     pub op: String,
     /// Represents the left-hand side.
-    pub lhs: Box<Expression>,
+    pub lhs: Box<Node>,
     /// Represents the right-hand side.
-    pub rhs: Box<Expression>,
+    pub rhs: Box<Node>,
 }
 
 /// Represents a block.
@@ -239,3 +243,13 @@ pub enum Literal {
     /// Represents an array literal (eg. `$(1 2 3)`)
     Array(Vec<Literal>),
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Node {
+    LiteralNode(Literal),
+    BlockNode(Block),
+    TermNode(Term),
+    ExpressionNode(Expression)
+}
+
+type NodeTree = Vec<Rc<RefCell<Node>>>;
