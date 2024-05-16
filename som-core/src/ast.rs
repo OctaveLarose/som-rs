@@ -179,13 +179,20 @@ pub enum Expression {
 /// value == 3
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct Message {
+pub struct GenericMessage {
     /// The object to which the message is sent to.
     pub receiver: Box<Expression>,
     /// The signature of the message (eg. "ifTrue:ifFalse:").
     pub signature: String,
     /// The list of dynamic values that are passed.
     pub values: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Message {
+    GenericMessage(GenericMessage),
+    // string is class name. it should be class layout, but ehhh. also genericmessage is the fallback but really it should be a linked list with the genericmessage a node in it
+    CachedMessage(MethodDef, String, GenericMessage)
 }
 
 /// Represents a binary operation.
