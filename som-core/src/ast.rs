@@ -190,9 +190,9 @@ pub struct GenericMessage {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
-    GenericMessage(GenericMessage),
+    Generic(GenericMessage),
     // string is class name. it should be class layout, but ehhh. also genericmessage is the fallback but really it should be a linked list with the genericmessage a node in it
-    CachedMessage(MethodDef, String, GenericMessage)
+    Cached(MethodDef, String, GenericMessage)
 }
 
 /// Represents a binary operation.

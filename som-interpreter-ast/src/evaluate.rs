@@ -236,8 +236,11 @@ impl Evaluate for ast::Block {
 
 impl Evaluate for ast::Message {
     fn evaluate(&mut self, universe: &mut Universe) -> Return {
+        // dbg!("messagin");
         match self {
-            ast::Message::GenericMessage(generic_message) => {
+            ast::Message::Generic(generic_message) => {
+                // print!("Invoking (generic) {:?}", &generic_message.signature);
+                // dbg!("generic messagin");
                 let (receiver, invokable) = match generic_message.receiver.as_mut() {
                     ast::Expression::GlobalRead(ident) if ident == "super" => unsafe {
                         let frame = universe.current_frame();
@@ -260,6 +263,7 @@ impl Evaluate for ast::Message {
                         (receiver, invokable)
                     }
                 };
+                // println!(" on {:?}", receiver);
                 let args = {
                     let mut output = Vec::with_capacity(generic_message.values.len() + 1);
                     output.push(receiver.clone());
@@ -286,7 +290,7 @@ impl Evaluate for ast::Message {
                             None => {}
                             Some(method_def) => {
                                 let name = receiver.class(universe).borrow().name.clone();
-                                *self = ast::Message::CachedMessage(method_def.clone(), name, generic_message.clone()); // todo we should memmove for both. we don't want a clone
+                                *self = ast::Message::Cached(method_def.clone(), name, generic_message.clone()); // todo we should memmove for both. we don't want a clone
                             }
                         }
 
@@ -310,14 +314,17 @@ impl Evaluate for ast::Message {
 
                 value
             }
-            ast::Message::CachedMessage(method_def, holder_name, generic_message) => {
-                // let expr = generic_message.receiver.as_mut();
-                // let receiver = propagate!(expr.evaluate(universe));
-                let frame = universe.current_frame();
-                let receiver = unsafe { (*frame).get_self() };
+            ast::Message::Cached(method_def, holder_name, generic_message) => {
+                // dbg!("cached messagin");
+
+                let expr = generic_message.receiver.as_mut();
+                let receiver = propagate!(expr.evaluate(universe));
+
+                // println!("Invoking (cached) {:?} on {:?} (holder name is {:?})", &generic_message.signature, &receiver, holder_name);
+                
 
                 if receiver.class(universe).borrow().name != *holder_name {
-                    *self = ast::Message::GenericMessage(generic_message.clone()); // we want a memmove, not a clone. but unless this breaks semantics, it's fine for now - genericmessage will later be part of the linkedlist.
+                    *self = ast::Message::Generic(generic_message.clone()); // we want a memmove, not a clone. but unless this breaks semantics, it's fine for now - genericmessage will later be part of the linkedlist.
                     return self.evaluate(universe);
                 }
 
