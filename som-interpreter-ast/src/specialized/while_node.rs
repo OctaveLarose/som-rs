@@ -24,7 +24,7 @@ impl Invoke for WhileNode {
                 Value::Block(Rc::clone(&cond_block)),
                 cond_block.borrow().block.nbr_locals,
                 0,
-                |universe| cond_block.borrow_mut().invoke(universe, vec![]),
+                |universe| unsafe { (*cond_block.as_ptr()).invoke(universe, vec![]) },
             );
 
             let bool_val = match cond_block_return {
@@ -39,7 +39,7 @@ impl Invoke for WhileNode {
                     Value::Block(Rc::clone(&body_block)),
                     body_block.borrow().block.nbr_locals,
                     0,
-                    |universe| body_block.borrow_mut().invoke(universe, vec![]),
+                    |universe| unsafe { (*body_block.as_ptr()).invoke(universe, vec![]) },
                 );
 
                 match ret_val {

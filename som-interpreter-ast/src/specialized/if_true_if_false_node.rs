@@ -32,7 +32,7 @@ impl Invoke for IfTrueIfFalseNode {
                         Value::Block(Rc::clone(&b)),
                         b.borrow().block.nbr_locals,
                         0,
-                        |universe| b.borrow_mut().invoke(universe, vec![]),
+                        |universe| unsafe { (*b.as_ptr()).invoke(universe, vec![]) },
                     )
                 },
                 a => Return::Local(a.clone()),
@@ -45,7 +45,7 @@ impl Invoke for IfTrueIfFalseNode {
                         Value::Block(Rc::clone(&b)),
                         b.borrow().block.nbr_locals,
                         0,
-                        |universe| b.borrow_mut().invoke(universe, vec![]),
+                        |universe| unsafe { (*b.as_ptr()).invoke(universe, vec![]) },
                     )
                 },
                 a => Return::Local(a.clone()),

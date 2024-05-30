@@ -9,7 +9,7 @@ use indexmap::{IndexMap, IndexSet};
 use num_bigint::BigInt;
 
 use som_core::ast;
-use som_core::ast::{Expression, MethodBody, MethodDef};
+use som_core::ast::{Expression, Message, MethodBody, MethodDef};
 #[cfg(feature = "frame-debug-info")]
 use som_core::ast::BlockDebugInfo;
 use som_core::bytecode::Bytecode;

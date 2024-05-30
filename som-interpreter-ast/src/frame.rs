@@ -63,7 +63,7 @@ impl Frame {
     /// Get the self value for this frame.
     pub unsafe fn get_self(&self) -> Value {
         match self.params.get(0).unwrap() {
-            Value::Block(b) => (*b.borrow().frame).get_self(),
+            Value::Block(b) => (*(*b.as_ptr()).frame).get_self(),
             s => s.clone()
         }
     }
@@ -154,14 +154,14 @@ impl Frame {
     pub unsafe fn nth_frame_back(&self, n: usize) -> *mut Frame {
         let mut target_frame: *mut Frame = match self.params.get(0).unwrap() {
             Value::Block(block) => {
-                block.borrow().frame
+                (*block.as_ptr()).frame
             }
             v => panic!("attempting to access a non local var/arg from a method instead of a block: self wasn't blockself but {:?}.", v)
         };
         for _ in 1..n {
             target_frame = match (*target_frame).params.get(0).unwrap() {
                 Value::Block(block) => {
-                    block.borrow().frame
+                    (*block.as_ptr()).frame
                 }
                 v => panic!("attempting to access a non local var/arg from a method instead of a block (but the original frame we were in was a block): self wasn't blockself but {:?}.", v)
             };
@@ -172,7 +172,7 @@ impl Frame {
         /// Get the method invocation frame for that frame.
     pub unsafe fn method_frame(frame: *mut Frame) -> *mut Frame {
         if let Value::Block(b) = (*frame).params.get(0).unwrap() {
-            Frame::method_frame(b.borrow().frame)
+            Frame::method_frame((*b.as_ptr()).frame)
         } else {
             frame
         }

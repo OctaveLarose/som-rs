@@ -5,7 +5,6 @@ use som_core::ast;
 
 use crate::block::Block;
 use crate::invokable::{Invoke, Return};
-use crate::method::MethodKind;
 use crate::universe::Universe;
 use crate::value::Value;
 
@@ -35,28 +34,28 @@ impl Evaluate for ast::Expression {
                         .map(|_| Return::Local(value))
                         .unwrap_or_else(||
                             Return::Exception(format!("local var write: idx '{}' not found", idx)))
-                },
+                }
                 Self::NonLocalVarWrite(scope, idx, expr) => {
                     let value = propagate!(expr.evaluate(universe));
                     universe.assign_non_local(*idx, *scope, &value)
                         .map(|_| Return::Local(value))
                         .unwrap_or_else(||
                             Return::Exception(format!("non local var write: idx '{}' not found", idx)))
-                },
+                }
                 Self::FieldWrite(idx, expr) => {
                     let value = propagate!(expr.evaluate(universe));
                     universe.assign_field(*idx, &value)
                         .map(|_| Return::Local(value))
                         .unwrap_or_else(||
                             Return::Exception(format!("field write: idx '{}' not found", idx)))
-                },
+                }
                 Self::ArgWrite(scope, idx, expr) => {
                     let value = propagate!(expr.evaluate(universe));
                     universe.assign_arg(*idx, *scope, &value)
                         .map(|_| Return::Local(value))
                         .unwrap_or_else(||
                             Return::Exception(format!("arg write: idx '{}', scope '{}' not found", idx, scope)))
-                },
+                }
                 Self::GlobalWrite(name, expr) => {
                     let value = propagate!(expr.evaluate(universe));
                     universe.assign_global(&name, &value)
@@ -64,7 +63,7 @@ impl Evaluate for ast::Expression {
                         .unwrap_or_else(|| {
                             Return::Exception(format!("global variable '{}' not found to assign to", name))
                         })
-                },
+                }
                 Self::BinaryOp(bin_op) => bin_op.evaluate(universe),
                 Self::Block(blk) => blk.evaluate(universe),
                 Self::Exit(expr, _scope) => {
@@ -106,28 +105,28 @@ impl Evaluate for ast::Expression {
                         .map(|v| Return::Local(v.clone()))
                         .unwrap_or_else(||
                             Return::Exception(format!("local var read: idx '{}' not found", idx)))
-                },
+                }
                 Self::NonLocalVarRead(scope, idx) => {
                     universe.lookup_non_local(*idx, *scope)
                         .map(Return::Local)
                         .unwrap_or_else(|| {
                             Return::Exception(format!("non local var read: idx '{}' not found", idx))
                         })
-                },
+                }
                 Self::FieldRead(idx) => {
                     universe.lookup_field(*idx)
                         .map(Return::Local)
                         .unwrap_or_else(|| {
                             Return::Exception(format!("field read: idx '{}' not found", idx))
                         })
-                },
+                }
                 Self::ArgRead(scope, idx) => {
                     universe.lookup_arg(*idx, *scope)
                         .map(Return::Local)
                         .unwrap_or_else(|| {
                             Return::Exception(format!("arg read: idx '{}', scope '{}' not found", idx, scope))
                         })
-                },
+                }
                 Self::GlobalRead(name) => universe.lookup_global(&name)
                     .map(Return::Local)
                     .or_else(|| {
@@ -154,7 +153,7 @@ impl Evaluate for ast::BinaryOp {
                     None => {
                         return Return::Exception(
                             "`super` used without any superclass available".to_string(),
-                        )
+                        );
                     }
                 };
                 let invokable = super_class.borrow().lookup_method(&self.op);
@@ -236,110 +235,58 @@ impl Evaluate for ast::Block {
 
 impl Evaluate for ast::Message {
     fn evaluate(&mut self, universe: &mut Universe) -> Return {
-        // dbg!("messagin");
-        match self {
-            ast::Message::Generic(generic_message) => {
-                // print!("Invoking (generic) {:?}", &generic_message.signature);
-                // dbg!("generic messagin");
-                let (receiver, invokable) = match generic_message.receiver.as_mut() {
-                    ast::Expression::GlobalRead(ident) if ident == "super" => unsafe {
-                        let frame = universe.current_frame();
-                        let receiver = (*frame).get_self();
-                        let holder = (*frame).get_method_holder();
-                        let super_class = match holder.borrow().super_class() {
-                            Some(class) => class,
-                            None => {
-                                return Return::Exception(
-                                    "`super` used without any superclass available".to_string(),
-                                );
-                            }
-                        };
-                        let invokable = super_class.borrow().lookup_method(&generic_message.signature);
-                        (receiver, invokable)
-                    }
-                    expr => {
-                        let receiver = propagate!(expr.evaluate(universe));
-                        let invokable = receiver.lookup_method(universe, &generic_message.signature);
-                        (receiver, invokable)
+        // print!("Invoking (generic) {:?}", &generic_message.signature);
+        // dbg!("generic messagin");
+        let (receiver, invokable) = match self.receiver.as_mut() {
+            ast::Expression::GlobalRead(ident) if ident == "super" => unsafe {
+                let frame = universe.current_frame();
+                let receiver = (*frame).get_self();
+                let holder = (*frame).get_method_holder();
+                let super_class = match holder.borrow().super_class() {
+                    Some(class) => class,
+                    None => {
+                        return Return::Exception(
+                            "`super` used without any superclass available".to_string(),
+                        );
                     }
                 };
-                // println!(" on {:?}", receiver);
-                let args = {
-                    let mut output = Vec::with_capacity(generic_message.values.len() + 1);
-                    output.push(receiver.clone());
-                    for expr in &mut generic_message.values {
-                        let value = propagate!(expr.evaluate(universe));
-                        output.push(value);
-                    }
-                    output
-                };
-
-                let value = match invokable {
-                    Some(invokable) => {
-                        let ret = unsafe { (*invokable).invoke(universe, args) };
-                        // todo we only handle generic calls, not prims, because we can only hold onto som-core (AST+BC) specific types
-                        // ...ideally we'd hold onto a pointer to Method, but that's code that's only for the AST interp so I can't put it in the CachedMessage definition (since that's in som-core)
-                        let maybe_method_def: Option<&ast::GenericMethodDef> = unsafe {
-                            match &(*invokable).kind {
-                                MethodKind::Defined(method_def) => Some(method_def),
-                                _ => None
-                            }
-                        };
-
-                        match maybe_method_def {
-                            None => {}
-                            Some(method_def) => {
-                                let name = receiver.class(universe).borrow().name.clone();
-                                // *self = ast::Message::Cached(method_def.clone(), name, generic_message.clone()); // todo we should memmove for both. we don't want a clone
-                            }
-                        }
-
-                        ret
-                    }
-                    None => unsafe {
-                        let mut args = args;
-                        args.remove(0);
-                        universe
-                            .does_not_understand(receiver.clone(), &generic_message.signature, args)
-                            .unwrap_or_else(|| {
-                                Return::Exception(format!(
-                                    "could not find method '{}>>#{}'",
-                                    receiver.class(universe).borrow().name(),
-                                    generic_message.signature
-                                ))
-                                // Return::Local(Value::Nil)
-                            })
-                    }
-                };
-
-                value
+                let invokable = super_class.borrow().lookup_method(&self.signature);
+                (receiver, invokable)
             }
-            ast::Message::Cached(_method_def, _holder_name, _generic_message) => {
-                todo!("no caching yet");
-                // dbg!("cached messagin");
+            expr => {
+                let receiver = propagate!(expr.evaluate(universe));
+                let invokable = receiver.lookup_method(universe, &self.signature);
+                (receiver, invokable)
+            }
+        };
+        // println!(" on {:?}", receiver);
+        let args = {
+            let mut output = Vec::with_capacity(self.values.len() + 1);
+            output.push(receiver.clone());
+            for expr in &mut self.values {
+                let value = propagate!(expr.evaluate(universe));
+                output.push(value);
+            }
+            output
+        };
 
-                // let expr = generic_message.receiver.as_mut();
-                // let receiver = propagate!(expr.evaluate(universe));
-                // 
-                // // println!("Invoking (cached) {:?} on {:?} (holder name is {:?})", &generic_message.signature, &receiver, holder_name);
-                // 
-                // 
-                // if receiver.class(universe).borrow().name != *holder_name {
-                //     *self = ast::Message::Generic(generic_message.clone()); // we want a memmove, not a clone. but unless this breaks semantics, it's fine for now - genericmessage will later be part of the linkedlist.
-                //     return self.evaluate(universe);
-                // }
-                // 
-                // let args = {
-                //     let mut output = Vec::with_capacity(generic_message.values.len() + 1);
-                //     output.push(receiver.clone());
-                //     for expr in &mut generic_message.values {
-                //         let value = propagate!(expr.evaluate(universe));
-                //         output.push(value);
-                //     }
-                //     output
-                // };
-                // 
-                // method_def.invoke(universe, args)
+        match invokable {
+            Some(invokable) => {
+                unsafe { (*invokable).invoke(universe, args) }
+            }
+            None => unsafe {
+                let mut args = args;
+                args.remove(0);
+                universe
+                    .does_not_understand(receiver.clone(), &self.signature, args)
+                    .unwrap_or_else(|| {
+                        Return::Exception(format!(
+                            "could not find method '{}>>#{}'",
+                            receiver.class(universe).borrow().name(),
+                            self.signature
+                        ))
+                        // Return::Local(Value::Nil)
+                    })
             }
         }
     }
