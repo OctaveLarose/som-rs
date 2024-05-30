@@ -192,7 +192,7 @@ pub struct GenericMessage {
 pub enum Message {
     Generic(GenericMessage),
     // string is class name. it should be class layout, but ehhh. also genericmessage is the fallback but really it should be a linked list with the genericmessage a node in it
-    Cached(MethodDef, String, GenericMessage)
+    Cached(GenericMethodDef, String, GenericMessage)
 }
 
 /// Represents a binary operation.

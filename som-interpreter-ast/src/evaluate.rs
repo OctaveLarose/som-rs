@@ -279,7 +279,7 @@ impl Evaluate for ast::Message {
                         let ret = unsafe { (*invokable).invoke(universe, args) };
                         // todo we only handle generic calls, not prims, because we can only hold onto som-core (AST+BC) specific types
                         // ...ideally we'd hold onto a pointer to Method, but that's code that's only for the AST interp so I can't put it in the CachedMessage definition (since that's in som-core)
-                        let maybe_method_def: Option<&ast::MethodDef> = unsafe {
+                        let maybe_method_def: Option<&ast::GenericMethodDef> = unsafe {
                             match &(*invokable).kind {
                                 MethodKind::Defined(method_def) => Some(method_def),
                                 _ => None
@@ -290,7 +290,7 @@ impl Evaluate for ast::Message {
                             None => {}
                             Some(method_def) => {
                                 let name = receiver.class(universe).borrow().name.clone();
-                                *self = ast::Message::Cached(method_def.clone(), name, generic_message.clone()); // todo we should memmove for both. we don't want a clone
+                                // *self = ast::Message::Cached(method_def.clone(), name, generic_message.clone()); // todo we should memmove for both. we don't want a clone
                             }
                         }
 
@@ -314,31 +314,32 @@ impl Evaluate for ast::Message {
 
                 value
             }
-            ast::Message::Cached(method_def, holder_name, generic_message) => {
+            ast::Message::Cached(_method_def, _holder_name, _generic_message) => {
+                todo!("no caching yet");
                 // dbg!("cached messagin");
 
-                let expr = generic_message.receiver.as_mut();
-                let receiver = propagate!(expr.evaluate(universe));
-
-                // println!("Invoking (cached) {:?} on {:?} (holder name is {:?})", &generic_message.signature, &receiver, holder_name);
-                
-
-                if receiver.class(universe).borrow().name != *holder_name {
-                    *self = ast::Message::Generic(generic_message.clone()); // we want a memmove, not a clone. but unless this breaks semantics, it's fine for now - genericmessage will later be part of the linkedlist.
-                    return self.evaluate(universe);
-                }
-
-                let args = {
-                    let mut output = Vec::with_capacity(generic_message.values.len() + 1);
-                    output.push(receiver.clone());
-                    for expr in &mut generic_message.values {
-                        let value = propagate!(expr.evaluate(universe));
-                        output.push(value);
-                    }
-                    output
-                };
-
-                method_def.invoke(universe, args)
+                // let expr = generic_message.receiver.as_mut();
+                // let receiver = propagate!(expr.evaluate(universe));
+                // 
+                // // println!("Invoking (cached) {:?} on {:?} (holder name is {:?})", &generic_message.signature, &receiver, holder_name);
+                // 
+                // 
+                // if receiver.class(universe).borrow().name != *holder_name {
+                //     *self = ast::Message::Generic(generic_message.clone()); // we want a memmove, not a clone. but unless this breaks semantics, it's fine for now - genericmessage will later be part of the linkedlist.
+                //     return self.evaluate(universe);
+                // }
+                // 
+                // let args = {
+                //     let mut output = Vec::with_capacity(generic_message.values.len() + 1);
+                //     output.push(receiver.clone());
+                //     for expr in &mut generic_message.values {
+                //         let value = propagate!(expr.evaluate(universe));
+                //         output.push(value);
+                //     }
+                //     output
+                // };
+                // 
+                // method_def.invoke(universe, args)
             }
         }
     }
