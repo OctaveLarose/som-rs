@@ -9,7 +9,7 @@ use indexmap::{IndexMap, IndexSet};
 use num_bigint::BigInt;
 
 use som_core::ast;
-use som_core::ast::{Expression, Message, MethodBody, MethodDef};
+use som_core::ast::{Expression, MethodBody, MethodDef};
 #[cfg(feature = "frame-debug-info")]
 use som_core::ast::BlockDebugInfo;
 use som_core::bytecode::Bytecode;
@@ -462,7 +462,9 @@ impl MethodCodegen for ast::Expression {
             ast::Expression::GlobalWrite(..) => {
                 panic!("was unreachable in the original som-rs code? i guess not used in the benchmarks, but TODO")
             }
-            ast::Expression::Message(message) => {
+            ast::Expression::Message(message_call) => {
+                let message = &message_call.message;
+                
                 let super_send = match message.receiver.as_ref() {
                     ast::Expression::GlobalRead(value) if value == "super" => true,
                     _ => false,

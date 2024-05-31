@@ -154,7 +154,7 @@ pub enum Expression {
     ArgWrite(usize, usize, Box<Expression>),
     FieldWrite(usize, Box<Expression>),
     /// A message send (eg. `counter incrementBy: 5`).
-    Message(Message),
+    Message(MessageCall),
     /// A binary operation (eg. `counter <= 5`).
     BinaryOp(BinaryOp),
     /// An exit operation (eg. `^counter`). Second argument is the scope level to differentiate local and nonlocal returns
@@ -186,6 +186,29 @@ pub struct Message {
     pub signature: String,
     /// The list of dynamic values that are passed.
     pub values: Vec<Expression>,
+}
+
+pub const INLINE_CACHE_SIZE: usize = 7;
+
+// maybe rename to DispatchNode?
+#[derive(Debug, Clone, PartialEq)]
+pub struct MessageCall {
+    pub message: Message,
+    // pub inline_cache: [Option<(String, MethodDef)>; INLINE_CACHE_SIZE],
+    pub inline_cache: Option<(String, usize)>,
+    pub is_generic_call: bool // no more inline cache, this is a megamorphic call site
+}
+
+// const I_DONT_GET_THE_POINT_OF_THIS: Option<(String, MethodDef)> = None;
+impl MessageCall {
+    pub fn new(message: Message) -> Self {
+        Self {
+            message,
+            // inline_cache: [I_DONT_GET_THE_POINT_OF_THIS; INLINE_CACHE_SIZE],
+            inline_cache: None,
+            is_generic_call: false
+        }
+    }
 }
 
 /// Represents a binary operation.

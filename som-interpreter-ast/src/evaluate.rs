@@ -233,11 +233,11 @@ impl Evaluate for ast::Block {
     }
 }
 
-impl Evaluate for ast::Message {
+impl Evaluate for ast::MessageCall {
     fn evaluate(&mut self, universe: &mut Universe) -> Return {
         // print!("Invoking (generic) {:?}", &generic_message.signature);
         // dbg!("generic messagin");
-        let (receiver, invokable) = match self.receiver.as_mut() {
+        let (receiver, invokable) = match self.message.receiver.as_mut() {
             ast::Expression::GlobalRead(ident) if ident == "super" => unsafe {
                 let frame = universe.current_frame();
                 let receiver = (*frame).get_self();
@@ -250,20 +250,39 @@ impl Evaluate for ast::Message {
                         );
                     }
                 };
-                let invokable = super_class.borrow().lookup_method(&self.signature);
+                let invokable = super_class.borrow().lookup_method(&self.message.signature);
                 (receiver, invokable)
             }
             expr => {
                 let receiver = propagate!(expr.evaluate(universe));
-                let invokable = receiver.lookup_method(universe, &self.signature);
+
+                let invokable = match &self.inline_cache {
+                    None => receiver.lookup_method(universe, &self.message.signature),
+                    Some((cached_name, method)) => {
+                        let rcvr_name = receiver.class(universe).borrow().name.clone();
+
+                        match rcvr_name == *cached_name {
+                            true => {
+                                // dbg!("cache hit!");
+                                Some(*method as *mut crate::method::Method)
+                            },
+                            false => {
+                                // dbg!("cache miss");
+                                self.inline_cache = None;
+                                receiver.lookup_method(universe, &self.message.signature)
+                            }
+                        }
+                    }
+                };
+
                 (receiver, invokable)
             }
         };
         // println!(" on {:?}", receiver);
         let args = {
-            let mut output = Vec::with_capacity(self.values.len() + 1);
+            let mut output = Vec::with_capacity(self.message.values.len() + 1);
             output.push(receiver.clone());
-            for expr in &mut self.values {
+            for expr in &mut self.message.values {
                 let value = propagate!(expr.evaluate(universe));
                 output.push(value);
             }
@@ -272,18 +291,46 @@ impl Evaluate for ast::Message {
 
         match invokable {
             Some(invokable) => {
-                unsafe { (*invokable).invoke(universe, args) }
+                let ret = unsafe { (*invokable).invoke(universe, args) };
+
+                let rcvr_name = receiver.class(universe).borrow().name.clone();
+                if self.inline_cache.is_none() {
+                    // dbg!("cachin'");
+                    self.inline_cache = Some((rcvr_name, invokable as usize));
+                }
+
+                // todo we only handle generic calls, not prims, because we can only hold onto som-core (AST+BC) specific types
+                // ...ideally we'd hold onto a pointer to Method, but that's code that's only for the AST interp so I can't put it in the CachedMessage definition (since that's in som-core)
+                // let maybe_method_def: Option<&ast::GenericMethodDef> = unsafe {
+                //     match &(*invokable).kind {
+                //         crate::method::MethodKind::Defined(method_def) => Some(method_def),
+                //         _ => None
+                //     }
+                // };
+                //
+                // match maybe_method_def {
+                //     None => {}
+                //     Some(method_def) => {
+                //         let rcvr_name = receiver.class(universe).borrow().name.clone();
+                //         if self.inline_cache.is_none() {
+                //             // dbg!("cachin'");
+                //             self.inline_cache = Some((rcvr_name, method_def.clone()));
+                //         }
+                //     }
+                // }
+
+                ret
             }
             None => unsafe {
                 let mut args = args;
                 args.remove(0);
                 universe
-                    .does_not_understand(receiver.clone(), &self.signature, args)
+                    .does_not_understand(receiver.clone(), &self.message.signature, args)
                     .unwrap_or_else(|| {
                         Return::Exception(format!(
                             "could not find method '{}>>#{}'",
                             receiver.class(universe).borrow().name(),
-                            self.signature
+                            self.message.signature
                         ))
                         // Return::Local(Value::Nil)
                     })
