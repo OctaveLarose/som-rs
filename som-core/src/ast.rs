@@ -188,50 +188,19 @@ pub struct Message {
     pub values: Vec<Expression>,
 }
 
-pub const INLINE_CACHE_SIZE: usize = 7;
-
 // maybe rename to DispatchNode?
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCall {
     pub message: Message,
-    pub inline_cache: Option<[Option<(usize, usize)>; INLINE_CACHE_SIZE]>,
-    pub is_generic_call: bool // no more inline cache, so this is a megamorphic call site
+    pub inline_cache: Option<(usize, usize)>
 }
 
 impl MessageCall {
     pub fn new(message: Message) -> Self {
         Self {
             message,
-            inline_cache: Some([None; INLINE_CACHE_SIZE]),
-            is_generic_call: false
+            inline_cache: None,
         }
-    }
-    
-    pub fn cache_lookup(&self, class_ptr: usize) -> Option<usize> {
-        for x in &self.inline_cache.unwrap() {
-            match x {
-                None => {}
-                Some((cached_class_ptr, cache_addr)) => {
-                    if *cached_class_ptr == class_ptr {
-                        return Some(*cache_addr);
-                    }
-                }
-            }
-        }
-        None
-    }
-    
-    pub fn cache_add_maybe_turn_megamorphic(&mut self, entry: (usize, usize)) {
-        // dbg!(self.inline_cache.iter().filter(|s| s.is_some()).count());
-        for x in &mut self.inline_cache.unwrap() {
-            if x.is_none() {
-                *x = Some(entry);
-                return;
-            }
-        }
-        // cache is full, we make it generic
-        self.is_generic_call = true;
-        self.inline_cache = None;
     }
 }
 
