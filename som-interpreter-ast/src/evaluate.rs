@@ -255,11 +255,12 @@ impl Evaluate for ast::MessageCall {
             }
             expr => {
                 let receiver = propagate!(expr.evaluate(universe));
-                let rcvr_name = receiver.class(universe).borrow().name.clone();
+                let rcvr_ptr = receiver.class(universe).as_ptr();
+                
 
                 let invokable = match self.is_generic_call {
                     true => {
-                        match self.cache_lookup(rcvr_name) {
+                        match self.cache_lookup(rcvr_ptr as usize) {
                             Some(method) => Some(method as *mut crate::method::Method),
                             None => receiver.lookup_method(universe, &self.message.signature)
                         }
@@ -272,7 +273,7 @@ impl Evaluate for ast::MessageCall {
                 (receiver, invokable)
             }
         };
-        
+
         // println!(" on {:?}", receiver);
         let args = {
             let mut output = Vec::with_capacity(self.message.values.len() + 1);
@@ -287,8 +288,11 @@ impl Evaluate for ast::MessageCall {
         match invokable {
             Some(invokable) => {
                 let ret = unsafe { (*invokable).invoke(universe, args) };
-                let rcvr_name = receiver.class(universe).borrow().name.clone();
-                self.cache_add_maybe_turn_megamorphic((rcvr_name, invokable as usize));
+                
+                if self.is_generic_call {
+                    let rcvr_ptr = receiver.class(universe).as_ptr();
+                    self.cache_add_maybe_turn_megamorphic((rcvr_ptr as usize, invokable as usize));
+                }
 
                 ret
             }
