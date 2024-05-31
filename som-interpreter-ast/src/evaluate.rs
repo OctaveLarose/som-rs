@@ -259,13 +259,13 @@ impl Evaluate for ast::MessageCall {
                 
 
                 let invokable = match self.is_generic_call {
-                    true => {
+                    false => {
                         match self.cache_lookup(rcvr_ptr as usize) {
                             Some(method) => Some(method as *mut crate::method::Method),
                             None => receiver.lookup_method(universe, &self.message.signature)
                         }
                     },
-                    false => {
+                    true => {
                         receiver.lookup_method(universe, &self.message.signature)
                     }
                 };
@@ -289,7 +289,7 @@ impl Evaluate for ast::MessageCall {
             Some(invokable) => {
                 let ret = unsafe { (*invokable).invoke(universe, args) };
                 
-                if self.is_generic_call {
+                if !self.is_generic_call {
                     let rcvr_ptr = receiver.class(universe).as_ptr();
                     self.cache_add_maybe_turn_megamorphic((rcvr_ptr as usize, invokable as usize));
                 }
