@@ -194,20 +194,44 @@ pub const INLINE_CACHE_SIZE: usize = 7;
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCall {
     pub message: Message,
-    // pub inline_cache: [Option<(String, MethodDef)>; INLINE_CACHE_SIZE],
-    pub inline_cache: Option<(String, usize)>,
+    pub inline_cache: [Option<(String, usize)>; INLINE_CACHE_SIZE],
     pub is_generic_call: bool // no more inline cache, this is a megamorphic call site
 }
 
-// const I_DONT_GET_THE_POINT_OF_THIS: Option<(String, MethodDef)> = None;
+const I_DONT_GET_THE_POINT_OF_THIS: Option<(String, usize)> = None;
 impl MessageCall {
     pub fn new(message: Message) -> Self {
         Self {
             message,
-            // inline_cache: [I_DONT_GET_THE_POINT_OF_THIS; INLINE_CACHE_SIZE],
-            inline_cache: None,
+            inline_cache: [I_DONT_GET_THE_POINT_OF_THIS; INLINE_CACHE_SIZE],
             is_generic_call: false
         }
+    }
+    
+    pub fn cache_lookup(&self, name: String) -> Option<usize> {
+        for x in &self.inline_cache {
+            match x {
+                None => {}
+                Some((cache_name, cache_addr)) => {
+                    if *cache_name == name {
+                        return Some(*cache_addr);
+                    }
+                }
+            }
+        }
+        None
+    }
+    
+    pub fn cache_add_maybe_turn_megamorphic(&mut self, entry: (String, usize)) {
+        // dbg!(self.inline_cache.iter().filter(|s| s.is_some()).count());
+        for x in &mut self.inline_cache {
+            if x.is_none() {
+                *x = Some(entry.clone());
+                return;
+            }
+        }
+        // cache is full, we make it generic
+        self.is_generic_call = true;
     }
 }
 

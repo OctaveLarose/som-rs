@@ -255,29 +255,24 @@ impl Evaluate for ast::MessageCall {
             }
             expr => {
                 let receiver = propagate!(expr.evaluate(universe));
+                let rcvr_name = receiver.class(universe).borrow().name.clone();
 
-                let invokable = match &self.inline_cache {
-                    None => receiver.lookup_method(universe, &self.message.signature),
-                    Some((cached_name, method)) => {
-                        let rcvr_name = receiver.class(universe).borrow().name.clone();
-
-                        match rcvr_name == *cached_name {
-                            true => {
-                                // dbg!("cache hit!");
-                                Some(*method as *mut crate::method::Method)
-                            },
-                            false => {
-                                // dbg!("cache miss");
-                                self.inline_cache = None;
-                                receiver.lookup_method(universe, &self.message.signature)
-                            }
+                let invokable = match self.is_generic_call {
+                    true => {
+                        match self.cache_lookup(rcvr_name) {
+                            Some(method) => Some(method as *mut crate::method::Method),
+                            None => receiver.lookup_method(universe, &self.message.signature)
                         }
+                    },
+                    false => {
+                        receiver.lookup_method(universe, &self.message.signature)
                     }
                 };
 
                 (receiver, invokable)
             }
         };
+        
         // println!(" on {:?}", receiver);
         let args = {
             let mut output = Vec::with_capacity(self.message.values.len() + 1);
@@ -292,32 +287,8 @@ impl Evaluate for ast::MessageCall {
         match invokable {
             Some(invokable) => {
                 let ret = unsafe { (*invokable).invoke(universe, args) };
-
                 let rcvr_name = receiver.class(universe).borrow().name.clone();
-                if self.inline_cache.is_none() {
-                    // dbg!("cachin'");
-                    self.inline_cache = Some((rcvr_name, invokable as usize));
-                }
-
-                // todo we only handle generic calls, not prims, because we can only hold onto som-core (AST+BC) specific types
-                // ...ideally we'd hold onto a pointer to Method, but that's code that's only for the AST interp so I can't put it in the CachedMessage definition (since that's in som-core)
-                // let maybe_method_def: Option<&ast::GenericMethodDef> = unsafe {
-                //     match &(*invokable).kind {
-                //         crate::method::MethodKind::Defined(method_def) => Some(method_def),
-                //         _ => None
-                //     }
-                // };
-                //
-                // match maybe_method_def {
-                //     None => {}
-                //     Some(method_def) => {
-                //         let rcvr_name = receiver.class(universe).borrow().name.clone();
-                //         if self.inline_cache.is_none() {
-                //             // dbg!("cachin'");
-                //             self.inline_cache = Some((rcvr_name, method_def.clone()));
-                //         }
-                //     }
-                // }
+                self.cache_add_maybe_turn_megamorphic((rcvr_name, invokable as usize));
 
                 ret
             }
