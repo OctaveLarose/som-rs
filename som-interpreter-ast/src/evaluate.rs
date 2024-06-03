@@ -309,13 +309,9 @@ impl Evaluate for ast::MessageCall {
         };
 
         match self.lookup_cache(rcvr_ptr as usize) {
-            Some((cached_rcvr_ptr, method)) => {
-                let invokable = if rcvr_ptr as usize == cached_rcvr_ptr {
-                    Some(method as *mut crate::method::Method)
-                } else {
-                    receiver.lookup_method(universe, &self.message.signature)
-                };
-
+            Some(method) => {
+                let invokable = Some(method as *mut crate::method::Method);
+                
                 match invokable {
                     Some(invokable) => {
                         unsafe { (*invokable).invoke(universe, args) }
