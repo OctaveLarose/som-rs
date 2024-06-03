@@ -256,9 +256,8 @@ impl Evaluate for ast::MessageCall {
             expr => {
                 let receiver = propagate!(expr.evaluate(universe));
                 let rcvr_ptr = receiver.class(universe).as_ptr();
-
-
-                let invokable = match self.inline_cache {
+                
+                let invokable = match self.lookup_cache(rcvr_ptr as usize) {
                     Some((cached_rcvr_ptr, method)) => {
                         if rcvr_ptr as usize == cached_rcvr_ptr {
                             Some(method as *mut crate::method::Method)
@@ -289,7 +288,7 @@ impl Evaluate for ast::MessageCall {
                 let ret = unsafe { (*invokable).invoke(universe, args) };
 
                 let rcvr_ptr = receiver.class(universe).as_ptr();
-                self.inline_cache = Some((rcvr_ptr as usize, invokable as usize));
+                self.cache_some_entry(invokable as usize, rcvr_ptr as usize);
 
                 ret
             }

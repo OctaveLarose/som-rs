@@ -188,18 +188,41 @@ pub struct Message {
     pub values: Vec<Expression>,
 }
 
+type CacheEntry = (usize, usize);
 // maybe rename to DispatchNode?
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCall {
     pub message: Message,
-    pub inline_cache: Option<(usize, usize)>
+    pub inline_cache: (Option<CacheEntry>, Option<CacheEntry>)
 }
 
 impl MessageCall {
     pub fn new(message: Message) -> Self {
         Self {
             message,
-            inline_cache: None,
+            inline_cache: (None, None),
+        }
+    }
+
+    pub fn lookup_cache(&self, key: usize) -> Option<CacheEntry> {
+        if let Some(cache @ (cached_class, _)) = self.inline_cache.0 {
+            if cached_class == key {
+                return Some(cache);
+            }
+        } else if let Some(cache @ (cached_class, _)) = self.inline_cache.1 {
+            if cached_class == key {
+                return Some(cache);
+            }
+        }
+        
+        None
+    }
+
+    pub fn cache_some_entry(&mut self, class_ptr: usize, method_ptr: usize) {
+        if self.inline_cache.0.is_none() {
+            self.inline_cache.0 = Some((class_ptr, method_ptr));
+        } else if self.inline_cache.1.is_none() {
+            self.inline_cache.1 = Some((class_ptr, method_ptr));
         }
     }
 }
