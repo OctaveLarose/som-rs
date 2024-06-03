@@ -193,25 +193,23 @@ type CacheEntry = (usize, usize);
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCall {
     pub message: Message,
-    pub inline_cache: Box<(Option<CacheEntry>, Option<CacheEntry>)>
+    pub inline_cache: Box<[Option<CacheEntry>; 2]>
 }
 
 impl MessageCall {
     pub fn new(message: Message) -> Self {
         Self {
             message,
-            inline_cache: Box::new((None, None)),
+            inline_cache: Box::new([None; 2]),
         }
     }
 
     pub fn lookup_cache(&self, key: usize) -> Option<CacheEntry> {
-        if let Some(cache @ (cached_class, _)) = self.inline_cache.0 {
-            if cached_class == key {
-                return Some(cache);
-            }
-        } else if let Some(cache @ (cached_class, _)) = self.inline_cache.1 {
-            if cached_class == key {
-                return Some(cache);
+        for cache_elem in self.inline_cache.iter() {
+            if let Some(cache @ (cached_class, _)) = cache_elem {
+                if *cached_class == key {
+                    return Some(*cache);
+                }
             }
         }
         
@@ -219,10 +217,11 @@ impl MessageCall {
     }
 
     pub fn cache_some_entry(&mut self, class_ptr: usize, method_ptr: usize) {
-        if self.inline_cache.0.is_none() {
-            self.inline_cache.0 = Some((class_ptr, method_ptr));
-        } else if self.inline_cache.1.is_none() {
-            self.inline_cache.1 = Some((class_ptr, method_ptr));
+        for cache_elem in self.inline_cache.iter_mut() {
+            if cache_elem.is_none() {
+                *cache_elem = Some((class_ptr, method_ptr));
+                return;
+            }
         }
     }
 }
