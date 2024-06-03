@@ -257,6 +257,10 @@ impl Evaluate for ast::MessageCall {
                 let receiver = propagate!(expr.evaluate(universe));
                 let rcvr_ptr = receiver.class(universe).as_ptr();
                 
+                // if self.inline_cache.iter().all(|s| s.is_some()) {
+                //     debug_assert_ne!(self.inline_cache[0].unwrap().0, self.inline_cache[1].unwrap().1);
+                // }
+                
                 match self.lookup_cache(rcvr_ptr as usize) {
                     Some((cached_rcvr_ptr, method)) => {
                         let invokable = if rcvr_ptr as usize == cached_rcvr_ptr {
@@ -312,7 +316,7 @@ impl Evaluate for ast::MessageCall {
                                 let ret = unsafe { (*invokable).invoke(universe, args) };
 
                                 let rcvr_ptr = receiver.class(universe).as_ptr();
-                                self.cache_some_entry(invokable as usize, rcvr_ptr as usize);
+                                self.cache_some_entry(rcvr_ptr as usize, invokable as usize);
 
                                 return ret;
                             }
@@ -351,7 +355,7 @@ impl Evaluate for ast::MessageCall {
                 let ret = unsafe { (*invokable).invoke(universe, args) };
 
                 let rcvr_ptr = receiver.class(universe).as_ptr();
-                self.cache_some_entry(invokable as usize, rcvr_ptr as usize);
+                self.cache_some_entry(rcvr_ptr as usize, invokable as usize);
 
                 ret
             }
