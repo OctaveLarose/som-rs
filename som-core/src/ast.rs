@@ -188,19 +188,21 @@ pub struct Message {
     pub values: Vec<Expression>,
 }
 
+const INLINE_CACHE_SIZE: usize = 7;
+
 type CacheEntry = (usize, usize);
 // maybe rename to DispatchNode?
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCall {
     pub message: Message,
-    pub inline_cache: Box<[Option<CacheEntry>; 2]>
+    pub inline_cache: Box<[Option<CacheEntry>; INLINE_CACHE_SIZE]>
 }
 
 impl MessageCall {
     pub fn new(message: Message) -> Self {
         Self {
             message,
-            inline_cache: Box::new([None; 2]),
+            inline_cache: Box::new([None; INLINE_CACHE_SIZE]),
         }
     }
 
