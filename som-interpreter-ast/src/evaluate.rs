@@ -235,6 +235,23 @@ impl Evaluate for ast::Block {
 
 impl Evaluate for ast::MessageCall {
     fn evaluate(&mut self, universe: &mut Universe) -> Return {
+        pub fn does_not_understand(msg: &ast::MessageCall, universe: &mut Universe, args: Vec<Value>, receiver: Value) -> Return {
+            unsafe {
+                let mut args = args;
+                args.remove(0);
+                universe
+                    .does_not_understand(receiver.clone(), &msg.message.signature, args)
+                    .unwrap_or_else(|| {
+                        Return::Exception(format!(
+                            "could not find method '{}>>#{}'",
+                            receiver.class(universe).borrow().name(),
+                            msg.message.signature
+                        ))
+                        // Return::Local(Value::Nil)
+                    })
+            }
+        }
+        
         // print!("Invoking (generic) {:?}", &generic_message.signature);
         // dbg!("generic messagin");
         let expr = self.message.receiver.as_mut();
@@ -268,24 +285,19 @@ impl Evaluate for ast::MessageCall {
                     Some(invokable) => {
                         let ret = (*invokable).invoke(universe, args);
 
-                        let rcvr_ptr = receiver.class(universe).as_ptr();
-                        self.cache_some_entry(rcvr_ptr as usize, invokable as usize);
+                        // let rcvr_ptr = receiver.class(universe).as_ptr();
+                        // self.cache_some_entry(rcvr_ptr as usize, invokable as usize);
+
+                        // let cache_len = self.debug_cache_len();
+                        // if self.debug_cache_len() > 10 {
+                        //     dbg!(&cache_len);
+                        //     dbg!(&self.message.signature);
+                        // }
+                        
 
                         return ret;
                     }
-                    None => {
-                        let mut args = args;
-                        args.remove(0);
-                        return universe
-                            .does_not_understand(receiver.clone(), &self.message.signature, args)
-                            .unwrap_or_else(|| {
-                                Return::Exception(format!(
-                                    "could not find method '{}>>#{}'",
-                                    receiver.class(universe).borrow().name(),
-                                    self.message.signature
-                                )) // Return::Local(Value::Nil)        
-                            });
-                    }
+                    None => { return does_not_understand(self, universe, args, receiver); }
                 }
             },
             _ => {}
@@ -294,9 +306,6 @@ impl Evaluate for ast::MessageCall {
         let receiver = propagate!(expr.evaluate(universe));
         let rcvr_ptr = receiver.class(universe).as_ptr();
 
-        // if self.inline_cache.iter().all(|s| s.is_some()) {
-        //     debug_assert_ne!(self.inline_cache[0].unwrap().0, self.inline_cache[1].unwrap().1);
-        // }
 
         let args = {
             let mut output = Vec::with_capacity(self.message.values.len() + 1);
@@ -311,25 +320,17 @@ impl Evaluate for ast::MessageCall {
         match self.lookup_cache(rcvr_ptr as usize) {
             Some(method) => {
                 let invokable = Some(method as *mut crate::method::Method);
-                
+
                 match invokable {
                     Some(invokable) => {
+                        // dbg!(self.debug_cache_len());
+                        // if self.debug_cache_len() >= 3 {
+                            // dbg!(self.debug_cache_len());
+                            // dbg!(&self.message.signature);
+                        // }
                         unsafe { (*invokable).invoke(universe, args) }
                     }
-                    None => unsafe {
-                        let mut args = args;
-                        args.remove(0);
-                        universe
-                            .does_not_understand(receiver.clone(), &self.message.signature, args)
-                            .unwrap_or_else(|| {
-                                Return::Exception(format!(
-                                    "could not find method '{}>>#{}'",
-                                    receiver.class(universe).borrow().name(),
-                                    self.message.signature
-                                ))
-                                // Return::Local(Value::Nil)
-                            })
-                    }
+                    None => does_not_understand(self, universe, args, receiver)
                 }
             }
             None => {
@@ -337,26 +338,10 @@ impl Evaluate for ast::MessageCall {
 
                 match invokable {
                     Some(invokable) => {
-                        let ret = unsafe { (*invokable).invoke(universe, args) };
-                        let rcvr_ptr = receiver.class(universe).as_ptr();
-                        self.cache_some_entry(rcvr_ptr as usize, invokable as usize);
-
-                        ret
+                        self.cache_some_entry(receiver.class(universe).as_ptr() as usize, invokable as usize);
+                        unsafe { (*invokable).invoke(universe, args) }
                     }
-                    None => unsafe {
-                        let mut args = args;
-                        args.remove(0);
-                        universe
-                            .does_not_understand(receiver.clone(), &self.message.signature, args)
-                            .unwrap_or_else(|| {
-                                Return::Exception(format!(
-                                    "could not find method '{}>>#{}'",
-                                    receiver.class(universe).borrow().name(),
-                                    self.message.signature
-                                ))
-                                // Return::Local(Value::Nil)
-                            })
-                    }
+                    None => does_not_understand(self, universe, args, receiver)
                 }
             }
         }

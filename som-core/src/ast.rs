@@ -188,7 +188,7 @@ pub struct Message {
     pub values: Vec<Expression>,
 }
 
-const INLINE_CACHE_SIZE: usize = 7;
+// const INLINE_CACHE_SIZE: usize = 7;
 
 #[derive(Debug, Clone, PartialEq)]
 // type CacheEntry = (usize, usize);
@@ -197,6 +197,12 @@ pub struct CacheEntry {
     method_ptr: usize,
     next: Option<Box<CacheEntry>>,
 }
+
+// enum MessageType {
+//     Uninitialized,
+//     Cached,
+//     SuperCall
+// }
 
 // maybe rename to DispatchNode?
 #[derive(Debug, Clone, PartialEq)]
@@ -213,13 +219,13 @@ impl MessageCall {
         }
     }
 
-    pub fn lookup_cache(&self, key: usize) -> Option<usize> {
+    pub fn lookup_cache(&self, class_ptr: usize) -> Option<usize> {
         let mut maybe_cache_item = &self.inline_cache;
 
         while maybe_cache_item.is_some() {
             let cache_item = maybe_cache_item.as_ref().unwrap();
 
-            if cache_item.class_ptr == key {
+            if cache_item.class_ptr == class_ptr {
                 return Some(cache_item.method_ptr);
             }
 
@@ -251,6 +257,22 @@ impl MessageCall {
                 next: None,
             }
         ));
+    }
+    
+    #[cfg(debug_assertions)]
+    pub fn debug_cache_len(&self) -> usize {
+        let mut i = 0;
+        let mut cache_elem = self.inline_cache.as_ref();
+
+        while let Some(elem) = cache_elem {
+            // dbg!(&cache_elem.unwrap().class_ptr);
+            cache_elem = elem.next.as_ref();
+            i += 1;
+        }
+        
+        // dbg!();
+        
+        i
     }
 }
 
