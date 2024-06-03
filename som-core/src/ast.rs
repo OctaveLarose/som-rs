@@ -193,14 +193,14 @@ type CacheEntry = (usize, usize);
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCall {
     pub message: Message,
-    pub inline_cache: (Option<CacheEntry>, Option<CacheEntry>)
+    pub inline_cache: Box<(Option<CacheEntry>, Option<CacheEntry>)>
 }
 
 impl MessageCall {
     pub fn new(message: Message) -> Self {
         Self {
             message,
-            inline_cache: (None, None),
+            inline_cache: Box::new((None, None)),
         }
     }
 
