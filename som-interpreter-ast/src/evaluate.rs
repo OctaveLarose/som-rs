@@ -237,7 +237,9 @@ impl Evaluate for ast::MessageCall {
     fn evaluate(&mut self, universe: &mut Universe) -> Return {
         // print!("Invoking (generic) {:?}", &generic_message.signature);
         // dbg!("generic messagin");
-        let (receiver, invokable) = match self.message.receiver.as_mut() {
+        let expr = self.message.receiver.as_mut();
+
+        match expr {
             ast::Expression::GlobalRead(ident) if ident == "super" => unsafe {
                 let frame = universe.current_frame();
                 let receiver = (*frame).get_self();
@@ -251,94 +253,50 @@ impl Evaluate for ast::MessageCall {
                     }
                 };
                 let invokable = super_class.borrow().lookup_method(&self.message.signature);
-                (receiver, invokable)
-            }
-            expr => {
-                let receiver = propagate!(expr.evaluate(universe));
-                let rcvr_ptr = receiver.class(universe).as_ptr();
-                
-                // if self.inline_cache.iter().all(|s| s.is_some()) {
-                //     debug_assert_ne!(self.inline_cache[0].unwrap().0, self.inline_cache[1].unwrap().1);
-                // }
-                
-                match self.lookup_cache(rcvr_ptr as usize) {
-                    Some((cached_rcvr_ptr, method)) => {
-                        let invokable = if rcvr_ptr as usize == cached_rcvr_ptr {
-                            Some(method as *mut crate::method::Method)
-                        } else {
-                            receiver.lookup_method(universe, &self.message.signature)
-                        };
 
-                        let args = {
-                            let mut output = Vec::with_capacity(self.message.values.len() + 1);
-                            output.push(receiver.clone());
-                            for expr in &mut self.message.values {
-                                let value = propagate!(expr.evaluate(universe));
-                                output.push(value);
-                            }
-                            output
-                        };
-
-                        match invokable {
-                            Some(invokable) => {
-                                return unsafe { (*invokable).invoke(universe, args) };
-                            }
-                            None => unsafe {
-                                let mut args = args;
-                                args.remove(0);
-                                return universe
-                                    .does_not_understand(receiver.clone(), &self.message.signature, args)
-                                    .unwrap_or_else(|| {
-                                        Return::Exception(format!(
-                                            "could not find method '{}>>#{}'",
-                                            receiver.class(universe).borrow().name(),
-                                            self.message.signature
-                                        ))
-                                        // Return::Local(Value::Nil)
-                                    });
-                            }
-                        }
-                    },
-                    None => {
-                        let invokable = receiver.lookup_method(universe, &self.message.signature);
-                        let args = {
-                            let mut output = Vec::with_capacity(self.message.values.len() + 1);
-                            output.push(receiver.clone());
-                            for expr in &mut self.message.values {
-                                let value = propagate!(expr.evaluate(universe));
-                                output.push(value);
-                            }
-                            output
-                        };
-
-                        match invokable {
-                            Some(invokable) => {
-                                let ret = unsafe { (*invokable).invoke(universe, args) };
-
-                                let rcvr_ptr = receiver.class(universe).as_ptr();
-                                self.cache_some_entry(rcvr_ptr as usize, invokable as usize);
-
-                                return ret;
-                            }
-                            None => unsafe {
-                                let mut args = args;
-                                args.remove(0);
-                                return universe
-                                    .does_not_understand(receiver.clone(), &self.message.signature, args)
-                                    .unwrap_or_else(|| {
-                                        Return::Exception(format!(
-                                            "could not find method '{}>>#{}'",
-                                            receiver.class(universe).borrow().name(),
-                                            self.message.signature
-                                        ))
-                                        // Return::Local(Value::Nil)
-                                    });
-                            }
-                        }
+                let args = {
+                    let mut output = Vec::with_capacity(self.message.values.len() + 1);
+                    output.push(receiver.clone());
+                    for expr in &mut self.message.values {
+                        let value = propagate!(expr.evaluate(universe));
+                        output.push(value);
                     }
+                    output
                 };
-            }
+
+                match invokable {
+                    Some(invokable) => {
+                        let ret = (*invokable).invoke(universe, args);
+
+                        let rcvr_ptr = receiver.class(universe).as_ptr();
+                        self.cache_some_entry(rcvr_ptr as usize, invokable as usize);
+
+                        return ret;
+                    }
+                    None => {
+                        let mut args = args;
+                        args.remove(0);
+                        return universe
+                            .does_not_understand(receiver.clone(), &self.message.signature, args)
+                            .unwrap_or_else(|| {
+                                Return::Exception(format!(
+                                    "could not find method '{}>>#{}'",
+                                    receiver.class(universe).borrow().name(),
+                                    self.message.signature
+                                )) // Return::Local(Value::Nil)        
+                            });
+                    }
+                }
+            },
+            _ => {}
         };
+
+        let receiver = propagate!(expr.evaluate(universe));
+        let rcvr_ptr = receiver.class(universe).as_ptr();
+
+        // if self.inline_cache.iter().all(|s| s.is_some()) {
+        //     debug_assert_ne!(self.inline_cache[0].unwrap().0, self.inline_cache[1].unwrap().1);
+        // }
 
         let args = {
             let mut output = Vec::with_capacity(self.message.values.len() + 1);
@@ -349,29 +307,61 @@ impl Evaluate for ast::MessageCall {
             }
             output
         };
-        
-        match invokable {
-            Some(invokable) => {
-                let ret = unsafe { (*invokable).invoke(universe, args) };
 
-                let rcvr_ptr = receiver.class(universe).as_ptr();
-                self.cache_some_entry(rcvr_ptr as usize, invokable as usize);
+        match self.lookup_cache(rcvr_ptr as usize) {
+            Some((cached_rcvr_ptr, method)) => {
+                let invokable = if rcvr_ptr as usize == cached_rcvr_ptr {
+                    Some(method as *mut crate::method::Method)
+                } else {
+                    receiver.lookup_method(universe, &self.message.signature)
+                };
 
-                ret
+                match invokable {
+                    Some(invokable) => {
+                        unsafe { (*invokable).invoke(universe, args) }
+                    }
+                    None => unsafe {
+                        let mut args = args;
+                        args.remove(0);
+                        universe
+                            .does_not_understand(receiver.clone(), &self.message.signature, args)
+                            .unwrap_or_else(|| {
+                                Return::Exception(format!(
+                                    "could not find method '{}>>#{}'",
+                                    receiver.class(universe).borrow().name(),
+                                    self.message.signature
+                                ))
+                                // Return::Local(Value::Nil)
+                            })
+                    }
+                }
             }
-            None => unsafe {
-                let mut args = args;
-                args.remove(0);
-                universe
-                    .does_not_understand(receiver.clone(), &self.message.signature, args)
-                    .unwrap_or_else(|| {
-                        Return::Exception(format!(
-                            "could not find method '{}>>#{}'",
-                            receiver.class(universe).borrow().name(),
-                            self.message.signature
-                        ))
-                        // Return::Local(Value::Nil)
-                    })
+            None => {
+                let invokable = receiver.lookup_method(universe, &self.message.signature);
+
+                match invokable {
+                    Some(invokable) => {
+                        let ret = unsafe { (*invokable).invoke(universe, args) };
+                        let rcvr_ptr = receiver.class(universe).as_ptr();
+                        self.cache_some_entry(rcvr_ptr as usize, invokable as usize);
+
+                        ret
+                    }
+                    None => unsafe {
+                        let mut args = args;
+                        args.remove(0);
+                        universe
+                            .does_not_understand(receiver.clone(), &self.message.signature, args)
+                            .unwrap_or_else(|| {
+                                Return::Exception(format!(
+                                    "could not find method '{}>>#{}'",
+                                    receiver.class(universe).borrow().name(),
+                                    self.message.signature
+                                ))
+                                // Return::Local(Value::Nil)
+                            })
+                    }
+                }
             }
         }
     }
