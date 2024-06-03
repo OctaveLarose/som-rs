@@ -257,22 +257,85 @@ impl Evaluate for ast::MessageCall {
                 let receiver = propagate!(expr.evaluate(universe));
                 let rcvr_ptr = receiver.class(universe).as_ptr();
                 
-                let invokable = match self.lookup_cache(rcvr_ptr as usize) {
+                match self.lookup_cache(rcvr_ptr as usize) {
                     Some((cached_rcvr_ptr, method)) => {
-                        if rcvr_ptr as usize == cached_rcvr_ptr {
+                        let invokable = if rcvr_ptr as usize == cached_rcvr_ptr {
                             Some(method as *mut crate::method::Method)
                         } else {
                             receiver.lookup_method(universe, &self.message.signature)
+                        };
+
+                        let args = {
+                            let mut output = Vec::with_capacity(self.message.values.len() + 1);
+                            output.push(receiver.clone());
+                            for expr in &mut self.message.values {
+                                let value = propagate!(expr.evaluate(universe));
+                                output.push(value);
+                            }
+                            output
+                        };
+
+                        match invokable {
+                            Some(invokable) => {
+                                return unsafe { (*invokable).invoke(universe, args) };
+                            }
+                            None => unsafe {
+                                let mut args = args;
+                                args.remove(0);
+                                return universe
+                                    .does_not_understand(receiver.clone(), &self.message.signature, args)
+                                    .unwrap_or_else(|| {
+                                        Return::Exception(format!(
+                                            "could not find method '{}>>#{}'",
+                                            receiver.class(universe).borrow().name(),
+                                            self.message.signature
+                                        ))
+                                        // Return::Local(Value::Nil)
+                                    });
+                            }
                         }
                     },
-                    None => receiver.lookup_method(universe, &self.message.signature)
-                };
+                    None => {
+                        let invokable = receiver.lookup_method(universe, &self.message.signature);
+                        let args = {
+                            let mut output = Vec::with_capacity(self.message.values.len() + 1);
+                            output.push(receiver.clone());
+                            for expr in &mut self.message.values {
+                                let value = propagate!(expr.evaluate(universe));
+                                output.push(value);
+                            }
+                            output
+                        };
 
-                (receiver, invokable)
+                        match invokable {
+                            Some(invokable) => {
+                                let ret = unsafe { (*invokable).invoke(universe, args) };
+
+                                let rcvr_ptr = receiver.class(universe).as_ptr();
+                                self.cache_some_entry(invokable as usize, rcvr_ptr as usize);
+
+                                return ret;
+                            }
+                            None => unsafe {
+                                let mut args = args;
+                                args.remove(0);
+                                return universe
+                                    .does_not_understand(receiver.clone(), &self.message.signature, args)
+                                    .unwrap_or_else(|| {
+                                        Return::Exception(format!(
+                                            "could not find method '{}>>#{}'",
+                                            receiver.class(universe).borrow().name(),
+                                            self.message.signature
+                                        ))
+                                        // Return::Local(Value::Nil)
+                                    });
+                            }
+                        }
+                    }
+                };
             }
         };
 
-        // println!(" on {:?}", receiver);
         let args = {
             let mut output = Vec::with_capacity(self.message.values.len() + 1);
             output.push(receiver.clone());
@@ -282,7 +345,7 @@ impl Evaluate for ast::MessageCall {
             }
             output
         };
-
+        
         match invokable {
             Some(invokable) => {
                 let ret = unsafe { (*invokable).invoke(universe, args) };
