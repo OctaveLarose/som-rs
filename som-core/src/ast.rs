@@ -195,7 +195,7 @@ pub struct Message {
 pub struct CacheEntry {
     class_ptr: usize,
     method_ptr: usize,
-    next: Option<Box<CacheEntry>>,
+    // next: Option<Box<CacheEntry>>,
 }
 
 // enum MessageType {
@@ -222,15 +222,17 @@ impl MessageCall {
     pub fn lookup_cache(&self, class_ptr: usize) -> Option<usize> {
         let mut maybe_cache_item = &self.inline_cache;
 
-        while maybe_cache_item.is_some() {
-            let cache_item = maybe_cache_item.as_ref().unwrap();
+        // while maybe_cache_item.is_some() {
+        //     let cache_item = maybe_cache_item.as_ref().unwrap();
 
+        if let Some(cache_item) = maybe_cache_item {
             if cache_item.class_ptr == class_ptr {
                 return Some(cache_item.method_ptr);
             }
-
-            maybe_cache_item = &cache_item.next;
         }
+
+            // maybe_cache_item = &cache_item.next;
+        // }
 
         // for cache_elem in self.inline_cache.iter() {
         //     if let Some(cache @ (cached_class, _)) = cache_elem {
@@ -246,20 +248,22 @@ impl MessageCall {
     pub fn cache_some_entry(&mut self, class_ptr: usize, method_ptr: usize) {
         let mut maybe_cache_item = &mut self.inline_cache;
 
-        while maybe_cache_item.is_some() {
-            maybe_cache_item = &mut maybe_cache_item.as_mut().unwrap().next;
-        }
+        // while maybe_cache_item.is_some() {
+        //     maybe_cache_item = &mut maybe_cache_item.as_mut().unwrap().next;
+        // }
 
-        *maybe_cache_item = Some(Box::new(
-            CacheEntry {
-                class_ptr,
-                method_ptr,
-                next: None,
-            }
-        ));
+        if maybe_cache_item.is_none() {
+            *maybe_cache_item = Some(Box::new(
+                CacheEntry {
+                    class_ptr,
+                    method_ptr,
+                    // next: None,
+                }
+            ));
+        }
     }
     
-    #[cfg(debug_assertions)]
+   /* #[cfg(debug_assertions)]
     pub fn debug_cache_len(&self) -> usize {
         let mut i = 0;
         let mut cache_elem = self.inline_cache.as_ref();
@@ -273,7 +277,7 @@ impl MessageCall {
         // dbg!();
         
         i
-    }
+    }*/
 }
 
 /// Represents a binary operation.
