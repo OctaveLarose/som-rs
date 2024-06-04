@@ -190,13 +190,13 @@ pub struct Message {
 
 // const INLINE_CACHE_SIZE: usize = 7;
 
-#[derive(Debug, Clone, PartialEq)]
-// type CacheEntry = (usize, usize);
-pub struct CacheEntry {
-    class_ptr: usize,
-    method_ptr: usize,
-    // next: Option<Box<CacheEntry>>,
-}
+type CacheEntry = (usize, usize);
+// #[derive(Debug, Clone, PartialEq)]
+// pub struct CacheEntry {
+//     class_ptr: usize,
+//     method_ptr: usize,
+//     next: Option<Box<CacheEntry>>,
+// }
 
 // enum MessageType {
 //     Uninitialized,
@@ -208,7 +208,7 @@ pub struct CacheEntry {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCall {
     pub message: Message,
-    pub inline_cache: Option<Box<CacheEntry>>,
+    pub inline_cache: Option<CacheEntry>,
 }
 
 impl MessageCall {
@@ -220,18 +220,18 @@ impl MessageCall {
     }
 
     pub fn lookup_cache(&self, class_ptr: usize) -> Option<usize> {
-        let mut maybe_cache_item = &self.inline_cache;
+        self.inline_cache.and_then(|cache| { (cache.0 == class_ptr).then_some(cache.1) })
+
+        // let mut maybe_cache_item = &self.inline_cache;
 
         // while maybe_cache_item.is_some() {
         //     let cache_item = maybe_cache_item.as_ref().unwrap();
-
-        if let Some(cache_item) = maybe_cache_item {
-            if cache_item.class_ptr == class_ptr {
-                return Some(cache_item.method_ptr);
-            }
-        }
-
-            // maybe_cache_item = &cache_item.next;
+        // 
+        //     if cache_item.class_ptr == class_ptr {
+        //         return Some(cache_item.method_ptr);
+        //     }
+        // 
+        //     maybe_cache_item = &cache_item.next;
         // }
 
         // for cache_elem in self.inline_cache.iter() {
@@ -242,25 +242,25 @@ impl MessageCall {
         //     }
         // }
 
-        None
+        // None
     }
 
     pub fn cache_some_entry(&mut self, class_ptr: usize, method_ptr: usize) {
-        let mut maybe_cache_item = &mut self.inline_cache;
-
+        self.inline_cache = Some((class_ptr, method_ptr));
+        
+        // let mut maybe_cache_item = &mut self.inline_cache;
+        // 
         // while maybe_cache_item.is_some() {
         //     maybe_cache_item = &mut maybe_cache_item.as_mut().unwrap().next;
         // }
-
-        if maybe_cache_item.is_none() {
-            *maybe_cache_item = Some(Box::new(
-                CacheEntry {
-                    class_ptr,
-                    method_ptr,
-                    // next: None,
-                }
-            ));
-        }
+        // 
+        // *maybe_cache_item = Some(Box::new(
+        //     CacheEntry {
+        //         class_ptr,
+        //         method_ptr,
+        //         next: None,
+        //     }
+        // ));
     }
     
    /* #[cfg(debug_assertions)]

@@ -319,19 +319,8 @@ impl Evaluate for ast::MessageCall {
 
         match self.lookup_cache(rcvr_ptr as usize) {
             Some(method) => {
-                let invokable = Some(method as *mut crate::method::Method);
-
-                match invokable {
-                    Some(invokable) => {
-                        // dbg!(self.debug_cache_len());
-                        // if self.debug_cache_len() >= 3 {
-                            // dbg!(self.debug_cache_len());
-                            // dbg!(&self.message.signature);
-                        // }
-                        unsafe { (*invokable).invoke(universe, args) }
-                    }
-                    None => does_not_understand(self, universe, args, receiver)
-                }
+                let invokable = method as *mut crate::method::Method;
+                unsafe { (*invokable).invoke(universe, args) }
             }
             None => {
                 let invokable = receiver.lookup_method(universe, &self.message.signature);
