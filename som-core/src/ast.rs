@@ -198,16 +198,18 @@ pub struct CacheEntry {
     next: Option<Box<CacheEntry>>,
 }
 
-// enum MessageType {
-//     Uninitialized,
-//     Cached,
-//     SuperCall
-// }
+#[derive(Debug, Clone, PartialEq)]
+pub enum MessageType {
+    Uninit,
+    Regular,
+    Super(usize)
+}
 
 // maybe rename to DispatchNode?
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCall {
     pub message: Message,
+    pub kind: MessageType,
     pub inline_cache: Option<Box<CacheEntry>>,
 }
 
@@ -215,6 +217,7 @@ impl MessageCall {
     pub fn new(message: Message) -> Self {
         Self {
             message,
+            kind: MessageType::Uninit,
             inline_cache: None,
         }
     }

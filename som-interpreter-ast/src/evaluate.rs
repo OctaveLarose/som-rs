@@ -2,8 +2,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use som_core::ast;
+use som_core::ast::MessageType;
 
 use crate::block::Block;
+use crate::class::Class;
 use crate::invokable::{Invoke, Return};
 use crate::universe::Universe;
 use crate::value::Value;
@@ -251,25 +253,29 @@ impl Evaluate for ast::MessageCall {
                     })
             }
         }
-        
-        // print!("Invoking (generic) {:?}", &generic_message.signature);
-        // dbg!("generic messagin");
-        let expr = self.message.receiver.as_mut();
 
-        match expr {
-            ast::Expression::GlobalRead(ident) if ident == "super" => unsafe {
-                let frame = universe.current_frame();
-                let receiver = (*frame).get_self();
-                let holder = (*frame).get_method_holder();
-                let super_class = match holder.borrow().super_class() {
-                    Some(class) => class,
-                    None => {
-                        return Return::Exception(
-                            "`super` used without any superclass available".to_string(),
-                        );
-                    }
+        match self.kind {
+            MessageType::Uninit => {
+                match self.message.receiver.as_mut() {
+                    ast::Expression::GlobalRead(ident) if ident == "super" => unsafe {
+                        let frame = universe.current_frame();
+                        let holder = (*frame).get_method_holder();
+                        let super_class = match holder.borrow().super_class() {
+                            Some(class) => class,
+                            None => {
+                                return Return::Exception(
+                                    "`super` used without any superclass available".to_string(),
+                                );
+                            }
+                        };
+                        self.kind = MessageType::Super(super_class.as_ptr() as usize);
+                    },
+                    _ => self.kind = MessageType::Regular
                 };
-                let invokable = super_class.borrow().lookup_method(&self.message.signature);
+                self.evaluate(universe)
+            }
+            _ => {
+                let receiver = propagate!(self.message.receiver.evaluate(universe));
 
                 let args = {
                     let mut output = Vec::with_capacity(self.message.values.len() + 1);
@@ -281,67 +287,30 @@ impl Evaluate for ast::MessageCall {
                     output
                 };
 
-                match invokable {
-                    Some(invokable) => {
-                        let ret = (*invokable).invoke(universe, args);
-
-                        // let rcvr_ptr = receiver.class(universe).as_ptr();
-                        // self.cache_some_entry(rcvr_ptr as usize, invokable as usize);
-
-                        // let cache_len = self.debug_cache_len();
-                        // if self.debug_cache_len() > 10 {
-                        //     dbg!(&cache_len);
-                        //     dbg!(&self.message.signature);
-                        // }
-                        
-
-                        return ret;
-                    }
-                    None => { return does_not_understand(self, universe, args, receiver); }
-                }
-            },
-            _ => {}
-        };
-
-        let receiver = propagate!(expr.evaluate(universe));
-        let rcvr_ptr = receiver.class(universe).as_ptr();
-
-
-        let args = {
-            let mut output = Vec::with_capacity(self.message.values.len() + 1);
-            output.push(receiver.clone());
-            for expr in &mut self.message.values {
-                let value = propagate!(expr.evaluate(universe));
-                output.push(value);
-            }
-            output
-        };
-
-        match self.lookup_cache(rcvr_ptr as usize) {
-            Some(method) => {
-                let invokable = Some(method as *mut crate::method::Method);
-
-                match invokable {
-                    Some(invokable) => {
-                        // dbg!(self.debug_cache_len());
-                        // if self.debug_cache_len() >= 3 {
-                            // dbg!(self.debug_cache_len());
-                            // dbg!(&self.message.signature);
-                        // }
+                let rcvr_ptr = receiver.class(universe).as_ptr();
+                match self.lookup_cache(rcvr_ptr as usize) {
+                    Some(method) => {
+                        let invokable = method as *mut crate::method::Method;
                         unsafe { (*invokable).invoke(universe, args) }
                     }
-                    None => does_not_understand(self, universe, args, receiver)
-                }
-            }
-            None => {
-                let invokable = receiver.lookup_method(universe, &self.message.signature);
+                    None => {
+                        let invokable = match self.kind {
+                            MessageType::Uninit => unreachable!(),
+                            MessageType::Regular => receiver.lookup_method(universe, &self.message.signature),
+                            MessageType::Super(s) => {
+                                let super_class = s as *mut Class;
+                                unsafe { (*super_class).lookup_method(&self.message.signature) }
+                            }
+                        };
 
-                match invokable {
-                    Some(invokable) => {
-                        self.cache_some_entry(receiver.class(universe).as_ptr() as usize, invokable as usize);
-                        unsafe { (*invokable).invoke(universe, args) }
+                        match invokable {
+                            Some(invokable) => {
+                                self.cache_some_entry(receiver.class(universe).as_ptr() as usize, invokable as usize);
+                                unsafe { (*invokable).invoke(universe, args) }
+                            }
+                            None => does_not_understand(self, universe, args, receiver)
+                        }
                     }
-                    None => does_not_understand(self, universe, args, receiver)
                 }
             }
         }

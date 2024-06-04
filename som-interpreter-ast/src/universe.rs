@@ -545,7 +545,10 @@ impl Universe {
     /// Search for a global binding.
     pub fn lookup_global(&self, name: impl AsRef<str>) -> Option<Value> {
         let name = name.as_ref();
-        self.globals.get(name).cloned()
+        match name {
+            "super" => unsafe { Some((*self.current_frame()).get_self()) }, // when you call super, the receiver is self... for some reason? TODO understand better
+            _ => self.globals.get(name).cloned()
+        }
     }
 
     /// Assign a value to a local binding.
