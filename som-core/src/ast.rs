@@ -208,7 +208,7 @@ type CacheEntry = (usize, usize);
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCall {
     pub message: Message,
-    pub inline_cache: Option<CacheEntry>,
+    pub inline_cache: Option<Box<CacheEntry>>,
 }
 
 impl MessageCall {
@@ -220,7 +220,7 @@ impl MessageCall {
     }
 
     pub fn lookup_cache(&self, class_ptr: usize) -> Option<usize> {
-        self.inline_cache.and_then(|cache| { (cache.0 == class_ptr).then_some(cache.1) })
+        self.inline_cache.as_ref().and_then(|cache| { (cache.0 == class_ptr).then_some(cache.1) })
 
         // let mut maybe_cache_item = &self.inline_cache;
 
@@ -246,7 +246,7 @@ impl MessageCall {
     }
 
     pub fn cache_some_entry(&mut self, class_ptr: usize, method_ptr: usize) {
-        self.inline_cache = Some((class_ptr, method_ptr));
+        self.inline_cache = Some(Box::new((class_ptr, method_ptr)));
         
         // let mut maybe_cache_item = &mut self.inline_cache;
         // 
