@@ -188,7 +188,7 @@ pub struct Message {
     pub values: Vec<Expression>,
 }
 
-// const INLINE_CACHE_SIZE: usize = 7;
+const INLINE_CACHE_SIZE: usize = 2;
 
 type CacheEntry = (usize, usize);
 // #[derive(Debug, Clone, PartialEq)]
@@ -208,59 +208,37 @@ type CacheEntry = (usize, usize);
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCall {
     pub message: Message,
-    pub inline_cache: Option<Box<CacheEntry>>,
+    // pub inline_cache: Option<Box<CacheEntry>>,
+    pub inline_cache: [Option<CacheEntry>; INLINE_CACHE_SIZE],
 }
 
 impl MessageCall {
     pub fn new(message: Message) -> Self {
         Self {
             message,
-            inline_cache: None,
+            inline_cache: [None; INLINE_CACHE_SIZE],
         }
     }
 
-    pub fn lookup_cache(&self, class_ptr: usize) -> Option<usize> {
-        self.inline_cache.as_ref().and_then(|cache| { (cache.0 == class_ptr).then_some(cache.1) })
+    pub fn lookup_cache(&self, key: usize) -> Option<usize> {
+        for cache_elem in self.inline_cache.iter() {
+            if let Some((cached_class, cached_method)) = cache_elem {
+                if *cached_class == key {
+                    return Some(*cached_method);
+                }
+            }
+        }
 
-        // let mut maybe_cache_item = &self.inline_cache;
-
-        // while maybe_cache_item.is_some() {
-        //     let cache_item = maybe_cache_item.as_ref().unwrap();
-        // 
-        //     if cache_item.class_ptr == class_ptr {
-        //         return Some(cache_item.method_ptr);
-        //     }
-        // 
-        //     maybe_cache_item = &cache_item.next;
-        // }
-
-        // for cache_elem in self.inline_cache.iter() {
-        //     if let Some(cache @ (cached_class, _)) = cache_elem {
-        //         if *cached_class == key {
-        //             return Some(*cache);
-        //         }
-        //     }
-        // }
-
-        // None
+        None
     }
 
     pub fn cache_some_entry(&mut self, class_ptr: usize, method_ptr: usize) {
-        self.inline_cache = Some(Box::new((class_ptr, method_ptr)));
-        
-        // let mut maybe_cache_item = &mut self.inline_cache;
-        // 
-        // while maybe_cache_item.is_some() {
-        //     maybe_cache_item = &mut maybe_cache_item.as_mut().unwrap().next;
-        // }
-        // 
-        // *maybe_cache_item = Some(Box::new(
-        //     CacheEntry {
-        //         class_ptr,
-        //         method_ptr,
-        //         next: None,
-        //     }
-        // ));
+        for cache_elem in self.inline_cache.iter_mut() {
+            if cache_elem.is_none() {
+                *cache_elem = Some((class_ptr, method_ptr));
+                return;
+            }
+        }
     }
     
    /* #[cfg(debug_assertions)]

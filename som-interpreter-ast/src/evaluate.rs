@@ -320,10 +320,12 @@ impl Evaluate for ast::MessageCall {
         match self.lookup_cache(rcvr_ptr as usize) {
             Some(method) => {
                 let invokable = method as *mut crate::method::Method;
+                // dbg!("cache hit");
                 unsafe { (*invokable).invoke(universe, args) }
             }
             None => {
                 let invokable = receiver.lookup_method(universe, &self.message.signature);
+                // dbg!("cache miss");
 
                 match invokable {
                     Some(invokable) => {
