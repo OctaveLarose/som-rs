@@ -221,11 +221,9 @@ impl MessageCall {
     }
 
     pub fn lookup_cache(&self, key: usize) -> Option<usize> {
-        for cache_elem in self.inline_cache.iter() {
-            if let Some((cached_class, cached_method)) = cache_elem {
-                if *cached_class == key {
-                    return Some(*cached_method);
-                }
+        for (cached_class, cached_method) in self.inline_cache.iter().flatten() {
+            if *cached_class == key {
+                return Some(*cached_method);
             }
         }
 
