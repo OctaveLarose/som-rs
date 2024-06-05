@@ -188,7 +188,7 @@ pub struct Message {
     pub values: Vec<Expression>,
 }
 
-const INLINE_CACHE_SIZE: usize = 1000;
+const INLINE_CACHE_SIZE: usize = 2;
 
 type CacheEntry = (usize, usize);
 // #[derive(Debug, Clone, PartialEq)]
