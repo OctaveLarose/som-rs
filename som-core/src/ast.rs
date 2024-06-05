@@ -209,14 +209,14 @@ type CacheEntry = (usize, usize);
 pub struct MessageCall {
     pub message: Message,
     // pub inline_cache: Option<Box<CacheEntry>>,
-    pub inline_cache: [Option<CacheEntry>; INLINE_CACHE_SIZE],
+    pub inline_cache: Box<[Option<CacheEntry>; INLINE_CACHE_SIZE]>,
 }
 
 impl MessageCall {
     pub fn new(message: Message) -> Self {
         Self {
             message,
-            inline_cache: [None; INLINE_CACHE_SIZE],
+            inline_cache: Box::new([None; INLINE_CACHE_SIZE]),
         }
     }
 
