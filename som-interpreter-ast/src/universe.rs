@@ -479,21 +479,21 @@ impl UniverseAST {
     }
 
     /// Search for a local binding.
-    pub fn lookup_local(&self, idx: usize) -> Option<Value> {
+    pub fn lookup_local(&self, idx: usize) -> Value {
         self.current_frame().borrow().lookup_local(idx)
     }
 
     /// Look up a variable we know to have been defined in another scope.
-    pub fn lookup_non_local(&self, idx: usize, target_scope: usize) -> Option<Value> {
+    pub fn lookup_non_local(&self, idx: usize, target_scope: usize) -> Value {
         self.current_frame().borrow().lookup_non_local(idx, target_scope)
     }
 
     /// Look up a field.
-    pub fn lookup_field(&self, idx: usize) -> Option<Value> {
+    pub fn lookup_field(&self, idx: usize) -> Value {
         self.current_frame().borrow().lookup_field(idx)
     }
 
-    pub fn lookup_arg(&self, idx: usize, scope: usize) -> Option<Value> {
+    pub fn lookup_arg(&self, idx: usize, scope: usize) -> Value {
         self.current_frame().borrow().lookup_arg(idx, scope)
     }
 
@@ -510,19 +510,19 @@ impl UniverseAST {
     }
 
     /// Assign a value to a local binding.
-    pub fn assign_local(&mut self, idx: usize, value: &Value) -> Option<()> {
+    pub fn assign_local(&mut self, idx: usize, value: &Value) {
         self.current_frame().borrow_mut().assign_local(idx, value)
     }
 
-    pub fn assign_non_local(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
+    pub fn assign_non_local(&mut self, idx: usize, scope: usize, value: &Value) {
         self.current_frame().borrow_mut().assign_non_local(idx, scope, value)
     }
 
-    pub fn assign_field(&mut self, idx: usize, value: &Value) -> Option<()> {
+    pub fn assign_field(&mut self, idx: usize, value: &Value) {
         self.current_frame().borrow_mut().assign_field(idx, value)
     }
 
-    pub fn assign_arg(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
+    pub fn assign_arg(&mut self, idx: usize, scope: usize, value: &Value) {
         self.current_frame().borrow_mut().assign_arg(idx, scope, value)
     }
 

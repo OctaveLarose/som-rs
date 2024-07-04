@@ -73,20 +73,20 @@ impl Value {
     }
 
     /// Search for a local binding within this value.
-    pub fn lookup_local(&self, idx: usize) -> Option<Self> {
+    pub fn lookup_local(&self, idx: usize) -> Self {
         match self {
             Self::Instance(instance) => instance.borrow().lookup_local(idx),
             Self::Class(class) => class.borrow().lookup_local(idx),
-            _ => None,
+            v => panic!("Looking up a local in a value {:?}", v),
         }
     }
 
-    /// Assign a value to a local binding within this value.
-    pub fn assign_local(&mut self, idx: usize, value: &Self) -> Option<()> {
+    /// Assign a value to a local binding within this value. TODO only ever used by that one object prim. move it
+    pub fn assign_local(&mut self, idx: usize, value: &Self) {
         match self {
             Self::Instance(instance) => instance.borrow_mut().assign_local(idx, value.clone()),
             Self::Class(class) => class.borrow_mut().assign_local(idx, value),
-            _ => None,
+            v => unreachable!("Assigning a local binding in a {:?} value type?", v),
         }
     }
 

@@ -29,31 +29,23 @@ impl Evaluate for ast::Expression {
             Self::LocalVarWrite(idx, expr) => {
                 // TODO: this doesn't call the fastest path for evaluate, still has to dispatch the right expr even though it's always a var write. potential minor speedup there
                 let value = propagate!(expr.evaluate(universe));
-                universe.assign_local(*idx, &value)
-                    .map(|_| Return::Local(value))
-                    .unwrap_or_else(||
-                        Return::Exception(format!("local var write: idx '{}' not found", idx)))
+                universe.assign_local(*idx, &value);
+                Return::Local(value)
             },
             Self::NonLocalVarWrite(scope, idx, expr) => {
                 let value = propagate!(expr.evaluate(universe));
-                universe.assign_non_local(*idx, *scope, &value)
-                    .map(|_| Return::Local(value))
-                    .unwrap_or_else(||
-                        Return::Exception(format!("non local var write: idx '{}' not found", idx)))
+                universe.assign_non_local(*idx, *scope, &value);
+                Return::Local(value)
             },
             Self::FieldWrite(idx, expr) => {
                 let value = propagate!(expr.evaluate(universe));
-                universe.assign_field(*idx, &value)
-                    .map(|_| Return::Local(value))
-                    .unwrap_or_else(||
-                        Return::Exception(format!("field write: idx '{}' not found", idx)))
+                universe.assign_field(*idx, &value);
+                Return::Local(value)
             },
             Self::ArgWrite(scope, idx, expr) => {
                 let value = propagate!(expr.evaluate(universe));
-                universe.assign_arg(*idx, *scope, &value)
-                    .map(|_| Return::Local(value))
-                    .unwrap_or_else(||
-                        Return::Exception(format!("arg write: idx '{}', scope '{}' not found", idx, scope)))
+                universe.assign_arg(*idx, *scope, &value);
+                Return::Local(value)
             },
             Self::BinaryOp(bin_op) => bin_op.evaluate(universe),
             Self::Block(blk) => blk.evaluate(universe),
@@ -92,31 +84,16 @@ impl Evaluate for ast::Expression {
             }
             Self::Literal(literal) => literal.evaluate(universe),
             Self::LocalVarRead(idx) => {
-                universe.lookup_local(*idx)
-                    .map(|v| Return::Local(v.clone()))
-                    .unwrap_or_else(||
-                        Return::Exception(format!("local var read: idx '{}' not found", idx)))
+                Return::Local(universe.lookup_local(*idx))
             },
             Self::NonLocalVarRead(scope, idx) => {
-                universe.lookup_non_local(*idx, *scope)
-                    .map(Return::Local)
-                    .unwrap_or_else(|| {
-                        Return::Exception(format!("non local var read: idx '{}' not found", idx))
-                    })
+                Return::Local(universe.lookup_non_local(*idx, *scope))
             },
             Self::FieldRead(idx) => {
-                universe.lookup_field(*idx)
-                    .map(Return::Local)
-                    .unwrap_or_else(|| {
-                        Return::Exception(format!("field read: idx '{}' not found", idx))
-                    })
+                Return::Local(universe.lookup_field(*idx))
             },
             Self::ArgRead(scope, idx) => {
-                universe.lookup_arg(*idx, *scope)
-                    .map(Return::Local)
-                    .unwrap_or_else(|| {
-                        Return::Exception(format!("arg read: idx '{}', scope '{}' not found", idx, scope))
-                    })
+                Return::Local(universe.lookup_arg(*idx, *scope))
             },
             Self::GlobalRead(name) => universe.lookup_global(name)
                 .map(Return::Local)

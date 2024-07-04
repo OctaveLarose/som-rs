@@ -233,23 +233,22 @@ impl Class {
     }
 
     /// Search for a local binding.
-    pub fn lookup_local(&self, idx: usize) -> Option<Value> {
-        self.locals.get(idx).cloned().or_else(|| {
-            let super_class = self.super_class()?;
-            let local = super_class.borrow_mut().lookup_local(idx)?;
-            Some(local)
+    pub fn lookup_local(&self, idx: usize) -> Value {
+        self.locals.get(idx).cloned().unwrap_or_else(|| {
+            let super_class = self.super_class().unwrap();
+            let super_class_ref = super_class.borrow_mut();
+            super_class_ref.lookup_local(idx)
         })
     }
 
     /// Assign a value to a local binding.
-    pub fn assign_local(&mut self, idx: usize, value: &Value) -> Option<()> {
+    pub fn assign_local(&mut self, idx: usize, value: &Value) {
         if let Some(local) = self.locals.get_mut(idx) {
             *local = value.clone();
-            return Some(());
+            return;
         }
-        let super_class = self.super_class()?;
-        super_class.borrow_mut().assign_local(idx, value)?;
-        Some(())
+        let super_class = self.super_class().unwrap();
+        super_class.borrow_mut().assign_local(idx, value);
     }
 }
 

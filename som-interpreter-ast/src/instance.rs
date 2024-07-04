@@ -48,14 +48,16 @@ impl Instance {
     }
 
     /// Search for a local binding.
-    pub fn lookup_local(&self, idx: usize) -> Option<Value> {
-        self.locals.get(idx).cloned()
+    pub fn lookup_local(&self, idx: usize) -> Value {
+        match cfg!(debug_assertions) {
+            true => self.locals.get(idx).unwrap().clone(),
+            false => unsafe { self.locals.get_unchecked(idx).clone() }
+        }
     }
 
     /// Assign a value to a local binding.
-    pub fn assign_local(&mut self, idx: usize, value: Value) -> Option<()> {
-        *self.locals.get_mut(idx)? = value;
-        Some(())
+    pub fn assign_local(&mut self, idx: usize, value: Value) {
+        *self.locals.get_mut(idx).unwrap() = value;
     }
 }
 

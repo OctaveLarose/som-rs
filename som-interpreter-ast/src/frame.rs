@@ -91,54 +91,64 @@ impl Frame {
     // }
 
     #[inline] // not sure if necessary
-    pub fn lookup_local(&self, idx: usize) -> Option<Value> {
-        self.locals.get(idx).cloned()
+    pub fn lookup_local(&self, idx: usize) -> Value {
+        match cfg!(debug_assertions) {
+            true => self.locals.get(idx).unwrap().clone(),
+            false => unsafe { self.locals.get_unchecked(idx).clone() }
+        }
     }
 
-    pub fn lookup_non_local(&self, idx: usize, scope: usize) -> Option<Value> {
+    pub fn lookup_non_local(&self, idx: usize, scope: usize) -> Value {
         self.nth_frame_back(scope).borrow().lookup_local(idx)
     }
     
-    pub fn assign_local(&mut self, idx: usize, value: &Value) -> Option<()> {
-        let local = self.locals.get_mut(idx).unwrap();
+    pub fn assign_local(&mut self, idx: usize, value: &Value) {
+        let local = match cfg!(debug_assertions) {
+            true => self.locals.get_mut(idx).unwrap(),
+            false => unsafe { self.locals.get_unchecked_mut(idx) }
+        };
         *local = value.clone();
-        Some(())
     }
 
-    pub fn assign_non_local(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
+    pub fn assign_non_local(&mut self, idx: usize, scope: usize, value: &Value) {
         self.nth_frame_back(scope).borrow_mut().assign_local(idx, value)
     }
 
-    pub fn lookup_arg(&self, idx: usize, scope: usize) -> Option<Value> {
+    pub fn lookup_arg(&self, idx: usize, scope: usize) -> Value {
         match (idx, scope) {
-            (0, 0) => Some(self.get_self()),
+            (0, 0) => self.get_self(),
             (_, 0) => self.lookup_local_arg(idx),
             _ => self.lookup_non_local_arg(idx, scope),
         }
     }
 
-    pub fn lookup_local_arg(&self, idx: usize) -> Option<Value> {
-        self.params.get(idx).cloned()
+    pub fn lookup_local_arg(&self, idx: usize) -> Value {
+        match cfg!(debug_assertions) {
+            true => self.params.get(idx).unwrap().clone(),
+            false => unsafe { self.params.get_unchecked(idx).clone() }
+        }
     }
 
-    pub fn lookup_non_local_arg(&self, idx: usize, scope: usize) -> Option<Value> {
+    pub fn lookup_non_local_arg(&self, idx: usize, scope: usize) -> Value {
         self.nth_frame_back(scope).borrow().lookup_local_arg(idx)
     }
 
-    pub fn assign_arg_local(&mut self, idx: usize, value: &Value) -> Option<()> {
-        let val =  self.params.get_mut(idx).unwrap();
+    pub fn assign_arg_local(&mut self, idx: usize, value: &Value) {
+        let val = match cfg!(debug_assertions) {
+            true => self.params.get_mut(idx).unwrap(),
+            false => unsafe { self.params.get_unchecked_mut(idx) }
+        };
         *val = value.clone();
-        return Some(());
     }
 
-    pub fn assign_arg(&mut self, idx: usize, scope: usize, value: &Value) -> Option<()> {
+    pub fn assign_arg(&mut self, idx: usize, scope: usize, value: &Value) {
         match scope {
             0 => self.assign_arg_local(idx, value),
             _ => self.nth_frame_back(scope).borrow_mut().assign_arg_local(idx, value)
         }
     }
 
-    pub fn lookup_field(&self, idx: usize) -> Option<Value> {
+    pub fn lookup_field(&self, idx: usize) -> Value {
         match self.get_self() {
             Value::Instance(i) => { i.borrow_mut().lookup_local(idx) }
             Value::Class(c) => { c.borrow().class().borrow_mut().lookup_local(idx) }
@@ -146,7 +156,7 @@ impl Frame {
         }
     }
 
-    pub fn assign_field(&self, idx: usize, value: &Value) -> Option<()> {
+    pub fn assign_field(&self, idx: usize, value: &Value) -> () {
         match self.get_self() {
             Value::Instance(i) => { i.borrow_mut().assign_local(idx, value.clone()) }
             Value::Class(c) => { c.borrow().class().borrow_mut().assign_local(idx, &value) }
@@ -155,7 +165,7 @@ impl Frame {
     }
 
     pub fn nth_frame_back(&self, n: usize) -> SOMRef<Frame> {
-        let mut target_frame: Rc<RefCell<Frame>> = match self.params.get(0).unwrap() {
+        let mut target_frame: Rc<RefCell<Frame>> = match self.params.get(0).unwrap() { // todo optimize that also
             Value::Block(block) => {
                 Rc::clone(&block.frame)
             }

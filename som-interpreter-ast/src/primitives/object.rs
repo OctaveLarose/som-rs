@@ -231,12 +231,13 @@ fn inst_var_at(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     };
 
     let locals = gather_locals(universe, object.class(universe));
-    let local = locals
-        .get(index)
-        .and_then(|local| object.lookup_local(*local))
-        .unwrap_or(Value::Nil);
+    todo!()
+    // let local = locals
+    //     .get(index)
+    //     .and_then(|local| object.lookup_local(*local))
+    //     .unwrap_or(Value::Nil);
 
-    Return::Local(local)
+    // Return::Local(local)
 }
 
 fn inst_var_at_put(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
@@ -252,14 +253,16 @@ fn inst_var_at_put(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
         Ok(index) => index,
         Err(err) => return Return::Exception(format!("'{}': {}", SIGNATURE, err)),
     };
+    
+    todo!()
 
-    let locals = gather_locals(universe, object.class(universe));
-    let local = locals
-        .get(index)
-        .and_then(|local| object.assign_local(*local, &value).map(|_| value))
-        .unwrap_or(Value::Nil);
+    // let locals = gather_locals(universe, object.class(universe));
+    // let local = locals
+    //     .get(index)
+    //     .and_then(|local| object.assign_local(*local, &value).map(|_| value))
+    //     .unwrap_or(Value::Nil);
 
-    Return::Local(local)
+    // Return::Local(local)
 }
 
 fn gather_locals(universe: &mut UniverseAST, class: SOMRef<Class>) -> Vec<usize> {
