@@ -213,17 +213,20 @@ impl Frame {
             return current_frame;
         }
 
-        let mut target_frame: Rc<RefCell<Frame>> = current_frame;
-        
-        for _ in 0..n {
-            target_frame = match Rc::clone(&target_frame).borrow().lookup_argument(0) {
+        let mut target_frame: Rc<RefCell<Frame>> = match current_frame.borrow().args.first().unwrap() {
+            Value::Block(block) => {
+                Rc::clone(block.frame.as_ref().unwrap())
+            }
+            v => panic!("attempting to access a non local var/arg from a method instead of a block: self wasn't blockself but {:?}.", v)
+        };
+        for _ in 1..n {
+            target_frame = match Rc::clone(&target_frame).borrow().args.first().unwrap() {
                 Value::Block(block) => {
                     Rc::clone(block.frame.as_ref().unwrap())
                 }
-                v => panic!("attempting to access a non local var/arg from a method instead of a block: self wasn't blockself but {:?}.", v)
+                v => panic!("attempting to access a non local var/arg from a method instead of a block (but the original frame we were in was a block): self wasn't blockself but {:?}.", v)
             };
         }
-        
         target_frame
     }
 }
