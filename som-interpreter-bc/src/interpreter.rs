@@ -104,16 +104,18 @@ impl Interpreter {
 
     pub fn pop_frame(&mut self) {
         self.frames.pop();
-        self.restore_frame_state();
+        match self.frames.last() {
+            None => {}
+            Some(f) => {
+                self.bytecode_idx = f.borrow().bytecode_idx;
+                self.current_frame = Rc::clone(&f);
+                self.current_bytecodes = f.borrow_mut().bytecodes;
+            }
+        }
     }
 
     pub fn pop_n_frames(&mut self, n: usize) {
         (0..n).for_each(|_| { self.frames.pop(); });
-        self.restore_frame_state();
-    }
-    
-    #[inline(always)]
-    fn restore_frame_state(&mut self) {
         match self.frames.last() {
             None => {}
             Some(f) => {
