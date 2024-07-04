@@ -104,21 +104,17 @@ impl Interpreter {
 
     pub fn pop_frame(&mut self) {
         self.frames.pop();
-
-        match self.frames.last().cloned() {
-            None => {}
-            Some(f) => {
-                self.bytecode_idx = f.borrow().bytecode_idx;
-                self.current_frame = Rc::clone(&f);
-                self.current_bytecodes = f.borrow_mut().bytecodes;
-            }
-        }
+        self.restore_frame_state();
     }
 
     pub fn pop_n_frames(&mut self, n: usize) {
         (0..n).for_each(|_| { self.frames.pop(); });
-
-        match self.frames.last().cloned() {
+        self.restore_frame_state();
+    }
+    
+    #[inline(always)]
+    fn restore_frame_state(&mut self) {
+        match self.frames.last() {
             None => {}
             Some(f) => {
                 self.bytecode_idx = f.borrow().bytecode_idx;
@@ -297,9 +293,9 @@ impl Interpreter {
                 Bytecode::ReturnSelf => {
                     let self_val = frame.borrow().lookup_argument(0);
                     self.pop_frame();
-                    if self.frames.is_empty() {
-                        return Some(self_val);
-                    }
+                    // if self.frames.is_empty() {
+                    //     return Some(self_val);
+                    // }
                     self.stack.push(self_val);
                 }
                 Bytecode::ReturnLocal => {
@@ -318,9 +314,9 @@ impl Interpreter {
 
                     if let Some(count) = escaped_frames {
                         self.pop_n_frames(count + 1);
-                        if self.frames.is_empty() {
-                            return Some(self.stack.pop().unwrap_or(Value::Nil));
-                        }
+                        // if self.frames.is_empty() {
+                        //     return Some(self.stack.pop().unwrap_or(Value::Nil));
+                        // }
                     } else {
                         // NB: I did some changes there with the blockself bits and i'm not positive it works the same as before, but it should.
 
