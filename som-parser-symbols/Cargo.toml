@@ -12,3 +12,6 @@ license = "MIT OR Apache-2.0"
 som-core = { path = "../som-core", version = "0.1.0" }
 som-parser-core = { path = "../som-parser-core", version = "0.1.0" }
 som-lexer = { path = "../som-lexer", version = "0.1.0" }
+
+[features]
+block-debug-info = []

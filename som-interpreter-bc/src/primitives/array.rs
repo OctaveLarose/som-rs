@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::interpreter::Interpreter;
 use crate::primitives::PrimitiveFn;
-use crate::universe::Universe;
+use crate::universe::UniverseBC;
 use crate::value::Value;
 use crate::{expect_args, reverse};
 
@@ -16,7 +16,7 @@ pub static INSTANCE_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[
 
 pub static CLASS_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[("new:", self::new, true)];
 
-fn at(interpreter: &mut Interpreter, _: &mut Universe) {
+fn at(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Array>>#at:";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -32,7 +32,7 @@ fn at(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value)
 }
 
-fn at_put(interpreter: &mut Interpreter, _: &mut Universe) {
+fn at_put(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Array>>#at:put:";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -51,7 +51,7 @@ fn at_put(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(Value::Array(values))
 }
 
-fn length(interpreter: &mut Interpreter, _: &mut Universe) {
+fn length(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Array>>#length";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -65,7 +65,7 @@ fn length(interpreter: &mut Interpreter, _: &mut Universe) {
     }
 }
 
-fn new(interpreter: &mut Interpreter, _: &mut Universe) {
+fn new(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Array>>#new:";
 
     expect_args!(SIGNATURE, interpreter, [

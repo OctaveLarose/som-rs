@@ -7,7 +7,7 @@ use rand::Rng;
 
 use crate::interpreter::Interpreter;
 use crate::primitives::PrimitiveFn;
-use crate::universe::Universe;
+use crate::universe::UniverseBC;
 use crate::value::Value;
 use crate::{expect_args, reverse};
 
@@ -31,7 +31,13 @@ pub static INSTANCE_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[
     ("atRandom", self::at_random, true),
     ("as32BitSignedValue", self::as_32bit_signed_value, true),
     ("as32BitUnsignedValue", self::as_32bit_unsigned_value, true),
+    ("to:do:", self::to_do, true),
+    ("to:by:do:", self::to_by_do, true),
+    ("downTo:do:", self::down_to_do, true),
+    ("downTo:by:do:", self::down_to_by_do, true),
+    ("timesRepeat:", self::times_repeat, true),
 ];
+
 pub static CLASS_PRIMITIVES: &[(&str, PrimitiveFn, bool)] =
     &[("fromString:", self::from_string, true)];
 
@@ -45,7 +51,7 @@ macro_rules! demote {
     }};
 }
 
-fn from_string(interpreter: &mut Interpreter, universe: &mut Universe) {
+fn from_string(interpreter: &mut Interpreter, universe: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#fromString:";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -71,7 +77,7 @@ fn from_string(interpreter: &mut Interpreter, universe: &mut Universe) {
     }
 }
 
-fn as_string(interpreter: &mut Interpreter, _: &mut Universe) {
+fn as_string(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#asString";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -90,7 +96,7 @@ fn as_string(interpreter: &mut Interpreter, _: &mut Universe) {
     }
 }
 
-fn as_double(interpreter: &mut Interpreter, _: &mut Universe) {
+fn as_double(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#asDouble";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -112,7 +118,7 @@ fn as_double(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value);
 }
 
-fn at_random(interpreter: &mut Interpreter, _: &mut Universe) {
+fn at_random(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#atRandom";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -138,7 +144,7 @@ fn at_random(interpreter: &mut Interpreter, _: &mut Universe) {
     }
 }
 
-fn as_32bit_signed_value(interpreter: &mut Interpreter, _: &mut Universe) {
+fn as_32bit_signed_value(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#as32BitSignedValue";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -160,7 +166,7 @@ fn as_32bit_signed_value(interpreter: &mut Interpreter, _: &mut Universe) {
     }
 }
 
-fn as_32bit_unsigned_value(interpreter: &mut Interpreter, _: &mut Universe) {
+fn as_32bit_unsigned_value(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#as32BitUnsignedValue";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -182,7 +188,7 @@ fn as_32bit_unsigned_value(interpreter: &mut Interpreter, _: &mut Universe) {
     }
 }
 
-fn plus(interpreter: &mut Interpreter, _: &mut Universe) {
+fn plus(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#+";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -218,7 +224,7 @@ fn plus(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value);
 }
 
-fn minus(interpreter: &mut Interpreter, _: &mut Universe) {
+fn minus(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#-";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -262,7 +268,7 @@ fn minus(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value);
 }
 
-fn times(interpreter: &mut Interpreter, _: &mut Universe) {
+fn times(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#*";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -298,7 +304,7 @@ fn times(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value);
 }
 
-fn divide(interpreter: &mut Interpreter, _: &mut Universe) {
+fn divide(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#/";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -342,7 +348,7 @@ fn divide(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value);
 }
 
-fn divide_float(interpreter: &mut Interpreter, _: &mut Universe) {
+fn divide_float(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#//";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -379,7 +385,7 @@ fn divide_float(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(Value::Double(a / b));
 }
 
-fn modulo(interpreter: &mut Interpreter, _: &mut Universe) {
+fn modulo(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#%";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -395,7 +401,7 @@ fn modulo(interpreter: &mut Interpreter, _: &mut Universe) {
     }
 }
 
-fn remainder(interpreter: &mut Interpreter, _: &mut Universe) {
+fn remainder(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#rem:";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -411,7 +417,7 @@ fn remainder(interpreter: &mut Interpreter, _: &mut Universe) {
     }
 }
 
-fn sqrt(interpreter: &mut Interpreter, _: &mut Universe) {
+fn sqrt(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#sqrt";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -436,7 +442,7 @@ fn sqrt(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value);
 }
 
-fn bitand(interpreter: &mut Interpreter, _: &mut Universe) {
+fn bitand(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#&";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -456,7 +462,7 @@ fn bitand(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value);
 }
 
-fn bitxor(interpreter: &mut Interpreter, _: &mut Universe) {
+fn bitxor(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#bitXor:";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -476,7 +482,7 @@ fn bitxor(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value);
 }
 
-fn lt(interpreter: &mut Interpreter, _: &mut Universe) {
+fn lt(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#<";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -492,13 +498,13 @@ fn lt(interpreter: &mut Interpreter, _: &mut Universe) {
         (Value::Double(a), Value::Integer(b)) => Value::Boolean(a < (b as f64)),
         (Value::BigInteger(a), Value::Integer(b)) => Value::Boolean(a < BigInt::from(b)),
         (Value::Integer(a), Value::BigInteger(b)) => Value::Boolean(BigInt::from(a) < b),
-        _ => panic!("'{}': wrong types", SIGNATURE),
+        (t1, t2) => panic!("'{}': wrong types: {:?} and {:?}", SIGNATURE, t1, t2),
     };
 
     interpreter.stack.push(value);
 }
 
-fn eq(interpreter: &mut Interpreter, _: &mut Universe) {
+fn eq(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#=";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -518,7 +524,7 @@ fn eq(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value);
 }
 
-fn shift_left(interpreter: &mut Interpreter, _: &mut Universe) {
+fn shift_left(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#<<";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -538,7 +544,7 @@ fn shift_left(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(value);
 }
 
-fn shift_right(interpreter: &mut Interpreter, _: &mut Universe) {
+fn shift_right(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Integer>>#>>";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -556,6 +562,98 @@ fn shift_right(interpreter: &mut Interpreter, _: &mut Universe) {
     };
 
     interpreter.stack.push(value);
+}
+
+fn to_do(interpreter: &mut Interpreter, _: &mut UniverseBC) {
+    const SIGNATURE: &str = "Integer>>to:do:";
+
+    expect_args!(SIGNATURE, interpreter, [
+        Value::Integer(start) => start,
+        Value::Integer(end) => end,
+        Value::Block(blk) => blk,
+    ]);
+    
+    // Nota Bene: blocks for to:do: and friends get instrumented as a special case in the parser, so that they don't leave their "self" on the stack.
+
+    let new_blk = blk.make_equivalent_with_no_return();
+    // calling rev() because it's a stack of frames: LIFO means we want to add the last one first, then the penultimate one, etc., til the first
+    for i in (start..=end).rev() {
+        interpreter.push_block_frame(Rc::clone(&new_blk), vec![Value::Block(Rc::clone(&new_blk)), Value::Integer(i)]);
+    }
+
+    interpreter.stack.push(Value::Integer(start));
+}
+
+fn to_by_do(interpreter: &mut Interpreter, _: &mut UniverseBC) {
+    const SIGNATURE: &str = "Integer>>to:by:do:";
+
+    expect_args!(SIGNATURE, interpreter, [
+        Value::Integer(start) => start,
+        Value::Integer(step) => step,
+        Value::Integer(end) => end,
+        Value::Block(blk) => blk,
+    ]);
+
+    let new_blk = blk.make_equivalent_with_no_return();
+    for i in (start..=end).rev().step_by(step as usize) {
+        interpreter.push_block_frame(Rc::clone(&new_blk), vec![Value::Block(Rc::clone(&new_blk)), Value::Integer(i)]);
+    }
+
+    interpreter.stack.push(Value::Integer(start));
+}
+
+fn down_to_do(interpreter: &mut Interpreter, _: &mut UniverseBC) {
+    const SIGNATURE: &str = "Integer>>downTo:do:";
+
+    expect_args!(SIGNATURE, interpreter, [
+        Value::Integer(start) => start,
+        Value::Integer(end) => end,
+        Value::Block(blk) => blk,
+    ]);
+
+    let new_blk = blk.make_equivalent_with_no_return();
+    for i in end..=start {
+        dbg!(&i);
+        interpreter.push_block_frame(Rc::clone(&new_blk), vec![Value::Block(Rc::clone(&new_blk)), Value::Integer(i)]);
+    }
+
+    interpreter.stack.push(Value::Integer(start));
+}
+
+// NB: this guy isn't a speedup, it's never used in our benchmarks as far as I'm aware.
+fn down_to_by_do(interpreter: &mut Interpreter, _: &mut UniverseBC) {
+    const SIGNATURE: &str = "Integer>>downTo:by:do:";
+
+    expect_args!(SIGNATURE, interpreter, [
+        Value::Integer(start) => start,
+        Value::Integer(step) => step,
+        Value::Integer(end) => end,
+        Value::Block(blk) => blk,
+    ]);
+    
+    let new_blk = blk.make_equivalent_with_no_return();
+    for i in (start..=end).step_by(step as usize) {
+        interpreter.push_block_frame(Rc::clone(&new_blk), vec![Value::Block(Rc::clone(&new_blk)), Value::Integer(i)]);
+    }
+
+    interpreter.stack.push(Value::Integer(start));
+}
+
+// NB: also not a speedup, also unused.
+fn times_repeat(interpreter: &mut Interpreter, _: &mut UniverseBC) {
+    const SIGNATURE: &str = "Integer>>timesRepeat:";
+
+    expect_args!(SIGNATURE, interpreter, [
+        Value::Integer(n) => n,
+        Value::Block(blk) => blk,
+    ]);
+
+    let new_blk = blk.make_equivalent_with_no_return();
+    for _ in 1..=n {
+        interpreter.push_block_frame(Rc::clone(&new_blk), vec![Value::Block(Rc::clone(&new_blk))]); // NB: this doesn't take the index as an argument
+    }
+
+    interpreter.stack.push(Value::Integer(n));
 }
 
 /// Search for an instance primitive matching the given signature.

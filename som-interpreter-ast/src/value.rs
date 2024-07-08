@@ -8,7 +8,7 @@ use crate::class::Class;
 use crate::instance::Instance;
 use crate::interner::Interned;
 use crate::method::Method;
-use crate::universe::Universe;
+use crate::universe::UniverseAST;
 use crate::SOMRef;
 
 /// Represents an SOM value.
@@ -44,7 +44,7 @@ pub enum Value {
 
 impl Value {
     /// Get the class of the current value.
-    pub fn class(&self, universe: &Universe) -> SOMRef<Class> {
+    pub fn class(&self, universe: &UniverseAST) -> SOMRef<Class> {
         match self {
             Self::Nil => universe.nil_class(),
             Self::System => universe.system_class(),
@@ -66,32 +66,32 @@ impl Value {
     /// Search for a given method for this value.
     pub fn lookup_method(
         &self,
-        universe: &Universe,
+        universe: &UniverseAST,
         signature: impl AsRef<str>,
     ) -> Option<Rc<Method>> {
         self.class(universe).borrow().lookup_method(signature)
     }
 
     /// Search for a local binding within this value.
-    pub fn lookup_local(&self, name: impl AsRef<str>) -> Option<Self> {
+    pub fn lookup_local(&self, idx: usize) -> Self {
         match self {
-            Self::Instance(instance) => instance.borrow().lookup_local(name),
-            Self::Class(class) => class.borrow().lookup_local(name),
-            _ => None,
+            Self::Instance(instance) => instance.borrow().lookup_local(idx),
+            Self::Class(class) => class.borrow().lookup_local(idx),
+            v => panic!("Looking up a local in a value {:?}", v),
         }
     }
 
-    /// Assign a value to a local binding within this value.
-    pub fn assign_local(&mut self, name: impl AsRef<str>, value: Self) -> Option<()> {
+    /// Assign a value to a local binding within this value. TODO only ever used by that one object prim. move it
+    pub fn assign_local(&mut self, idx: usize, value: &Self) {
         match self {
-            Self::Instance(instance) => instance.borrow_mut().assign_local(name, value),
-            Self::Class(class) => class.borrow_mut().assign_local(name, value),
-            _ => None,
+            Self::Instance(instance) => instance.borrow_mut().assign_local(idx, value.clone()),
+            Self::Class(class) => class.borrow_mut().assign_local(idx, value),
+            v => unreachable!("Assigning a local binding in a {:?} value type?", v),
         }
     }
 
     /// Get the string representation of this value.
-    pub fn to_string(&self, universe: &Universe) -> String {
+    pub fn to_string(&self, universe: &UniverseAST) -> String {
         match self {
             Self::Nil => "nil".to_string(),
             Self::System => "system".to_string(),
@@ -109,7 +109,7 @@ impl Value {
             }
             Self::String(value) => value.to_string(),
             Self::Array(values) => {
-                // TODO: I think we can do better here (less allocations).
+                // @nicolas: I think we can do better here (less allocations).
                 let strings: Vec<String> = values
                     .borrow()
                     .iter()
@@ -180,7 +180,7 @@ impl fmt::Debug for Value {
                     .map(|holder| format!("{}>>#{}", holder.borrow().name(), val.signature()))
                     .unwrap_or_else(|| format!("??>>#{}", val.signature()));
                 f.debug_tuple("Invokable").field(&signature).finish()
-            }
+            },
         }
     }
 }

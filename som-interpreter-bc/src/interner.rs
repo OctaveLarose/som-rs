@@ -60,6 +60,12 @@ impl Interner {
     pub fn lookup(&self, id: Interned) -> &str {
         self.vec[id.0 as usize]
     }
+    
+    
+    /// Gets the interning ID associated with a given string. Niche use in field lookup code... TODO can we avoid it maybe?
+    pub fn reverse_lookup(&self, name: &str) -> Option<Interned> {
+        self.map.get(name).and_then(|idx| Some(Interned(*idx)))
+    }
 
     unsafe fn alloc(&mut self, name: &str) -> &'static str {
         let cap = self.buf.capacity();

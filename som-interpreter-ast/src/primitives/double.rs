@@ -5,7 +5,7 @@ use num_traits::ToPrimitive;
 use crate::expect_args;
 use crate::invokable::Return;
 use crate::primitives::PrimitiveFn;
-use crate::universe::Universe;
+use crate::universe::UniverseAST;
 use crate::value::Value;
 
 pub static INSTANCE_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[
@@ -52,7 +52,7 @@ macro_rules! promote {
     };
 }
 
-fn from_string(_: &mut Universe, args: Vec<Value>) -> Return {
+fn from_string(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#fromString:";
 
     expect_args!(SIGNATURE, args, [
@@ -66,7 +66,7 @@ fn from_string(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn as_string(_: &mut Universe, args: Vec<Value>) -> Return {
+fn as_string(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#asString";
 
     expect_args!(SIGNATURE, args, [
@@ -78,7 +78,7 @@ fn as_string(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::String(Rc::new(value.to_string())))
 }
 
-fn as_integer(_: &mut Universe, args: Vec<Value>) -> Return {
+fn as_integer(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#asInteger";
 
     expect_args!(SIGNATURE, args, [
@@ -88,7 +88,7 @@ fn as_integer(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Integer(value.trunc() as i64))
 }
 
-fn sqrt(_: &mut Universe, args: Vec<Value>) -> Return {
+fn sqrt(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#sqrt";
 
     expect_args!(SIGNATURE, args, [
@@ -100,7 +100,7 @@ fn sqrt(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Double(value.sqrt()))
 }
 
-fn round(_: &mut Universe, args: Vec<Value>) -> Return {
+fn round(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#round";
 
     expect_args!(SIGNATURE, args, [
@@ -112,7 +112,7 @@ fn round(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Double(value.round()))
 }
 
-fn cos(_: &mut Universe, args: Vec<Value>) -> Return {
+fn cos(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#cos";
 
     expect_args!(SIGNATURE, args, [
@@ -124,7 +124,7 @@ fn cos(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Double(value.cos()))
 }
 
-fn sin(_: &mut Universe, args: Vec<Value>) -> Return {
+fn sin(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#sin";
 
     expect_args!(SIGNATURE, args, [
@@ -136,7 +136,7 @@ fn sin(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Double(value.sin()))
 }
 
-fn eq(_: &mut Universe, args: Vec<Value>) -> Return {
+fn eq(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#=";
 
     expect_args!(SIGNATURE, args, [
@@ -149,7 +149,7 @@ fn eq(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Boolean(a == b))
 }
 
-fn lt(_: &mut Universe, args: Vec<Value>) -> Return {
+fn lt(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#<";
 
     expect_args!(SIGNATURE, args, [
@@ -163,7 +163,7 @@ fn lt(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Boolean(a < b))
 }
 
-fn plus(_: &mut Universe, args: Vec<Value>) -> Return {
+fn plus(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#+";
 
     expect_args!(SIGNATURE, args, [
@@ -177,7 +177,7 @@ fn plus(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Double(a + b))
 }
 
-fn minus(_: &mut Universe, args: Vec<Value>) -> Return {
+fn minus(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#-";
 
     expect_args!(SIGNATURE, args, [
@@ -191,7 +191,7 @@ fn minus(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Double(a - b))
 }
 
-fn times(_: &mut Universe, args: Vec<Value>) -> Return {
+fn times(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#*";
 
     expect_args!(SIGNATURE, args, [
@@ -205,7 +205,7 @@ fn times(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Double(a * b))
 }
 
-fn divide(_: &mut Universe, args: Vec<Value>) -> Return {
+fn divide(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#//";
 
     expect_args!(SIGNATURE, args, [
@@ -219,7 +219,7 @@ fn divide(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Double(a / b))
 }
 
-fn modulo(_: &mut Universe, args: Vec<Value>) -> Return {
+fn modulo(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Double>>#%";
 
     expect_args!(SIGNATURE, args, [
@@ -233,7 +233,7 @@ fn modulo(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Double(a % b))
 }
 
-fn positive_infinity(_: &mut Universe, _: Vec<Value>) -> Return {
+fn positive_infinity(_: &mut UniverseAST, _: Vec<Value>) -> Return {
     const _: &str = "Double>>#positiveInfinity";
 
     Return::Local(Value::Double(f64::INFINITY))

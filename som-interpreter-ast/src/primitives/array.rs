@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::expect_args;
 use crate::invokable::Return;
 use crate::primitives::PrimitiveFn;
-use crate::universe::Universe;
+use crate::universe::UniverseAST;
 use crate::value::Value;
 
 pub static INSTANCE_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[
@@ -16,7 +16,7 @@ pub static INSTANCE_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[
 
 pub static CLASS_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[("new:", self::new, true)];
 
-fn at(_: &mut Universe, args: Vec<Value>) -> Return {
+fn at(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Array>>#at:";
 
     expect_args!(SIGNATURE, args, [
@@ -32,7 +32,7 @@ fn at(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(value)
 }
 
-fn at_put(_: &mut Universe, args: Vec<Value>) -> Return {
+fn at_put(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Array>>#at:put:";
 
     expect_args!(SIGNATURE, args, [
@@ -51,7 +51,7 @@ fn at_put(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Array(values))
 }
 
-fn length(_: &mut Universe, args: Vec<Value>) -> Return {
+fn length(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Array>>#length";
 
     expect_args!(SIGNATURE, args, [
@@ -65,7 +65,7 @@ fn length(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn new(_: &mut Universe, args: Vec<Value>) -> Return {
+fn new(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Array>>#new:";
 
     expect_args!(SIGNATURE, args, [

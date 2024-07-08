@@ -14,7 +14,7 @@ use jemallocator::Jemalloc;
 mod shell;
 
 use som_interpreter_ast::invokable::Return;
-use som_interpreter_ast::universe::Universe;
+use som_interpreter_ast::universe::UniverseAST;
 use som_interpreter_ast::value::Value;
 
 #[cfg(feature = "jemalloc")]
@@ -45,7 +45,7 @@ fn main() -> anyhow::Result<()> {
 
     match opts.file {
         None => {
-            let mut universe = Universe::with_classpath(opts.classpath)?;
+            let mut universe = UniverseAST::with_classpath(opts.classpath)?;
             shell::interactive(&mut universe, opts.verbose)?
         }
         Some(file) => {
@@ -61,7 +61,7 @@ fn main() -> anyhow::Result<()> {
                 classpath.push(directory.to_path_buf());
             }
 
-            let mut universe = Universe::with_classpath(classpath)?;
+            let mut universe = UniverseAST::with_classpath(classpath)?;
 
             let args = std::iter::once(String::from(file_stem))
                 .chain(opts.args.iter().cloned())

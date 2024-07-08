@@ -6,7 +6,7 @@ members = [
     "som-lexer",
     "som-parser-core",
     "som-parser-symbols",
-    "som-parser-text",
+#    "som-parser-text",
 ]
 
 [profile.release]

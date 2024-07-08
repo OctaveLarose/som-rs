@@ -1,20 +1,19 @@
 use std::path::PathBuf;
 
 use som_interpreter_ast::evaluate::Evaluate;
-use som_interpreter_ast::frame::FrameKind;
 use som_interpreter_ast::invokable::Return;
-use som_interpreter_ast::universe::Universe;
+use som_interpreter_ast::universe::UniverseAST;
 use som_interpreter_ast::value::Value;
 use som_lexer::{Lexer, Token};
 
 use som_parser::lang;
 
-fn setup_universe() -> Universe {
+fn setup_universe() -> UniverseAST {
     let classpath = vec![
         PathBuf::from("../core-lib/Smalltalk"),
         PathBuf::from("../core-lib/TestSuite/BasicInterpreterTests"),
     ];
-    Universe::with_classpath(classpath).expect("could not setup test universe")
+    UniverseAST::with_classpath(classpath).expect("could not setup test universe")
 }
 
 #[test]
@@ -166,16 +165,20 @@ fn basic_interpreter_tests() {
             "could not fully tokenize test expression"
         );
 
-        let ast = som_parser::apply(lang::expression(), tokens.as_slice()).unwrap();
+        let ast = som_parser::apply(lang::expression(), tokens.as_slice(), None).unwrap();
 
-        let signature = universe.intern_symbol(expr.split(' ').skip(1).next().unwrap_or("unknown"));
+        // let signature = universe.intern_symbol(expr.split(' ').skip(1).next().unwrap_or("unknown"));
 
-        let kind = FrameKind::Method {
-            signature,
-            holder: universe.system_class(),
-            self_value: Value::System,
-        };
-        let output = universe.with_frame(kind, |universe| ast.evaluate(universe));
+        // let kind = FrameKind::Method {
+        //     signature,
+        //     holder: universe.system_class(),
+        //     self_value: Value::System,
+        // };
+        let output = universe.with_frame(
+            0,
+            vec![Value::System],
+            |universe| ast.evaluate(universe),
+        );
 
         match &output {
             Return::Local(output) => assert_eq!(output, expected, "unexpected test output value"),

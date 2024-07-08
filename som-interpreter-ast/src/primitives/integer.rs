@@ -8,7 +8,7 @@ use rand::Rng;
 use crate::expect_args;
 use crate::invokable::Return;
 use crate::primitives::PrimitiveFn;
-use crate::universe::Universe;
+use crate::universe::UniverseAST;
 use crate::value::Value;
 
 pub static INSTANCE_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[
@@ -45,7 +45,7 @@ macro_rules! demote {
     }};
 }
 
-fn from_string(universe: &mut Universe, args: Vec<Value>) -> Return {
+fn from_string(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#fromString:";
 
     expect_args!(SIGNATURE, args, [
@@ -68,7 +68,7 @@ fn from_string(universe: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn as_string(_: &mut Universe, args: Vec<Value>) -> Return {
+fn as_string(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#asString";
 
     expect_args!(SIGNATURE, args, [
@@ -84,7 +84,7 @@ fn as_string(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::String(Rc::new(value)))
 }
 
-fn as_double(_: &mut Universe, args: Vec<Value>) -> Return {
+fn as_double(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#asDouble";
 
     expect_args!(SIGNATURE, args, [
@@ -104,7 +104,7 @@ fn as_double(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn at_random(_: &mut Universe, args: Vec<Value>) -> Return {
+fn at_random(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#atRandom";
 
     expect_args!(SIGNATURE, args, [
@@ -129,7 +129,7 @@ fn at_random(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Integer(chosen))
 }
 
-fn as_32bit_signed_value(_: &mut Universe, args: Vec<Value>) -> Return {
+fn as_32bit_signed_value(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#as32BitSignedValue";
 
     expect_args!(SIGNATURE, args, [
@@ -148,7 +148,7 @@ fn as_32bit_signed_value(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Integer(value))
 }
 
-fn as_32bit_unsigned_value(_: &mut Universe, args: Vec<Value>) -> Return {
+fn as_32bit_unsigned_value(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#as32BitUnsignedValue";
 
     expect_args!(SIGNATURE, args, [
@@ -167,7 +167,7 @@ fn as_32bit_unsigned_value(_: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Integer(value))
 }
 
-fn plus(_: &mut Universe, args: Vec<Value>) -> Return {
+fn plus(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#+";
 
     expect_args!(SIGNATURE, args, [
@@ -201,7 +201,7 @@ fn plus(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn minus(_: &mut Universe, args: Vec<Value>) -> Return {
+fn minus(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#-";
 
     expect_args!(SIGNATURE, args, [
@@ -238,7 +238,7 @@ fn minus(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn times(_: &mut Universe, args: Vec<Value>) -> Return {
+fn times(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#*";
 
     expect_args!(SIGNATURE, args, [
@@ -263,7 +263,7 @@ fn times(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn divide(_: &mut Universe, args: Vec<Value>) -> Return {
+fn divide(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#/";
 
     expect_args!(SIGNATURE, args, [
@@ -288,7 +288,7 @@ fn divide(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn divide_float(_: &mut Universe, args: Vec<Value>) -> Return {
+fn divide_float(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#//";
 
     expect_args!(SIGNATURE, args, [
@@ -308,7 +308,7 @@ fn divide_float(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn modulo(_: &mut Universe, args: Vec<Value>) -> Return {
+fn modulo(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#%";
 
     expect_args!(SIGNATURE, args, [
@@ -324,7 +324,7 @@ fn modulo(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn remainder(_: &mut Universe, args: Vec<Value>) -> Return {
+fn remainder(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#rem:";
 
     expect_args!(SIGNATURE, args, [
@@ -340,7 +340,7 @@ fn remainder(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn sqrt(_: &mut Universe, args: Vec<Value>) -> Return {
+fn sqrt(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#sqrt";
 
     expect_args!(SIGNATURE, args, [
@@ -363,7 +363,7 @@ fn sqrt(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn bitand(_: &mut Universe, args: Vec<Value>) -> Return {
+fn bitand(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#&";
 
     expect_args!(SIGNATURE, args, [
@@ -381,7 +381,7 @@ fn bitand(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn bitxor(_: &mut Universe, args: Vec<Value>) -> Return {
+fn bitxor(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#bitXor:";
 
     expect_args!(SIGNATURE, args, [
@@ -399,7 +399,7 @@ fn bitxor(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn lt(_: &mut Universe, args: Vec<Value>) -> Return {
+fn lt(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#<";
 
     expect_args!(SIGNATURE, args, [
@@ -424,7 +424,7 @@ fn lt(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn eq(_: &mut Universe, args: Vec<Value>) -> Return {
+fn eq(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#=";
 
     expect_args!(SIGNATURE, args, [
@@ -446,7 +446,7 @@ fn eq(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn shift_left(_: &mut Universe, args: Vec<Value>) -> Return {
+fn shift_left(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#<<";
 
     expect_args!(SIGNATURE, args, [
@@ -464,7 +464,7 @@ fn shift_left(_: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn shift_right(_: &mut Universe, args: Vec<Value>) -> Return {
+fn shift_right(_: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "Integer>>#>>";
 
     expect_args!(SIGNATURE, args, [

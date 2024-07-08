@@ -5,6 +5,15 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+macro_rules! propagate {
+    ($expr:expr) => {
+        match $expr {
+            Return::Local(value) => value,
+            ret => return ret,
+        }
+    };
+}
+
 /// Facilities for manipulating blocks.
 pub mod block;
 /// Facilities for manipulating classes.
@@ -29,6 +38,9 @@ pub mod primitives;
 pub mod universe;
 /// Facilities for manipulating values.
 pub mod value;
+
+/// Specialized AST nodes
+pub mod specialized;
 
 /// A strong and owning reference to an object.
 pub type SOMRef<T> = Rc<RefCell<T>>;

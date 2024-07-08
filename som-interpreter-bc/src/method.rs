@@ -6,20 +6,23 @@ use som_core::bytecode::Bytecode;
 
 use crate::class::Class;
 use crate::compiler::Literal;
-use crate::frame::FrameKind;
-use crate::interner::Interned;
 use crate::interpreter::Interpreter;
 use crate::primitives::PrimitiveFn;
-use crate::universe::Universe;
+use crate::universe::UniverseBC;
 use crate::value::Value;
 use crate::{SOMRef, SOMWeakRef};
 
+#[cfg(feature = "frame-debug-info")]
+use som_core::ast::BlockDebugInfo;
+
 #[derive(Clone)]
 pub struct MethodEnv {
-    pub locals: Vec<Interned>,
     pub literals: Vec<Literal>,
     pub body: Vec<Bytecode>,
     pub inline_cache: RefCell<Vec<Option<(*const Class, Rc<Method>)>>>,
+    pub nbr_locals: usize,
+    #[cfg(feature = "frame-debug-info")]
+    pub block_debug_info: BlockDebugInfo,
 }
 
 /// The kind of a class method.
@@ -49,7 +52,7 @@ pub struct Method {
 }
 
 impl Method {
-    pub fn class(&self, universe: &Universe) -> SOMRef<Class> {
+    pub fn class(&self, universe: &UniverseBC) -> SOMRef<Class> {
         if self.is_primitive() {
             universe.primitive_class()
         } else {
@@ -77,22 +80,15 @@ impl Method {
     pub fn invoke(
         self: Rc<Self>,
         interpreter: &mut Interpreter,
-        universe: &mut Universe,
+        universe: &mut UniverseBC,
         receiver: Value,
         mut args: Vec<Value>,
     ) {
         match self.kind() {
             MethodKind::Defined(_) => {
-                let holder = self.holder().upgrade().unwrap();
-                let kind = FrameKind::Method {
-                    method: self,
-                    holder,
-                    self_value: receiver.clone(),
-                };
-
-                let frame = interpreter.push_frame(kind);
-                frame.borrow_mut().args.push(receiver);
-                frame.borrow_mut().args.append(&mut args);
+                let mut frame_args = vec![receiver];
+                frame_args.append(&mut args);
+                interpreter.push_method_frame(self, frame_args);
             }
             MethodKind::Primitive(func) => {
                 interpreter.stack.push(receiver);
@@ -115,17 +111,22 @@ impl fmt::Display for Method {
         match &self.kind {
             MethodKind::Defined(env) => {
                 writeln!(f, "(")?;
-                write!(f, "    <{} locals>", env.locals.len())?;
+                write!(f, "    <{} locals>", env.nbr_locals)?;
                 for bytecode in &env.body {
                     writeln!(f)?;
                     write!(f, "    {}  ", bytecode.padded_name())?;
                     match bytecode {
-                        Bytecode::Halt => {}
                         Bytecode::Dup => {}
-                        Bytecode::PushLocal(up_idx, idx) => {
+                        Bytecode::PushLocal(idx) => {
+                            write!(f, "local: {}", idx)?;
+                        }
+                        Bytecode::PushNonLocal(up_idx, idx) => {
                             write!(f, "local: {}, context: {}", idx, up_idx)?;
                         }
-                        Bytecode::PushArgument(up_idx, idx) => {
+                        Bytecode::PushArg(idx) => {
+                            write!(f, "argument: {}", idx)?;
+                        }
+                        Bytecode::PushNonLocalArg(up_idx, idx) => {
                             write!(f, "argument: {}, context: {}", idx, up_idx)?;
                         }
                         Bytecode::PushField(idx) => {
@@ -155,14 +156,13 @@ impl fmt::Display for Method {
                         Bytecode::PushGlobal(idx) => {
                             write!(f, "index: {}", idx)?;
                         }
-                        Bytecode::Push0 => {}
-                        Bytecode::Push1 => {}
-                        Bytecode::PushNil => {}
-                        Bytecode::Pop => {}
+                        Bytecode::Push0 | Bytecode::Push1 | Bytecode::PushNil => {}
+                        Bytecode::PushSelf => {}
+                        Bytecode::Inc | Bytecode::Dec | Bytecode::Pop | Bytecode::Pop2 => {}
                         Bytecode::PopLocal(up_idx, idx) => {
                             write!(f, "local: {}, context: {}", idx, up_idx)?;
                         }
-                        Bytecode::PopArgument(up_idx, idx) => {
+                        Bytecode::PopArg(up_idx, idx) => {
                             write!(f, "argument: {}, context: {}", idx, up_idx)?;
                         }
                         Bytecode::PopField(idx) => {
@@ -181,7 +181,17 @@ impl fmt::Display for Method {
                             write!(f, "index: {}", idx)?;
                         }
                         Bytecode::ReturnLocal => {}
-                        Bytecode::ReturnNonLocal => {}
+                        Bytecode::ReturnNonLocal(_) => {}
+                        Bytecode::ReturnSelf => {}
+                        Bytecode::Jump(idx)
+                        | Bytecode::JumpBackward(idx) 
+                        | Bytecode::JumpOnTruePop(idx)
+                        | Bytecode::JumpOnFalsePop(idx)
+                        | Bytecode::JumpOnFalseTopNil(idx)
+                        | Bytecode::JumpOnTrueTopNil(idx) => {
+                            write!(f, "index: {}", idx)?;
+                        }
+                        Bytecode::Halt => {}
                     }
                 }
                 Ok(())

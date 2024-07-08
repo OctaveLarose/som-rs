@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 /// Represents a class definition.
 ///
 /// Example:
@@ -26,30 +28,6 @@ pub struct ClassDef {
     pub static_methods: Vec<MethodDef>,
 }
 
-/// Represents a method's kind.
-///
-/// Example:
-/// ```text
-/// "unary method"       increment = ( self increment: 1 )
-/// "positional method"  increment: value = ( total := total + value )
-/// "operator method"    + value = ( self increment: value )
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub enum MethodKind {
-    /// A unary method definition.
-    Unary,
-    /// A positional method definition (keyword-based).
-    Positional {
-        /// The binding names for the method's parameters.
-        parameters: Vec<String>,
-    },
-    /// A binary operator method definiton.
-    Operator {
-        /// The binding name for the right-hand side.
-        rhs: String,
-    },
-}
-
 /// Represents a method definition.
 ///
 /// Example:
@@ -59,13 +37,22 @@ pub enum MethodKind {
 /// "operator method"    + value = ( self increment: value )
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct MethodDef {
-    /// The method's kind.
-    pub kind: MethodKind,
+pub struct GenericMethodDef {
     /// The method's signature (eg. `println`, `at:put:` or `==`).
     pub signature: String,
     /// The method's body.
     pub body: MethodBody,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MethodDef {
+    Generic(GenericMethodDef),
+    InlinedWhile(GenericMethodDef, bool),
+    InlinedToDo(GenericMethodDef),
+    InlinedToByDo(GenericMethodDef),
+    InlinedDownToDo(GenericMethodDef),
+    InlinedIf(GenericMethodDef, bool),
+    InlinedIfTrueIfFalse(GenericMethodDef),
 }
 
 /// Represents a method's body.
@@ -83,7 +70,12 @@ pub enum MethodBody {
     /// A primitive (meant to be implemented by the VM itself).
     Primitive,
     /// An actual body for the method, with locals.
-    Body { locals: Vec<String>, body: Body },
+    Body { 
+        locals_nbr: usize,
+        body: Body,
+        #[cfg(feature = "block-debug-info")]
+        debug_info: BlockDebugInfo,
+    },
 }
 
 /// Represents the contents of a body (within a term or block).
@@ -125,19 +117,30 @@ pub struct Body {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     /// A reference to a binding (eg. `counter`).
-    Reference(String),
+    GlobalRead(String),
+    /// Read of a local var.
+    LocalVarRead(usize),
+    /// Read of a nonlocal var.
+    NonLocalVarRead(usize, usize),
+    /// Read of an argument.
+    ArgRead(usize, usize),
+    /// Read of a field.
+    FieldRead(usize),
     /// An assignment to a binding (eg. `counter := 10`).
-    Assignment(String, Box<Expression>),
+    LocalVarWrite(usize, Box<Expression>),
+    NonLocalVarWrite(usize, usize, Box<Expression>),
+    ArgWrite(usize, usize, Box<Expression>),
+    FieldWrite(usize, Box<Expression>),
     /// A message send (eg. `counter incrementBy: 5`).
     Message(Message),
     /// A binary operation (eg. `counter <= 5`).
     BinaryOp(BinaryOp),
-    /// An exit operation (eg. `^counter`).
-    Exit(Box<Expression>),
+    /// An exit operation (eg. `^counter`). Second argument is the scope level to differentiate local and nonlocal returns
+    Exit(Box<Expression>, usize),
     /// A literal (eg. `'foo'`, `10`, `#foo`, ...).
     Literal(Literal),
     /// A block (eg. `[ :value | counter incrementBy: value ]`).
-    Block(Block),
+    Block(Rc<Block>),
 }
 
 /// Represents a message send.
@@ -195,11 +198,21 @@ pub struct BinaryOp {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Block {
     /// Represents the parameters' names.
-    pub parameters: Vec<String>,
+    pub nbr_params: usize,
     /// The names of the locals.
-    pub locals: Vec<String>,
+    pub nbr_locals: usize,
     /// Represents the block's body.
     pub body: Body,
+    #[cfg(feature = "block-debug-info")]
+    /// Debug info for the block: parameters and local variable names
+    pub dbg_info: BlockDebugInfo,
+}
+
+#[cfg(feature = "block-debug-info")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockDebugInfo {
+    pub parameters: Vec<String>,
+    pub locals: Vec<String>,
 }
 
 /// Represents a term.

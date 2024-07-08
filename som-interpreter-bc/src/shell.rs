@@ -8,15 +8,15 @@ use som_lexer::{Lexer, Token};
 use som_parser::lang;
 
 use som_interpreter_bc::compiler;
-use som_interpreter_bc::frame::FrameKind;
 use som_interpreter_bc::interpreter::Interpreter;
-use som_interpreter_bc::universe::Universe;
+use som_interpreter_bc::universe::UniverseBC;
 use som_interpreter_bc::value::Value;
 
 /// Launches an interactive Read-Eval-Print-Loop within the given universe.
+#[allow(dead_code)]
 pub fn interactive(
     interpreter: &mut Interpreter,
-    universe: &mut Universe,
+    universe: &mut UniverseBC,
     verbose: bool,
 ) -> Result<(), Error> {
     let stdin = io::stdin();
@@ -63,7 +63,7 @@ pub fn interactive(
         }
 
         let start = Instant::now();
-        let class_def = match som_parser::apply(lang::class_def(), tokens.as_slice()) {
+        let class_def = match som_parser::apply(lang::class_def(), tokens.as_slice(), Some(universe)) {
             Some(class_def) => class_def,
             None => {
                 println!("ERROR: could not fully parse the given expression");
@@ -110,14 +110,7 @@ pub fn interactive(
             .lookup_method(method_name)
             .expect("method not found ??");
         let start = Instant::now();
-        let kind = FrameKind::Method {
-            method,
-            holder: class.clone(),
-            self_value: Value::Class(class),
-        };
-        let frame = interpreter.push_frame(kind);
-        frame.borrow_mut().args.push(Value::System);
-        frame.borrow_mut().args.push(last_value.clone());
+        interpreter.push_method_frame(method, vec![Value::System, last_value.clone()]);
         if let Some(value) = interpreter.run(universe) {
             writeln!(
                 &mut stdout,

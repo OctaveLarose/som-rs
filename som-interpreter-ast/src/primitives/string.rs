@@ -6,7 +6,7 @@ use std::rc::Rc;
 use crate::expect_args;
 use crate::invokable::Return;
 use crate::primitives::PrimitiveFn;
-use crate::universe::Universe;
+use crate::universe::UniverseAST;
 use crate::value::Value;
 
 pub static INSTANCE_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[
@@ -16,13 +16,14 @@ pub static INSTANCE_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[
     ("isDigits", self::is_digits, true),
     ("isWhiteSpace", self::is_whitespace, true),
     ("asSymbol", self::as_symbol, true),
+    ("charAt:", self::char_at, true),
     ("concatenate:", self::concatenate, true),
     ("primSubstringFrom:to:", self::prim_substring_from_to, true),
     ("=", self::eq, true),
 ];
 pub static CLASS_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[];
 
-fn length(universe: &mut Universe, args: Vec<Value>) -> Return {
+fn length(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "String>>#length";
 
     expect_args!(SIGNATURE, args, [
@@ -41,7 +42,7 @@ fn length(universe: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn hashcode(universe: &mut Universe, args: Vec<Value>) -> Return {
+fn hashcode(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "String>>#hashcode";
 
     expect_args!(SIGNATURE, args, [
@@ -66,7 +67,7 @@ fn hashcode(universe: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Integer((hasher.finish() as i64).abs()))
 }
 
-fn is_letters(universe: &mut Universe, args: Vec<Value>) -> Return {
+fn is_letters(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "String>>#isLetters";
 
     expect_args!(SIGNATURE, args, [
@@ -84,7 +85,7 @@ fn is_letters(universe: &mut Universe, args: Vec<Value>) -> Return {
     ))
 }
 
-fn is_digits(universe: &mut Universe, args: Vec<Value>) -> Return {
+fn is_digits(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "String>>#isDigits";
 
     expect_args!(SIGNATURE, args, [
@@ -102,7 +103,7 @@ fn is_digits(universe: &mut Universe, args: Vec<Value>) -> Return {
     ))
 }
 
-fn is_whitespace(universe: &mut Universe, args: Vec<Value>) -> Return {
+fn is_whitespace(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "String>>#isWhiteSpace";
 
     expect_args!(SIGNATURE, args, [
@@ -120,7 +121,7 @@ fn is_whitespace(universe: &mut Universe, args: Vec<Value>) -> Return {
     ))
 }
 
-fn concatenate(universe: &mut Universe, args: Vec<Value>) -> Return {
+fn concatenate(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "String>>#concatenate:";
 
     expect_args!(SIGNATURE, args, [
@@ -142,7 +143,7 @@ fn concatenate(universe: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::String(Rc::new(format!("{}{}", s1, s2))))
 }
 
-fn as_symbol(universe: &mut Universe, args: Vec<Value>) -> Return {
+fn as_symbol(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "String>>#asSymbol";
 
     expect_args!(SIGNATURE, args, [
@@ -158,7 +159,27 @@ fn as_symbol(universe: &mut Universe, args: Vec<Value>) -> Return {
     }
 }
 
-fn eq(universe: &mut Universe, args: Vec<Value>) -> Return {
+fn char_at(_universe: &mut UniverseAST, args: Vec<Value>) -> Return {
+    const SIGNATURE: &str = "String>>#charAt:";
+
+    expect_args!(SIGNATURE, args, [
+        s1 => s1,
+        s2 => s2,
+    ]);
+
+    let (value, idx) = match (&s1, s2) {
+        (Value::String(ref value), Value::Integer(i)) => (value.as_str(), i as usize - 1),
+        (Value::Symbol(intern), Value::Integer(i)) => {
+            let str = _universe.lookup_symbol(*intern);
+            (str, i as usize - 1)
+        },
+        a => panic!("charAt not given a [String|Symbol] + integer but {:?}", a)
+    };
+
+    Return::Local(Value::String(Rc::new(String::from(value.chars().nth(idx).unwrap()))))
+}
+
+fn eq(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "String>>#=";
 
     expect_args!(SIGNATURE, args, [
@@ -185,7 +206,7 @@ fn eq(universe: &mut Universe, args: Vec<Value>) -> Return {
     Return::Local(Value::Boolean(s1 == s2))
 }
 
-fn prim_substring_from_to(universe: &mut Universe, args: Vec<Value>) -> Return {
+fn prim_substring_from_to(universe: &mut UniverseAST, args: Vec<Value>) -> Return {
     const SIGNATURE: &str = "String>>#primSubstringFrom:to:";
 
     expect_args!(SIGNATURE, args, [
@@ -200,7 +221,7 @@ fn prim_substring_from_to(universe: &mut Universe, args: Vec<Value>) -> Return {
         (_, _, _) => return Return::Exception(format!("'{}': wrong types", SIGNATURE)),
     };
 
-    let string = Rc::new(value.chars().skip(from).take(to - from).collect());
+    let string = Rc::new(String::from(&value[from..to]));
 
     Return::Local(Value::String(string))
 }

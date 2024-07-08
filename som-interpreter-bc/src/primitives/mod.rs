@@ -22,10 +22,10 @@ pub mod system;
 pub use self::blocks::{block1, block2, block3};
 
 use crate::interpreter::Interpreter;
-use crate::universe::Universe;
+use crate::universe::UniverseBC;
 
 /// A interpreter primitive (just a bare function pointer).
-pub type PrimitiveFn = fn(interpreter: &mut Interpreter, universe: &mut Universe);
+pub type PrimitiveFn = fn(interpreter: &mut Interpreter, universe: &mut UniverseBC);
 
 #[macro_export]
 macro_rules! reverse {

@@ -2,16 +2,34 @@ use som_core::ast;
 
 use crate::class::Class;
 use crate::primitives::PrimitiveFn;
-use crate::universe::Universe;
+use crate::universe::UniverseAST;
 use crate::{SOMRef, SOMWeakRef};
+use crate::specialized::down_to_do_node::DownToDoNode;
+use crate::specialized::while_node::WhileNode;
+use crate::specialized::if_node::IfNode;
+use crate::specialized::if_true_if_false_node::IfTrueIfFalseNode;
+use crate::specialized::to_by_do_node::ToByDoNode;
+use crate::specialized::to_do_node::ToDoNode;
 
 /// The kind of a class method.
 #[derive(Clone)]
 pub enum MethodKind {
     /// A user-defined method from the AST.
-    Defined(ast::MethodDef),
+    Defined(ast::GenericMethodDef),
     /// An interpreter primitive.
     Primitive(PrimitiveFn),
+    /// Specialized: whileTrue/whileFalse node.
+    WhileInlined(WhileNode),
+    /// Specialized: ifTrue/ifFalse.
+    IfInlined(IfNode),
+    /// Specialized: ifTrue:ifFalse.
+    IfTrueIfFalseInlined(IfTrueIfFalseNode),
+    /// Specialized: to:do:.
+    ToDoInlined(ToDoNode),
+    /// Specialized: to:by:do:.
+    ToByDoInlined(ToByDoNode),
+    /// Specialized: downTo:do:.
+    DownToDoInlined(DownToDoNode),
     /// A non-implemented primitive.
     NotImplemented(String),
 }
@@ -32,7 +50,7 @@ pub struct Method {
 }
 
 impl Method {
-    pub fn class(&self, universe: &Universe) -> SOMRef<Class> {
+    pub fn class(&self, universe: &UniverseAST) -> SOMRef<Class> {
         if self.is_primitive() {
             universe.primitive_class()
         } else {

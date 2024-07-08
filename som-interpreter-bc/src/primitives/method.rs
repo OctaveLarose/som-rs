@@ -1,6 +1,6 @@
 use crate::interpreter::Interpreter;
 use crate::primitives::PrimitiveFn;
-use crate::universe::Universe;
+use crate::universe::UniverseBC;
 use crate::value::Value;
 use crate::{expect_args, reverse};
 
@@ -11,7 +11,7 @@ pub static INSTANCE_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[
 ];
 pub static CLASS_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[];
 
-fn holder(interpreter: &mut Interpreter, _: &mut Universe) {
+fn holder(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Method>>#holder";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -24,7 +24,7 @@ fn holder(interpreter: &mut Interpreter, _: &mut Universe) {
     }
 }
 
-fn signature(interpreter: &mut Interpreter, universe: &mut Universe) {
+fn signature(interpreter: &mut Interpreter, universe: &mut UniverseBC) {
     const SIGNATURE: &str = "Method>>#signature";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -35,7 +35,7 @@ fn signature(interpreter: &mut Interpreter, universe: &mut Universe) {
     interpreter.stack.push(Value::Symbol(sym))
 }
 
-fn invoke_on_with(interpreter: &mut Interpreter, universe: &mut Universe) {
+fn invoke_on_with(interpreter: &mut Interpreter, universe: &mut UniverseBC) {
     const SIGNATURE: &str = "Method>>#invokeOn:with:";
 
     expect_args!(SIGNATURE, interpreter, [

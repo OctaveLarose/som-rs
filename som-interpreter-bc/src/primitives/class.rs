@@ -4,7 +4,7 @@ use std::rc::Rc;
 use crate::instance::Instance;
 use crate::interpreter::Interpreter;
 use crate::primitives::PrimitiveFn;
-use crate::universe::Universe;
+use crate::universe::UniverseBC;
 use crate::value::Value;
 use crate::{expect_args, reverse};
 
@@ -17,7 +17,7 @@ pub static INSTANCE_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[
 ];
 pub static CLASS_PRIMITIVES: &[(&str, PrimitiveFn, bool)] = &[];
 
-fn superclass(interpreter: &mut Interpreter, _: &mut Universe) {
+fn superclass(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Class>>#superclass";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -30,7 +30,7 @@ fn superclass(interpreter: &mut Interpreter, _: &mut Universe) {
         .push(super_class.map(Value::Class).unwrap_or(Value::Nil));
 }
 
-fn new(interpreter: &mut Interpreter, _: &mut Universe) {
+fn new(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Class>>#new";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -42,7 +42,7 @@ fn new(interpreter: &mut Interpreter, _: &mut Universe) {
     interpreter.stack.push(Value::Instance(instance));
 }
 
-fn name(interpreter: &mut Interpreter, universe: &mut Universe) {
+fn name(interpreter: &mut Interpreter, universe: &mut UniverseBC) {
     const SIGNATURE: &str = "Class>>#name";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -53,7 +53,7 @@ fn name(interpreter: &mut Interpreter, universe: &mut Universe) {
     interpreter.stack.push(Value::Symbol(sym));
 }
 
-fn methods(interpreter: &mut Interpreter, _: &mut Universe) {
+fn methods(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Class>>#methods";
 
     expect_args!(SIGNATURE, interpreter, [
@@ -72,7 +72,7 @@ fn methods(interpreter: &mut Interpreter, _: &mut Universe) {
         .push(Value::Array(Rc::new(RefCell::new(methods))));
 }
 
-fn fields(interpreter: &mut Interpreter, _: &mut Universe) {
+fn fields(interpreter: &mut Interpreter, _: &mut UniverseBC) {
     const SIGNATURE: &str = "Class>>#fields";
 
     expect_args!(SIGNATURE, interpreter, [

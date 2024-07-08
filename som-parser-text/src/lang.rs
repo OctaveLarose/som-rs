@@ -237,14 +237,14 @@ pub fn keyword<'a>() -> impl Parser<String, &'a [char]> {
 }
 
 pub fn unary_send<'a>() -> impl Parser<Expression, &'a [char]> {
-    move |input: &'a [char]| {
-        let (receiver, input) = primary().parse(input)?;
-        let (_, input) = many(spacing()).parse(input)?;
+    move |input: &'a [char], &mut genctxt| {
+        let (receiver, input) = primary().parse(input, genctxt)?;
+        let (_, input) = many(spacing()).parse(input, genctxt)?;
         let (signatures, input) = sep_by(
             many(spacing()),
             identifier().and_left(not(peek(exact(':')))),
         )
-        .parse(input)?;
+        .parse(input, genctxt)?;
 
         let expr = signatures
             .into_iter()
@@ -445,11 +445,11 @@ pub fn unary_method_def<'a>() -> impl Parser<MethodDef, &'a [char]> {
         let (_, input) = many(spacing()).parse(input)?;
         let (body, input) = primitive().or(method_body()).parse(input)?;
 
-        let method_def = MethodDef {
+        let method_def = MethodDef::Generic(GenericMethodDef {
             kind: MethodKind::Unary,
             signature,
             body,
-        };
+        });
         Some((method_def, input))
     }
 }
@@ -469,11 +469,11 @@ pub fn positional_method_def<'a>() -> impl Parser<MethodDef, &'a [char]> {
         let (body, input) = primitive().or(method_body()).parse(input)?;
 
         let (signature, parameters) = pairs.into_iter().unzip();
-        let method_def = MethodDef {
+        let method_def = MethodDef::Generic(GenericMethodDef {
             kind: MethodKind::Positional { parameters },
             signature,
             body,
-        };
+        });
         Some((method_def, input))
     }
 }
@@ -488,11 +488,11 @@ pub fn operator_method_def<'a>() -> impl Parser<MethodDef, &'a [char]> {
         let (_, input) = many(spacing()).parse(input)?;
         let (body, input) = primitive().or(method_body()).parse(input)?;
 
-        let method_def = MethodDef {
+        let method_def = MethodDef::Generic(GenericMethodDef {
             kind: MethodKind::Operator { rhs },
             signature,
             body,
-        };
+        });
         Some((method_def, input))
     }
 }

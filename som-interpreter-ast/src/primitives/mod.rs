@@ -22,11 +22,11 @@ pub mod system;
 pub use self::blocks::{block1, block2, block3};
 
 use crate::invokable::Return;
-use crate::universe::Universe;
+use crate::universe::UniverseAST;
 use crate::value::Value;
 
 /// A interpreter primitive (just a bare function pointer).
-pub type PrimitiveFn = fn(universe: &mut Universe, args: Vec<Value>) -> Return;
+pub type PrimitiveFn = fn(universe: &mut UniverseAST, args: Vec<Value>) -> Return;
 
 /// Macro for checking and destructuring arguments passed to primitives.
 #[macro_export]

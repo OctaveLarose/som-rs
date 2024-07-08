@@ -6,11 +6,12 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use anyhow::{anyhow, Error};
+use som_core::universe::UniverseForParser;
 
 use crate::block::Block;
 use crate::class::Class;
 use crate::compiler;
-use crate::frame::FrameKind;
+use crate::frame::Frame;
 use crate::interner::{Interned, Interner};
 use crate::interpreter::Interpreter;
 use crate::value::Value;
@@ -69,7 +70,7 @@ pub struct CoreClasses {
 ///
 /// It represents the complete state of the interpreter, like the known class definitions,
 /// the string interner and the stack frames.
-pub struct Universe {
+pub struct UniverseBC {
     /// The string interner for symbols.
     pub interner: Interner,
     /// The known global bindings.
@@ -80,7 +81,39 @@ pub struct Universe {
     pub core: CoreClasses,
 }
 
-impl Universe {
+impl UniverseForParser for UniverseBC {
+    fn load_class_and_get_all_fields(&mut self, class_name: &str) -> (Vec<String>, Vec<String>) {
+        fn parse_and_get_field_names(universe: &mut UniverseBC, class_name: &str) -> (Vec<String>, Vec<String>) {
+            let cls = universe.load_class(class_name).expect(&format!("Failed to parse class: {}", class_name));
+            let instance_field_names = cls.borrow().locals.keys().map(|s| universe.interner.lookup(*s).to_string()).collect();
+            let static_field_names = cls.borrow().class().borrow().locals.keys().map(|s| universe.interner.lookup(*s).to_string()).collect();
+            (instance_field_names, static_field_names)
+        }
+        
+        match self.interner.reverse_lookup(class_name) {
+            None => {
+                parse_and_get_field_names(self, class_name)
+            }
+            Some(interned) => {
+                match self.lookup_global(interned) {
+                    Some(Value::Class(cls)) => {
+                        let instance_field_names = cls.borrow().locals.keys().map(|s| self.interner.lookup(*s).to_string()).collect();
+                        let static_field_names = cls.borrow().class().borrow().locals.keys().map(|s| self.interner.lookup(*s).to_string()).collect();
+                        (instance_field_names, static_field_names)
+                    },
+                    Some(val) => unreachable!("superclass accessed from parser is not actually a class, but {:?}", val),
+                    None => {
+                        // this case is weird: you have encountered the superclass name, but not parsed it as a global. 
+                        // it can happen and i'm not convinced at all it's indicative of a design flaw. if it is, it's likely not a major one or one that could have an impact on performance
+                        parse_and_get_field_names(self, class_name)
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl UniverseBC {
     /// Initialize the universe from the given classpath.
     pub fn with_classpath(classpath: Vec<PathBuf>) -> Result<Self, Error> {
         let mut interner = Interner::with_capacity(100);
@@ -212,56 +245,13 @@ impl Universe {
         })
     }
 
-    /// Load a system class (with an incomplete hierarchy).
-    pub fn load_system_class(
-        interner: &mut Interner,
-        classpath: &[impl AsRef<Path>],
-        class_name: impl Into<String>,
-    ) -> Result<SOMRef<Class>, Error> {
-        let class_name = class_name.into();
-        for path in classpath {
-            let mut path = path.as_ref().join(class_name.as_str());
-            path.set_extension("som");
-
-            // Read file contents.
-            let contents = match fs::read_to_string(path.as_path()) {
-                Ok(contents) => contents,
-                Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
-                Err(err) => return Err(Error::from(err)),
-            };
-
-            // Collect all tokens from the file.
-            let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
-                .skip_comments(true)
-                .skip_whitespace(true)
-                .collect();
-
-            // Parse class definition from the tokens.
-            let defn = match som_parser::parse_file(tokens.as_slice()) {
-                Some(defn) => defn,
-                None => return Err(anyhow!("could not parse the '{}' system class", class_name)),
-            };
-
-            if defn.name != class_name {
-                return Err(anyhow!(
-                    "{}: class name is different from file name.",
-                    path.display(),
-                ));
-            }
-            let class = compiler::compile_class(interner, &defn, None)
-                .ok_or_else(|| Error::msg(format!("")))?;
-
-            return Ok(class);
-        }
-
-        Err(anyhow!("could not find the '{}' system class", class_name))
-    }
-
     /// Load a class from its name into this universe.
     pub fn load_class(&mut self, class_name: impl Into<String>) -> Result<SOMRef<Class>, Error> {
         let class_name = class_name.into();
-        for path in self.classpath.iter() {
-            let mut path = path.join(class_name.as_str());
+        let paths: Vec<PathBuf> = self.classpath.iter().map(|path| path.clone()).collect(); // ugly. see original code for how it should be done instead. TODO change - maybe a .map() call fixes it?
+
+        for mut path in paths {
+            path.push(class_name.as_str());
             path.set_extension("som");
 
             // Read file contents.
@@ -277,7 +267,7 @@ impl Universe {
                 .collect();
 
             // Parse class definition from the tokens.
-            let defn = match som_parser::parse_file(tokens.as_slice()) {
+            let defn = match som_parser::parse_file(tokens.as_slice(), self) {
                 Some(defn) => defn,
                 None => continue,
             };
@@ -303,42 +293,6 @@ impl Universe {
                 .ok_or_else(|| Error::msg(format!("")))?;
             set_super_class(&class, &super_class, &self.core.metaclass_class);
 
-            // fn has_duplicated_field(class: &SOMRef<Class>) -> Option<(String, (String, String))> {
-            //     let super_class_iterator = std::iter::successors(Some(class.clone()), |class| {
-            //         class.borrow().super_class()
-            //     });
-            //     let mut map = HashMap::<String, String>::new();
-            //     for class in super_class_iterator {
-            //         let class_name = class.borrow().name().to_string();
-            //         for (field, _) in class.borrow().locals.iter() {
-            //             let field_name = field.clone();
-            //             match map.entry(field_name.clone()) {
-            //                 Entry::Occupied(entry) => {
-            //                     return Some((field_name, (class_name, entry.get().clone())))
-            //                 }
-            //                 Entry::Vacant(v) => {
-            //                     v.insert(class_name.clone());
-            //                 }
-            //             }
-            //         }
-            //     }
-            //     return None;
-            // }
-
-            // if let Some((field, (c1, c2))) = has_duplicated_field(&class) {
-            //     return Err(anyhow!(
-            //         "the field named '{}' is defined more than once (by '{}' and '{}', where the latter inherits from the former)",
-            //         field, c1, c2,
-            //     ));
-            // }
-
-            // if let Some((field, (c1, c2))) = has_duplicated_field(&class.borrow().class()) {
-            //     return Err(anyhow!(
-            //         "the field named '{}' is defined more than once (by '{}' and '{}', where the latter inherits from the former)",
-            //         field, c1, c2,
-            //     ));
-            // }
-
             let symbol = self.intern_symbol(class.borrow().name());
             self.globals.insert(symbol, Value::Class(class.clone()));
 
@@ -348,53 +302,49 @@ impl Universe {
         Err(anyhow!("could not find the '{}' class", class_name))
     }
 
-    /// Load a class from its path into this universe.
-    pub fn load_class_from_path(&mut self, path: impl AsRef<Path>) -> Result<SOMRef<Class>, Error> {
-        let path = path.as_ref();
-        let file_stem = path
-            .file_stem()
-            .ok_or_else(|| anyhow!("The given path has no file stem"))?;
+    /// Load a system class (with an incomplete hierarchy).
+    pub fn load_system_class(
+        interner: &mut Interner,
+        classpath: &[impl AsRef<Path>],
+        class_name: impl Into<String>,
+    ) -> Result<SOMRef<Class>, Error> {
+        let class_name = class_name.into();
+        for path in classpath {
+            let mut path = path.as_ref().join(class_name.as_str());
+            path.set_extension("som");
 
-        // Read file contents.
-        let contents = match fs::read_to_string(path) {
-            Ok(contents) => contents,
-            Err(err) => return Err(Error::from(err)),
-        };
+            // Read file contents.
+            let contents = match fs::read_to_string(path.as_path()) {
+                Ok(contents) => contents,
+                Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                Err(err) => return Err(Error::from(err)),
+            };
 
-        // Collect all tokens from the file.
-        let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
-            .skip_comments(true)
-            .skip_whitespace(true)
-            .collect();
+            // Collect all tokens from the file.
+            let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
+                .skip_comments(true)
+                .skip_whitespace(true)
+                .collect();
 
-        // Parse class definition from the tokens.
-        let defn = match som_parser::parse_file(tokens.as_slice()) {
-            Some(defn) => defn,
-            None => return Err(Error::msg("could not parse file")),
-        };
+            // Parse class definition from the tokens.
+            let defn = match som_parser::parse_file_no_universe(tokens.as_slice()) {
+                Some(defn) => defn,
+                None => return Err(anyhow!("could not parse the '{}' system class", class_name)),
+            };
 
-        if defn.name.as_str() != file_stem {
-            return Err(anyhow!(
-                "{}: class name is different from file name.",
-                path.display(),
-            ));
+            if defn.name != class_name {
+                return Err(anyhow!(
+                    "{}: class name is different from file name.",
+                    path.display(),
+                ));
+            }
+            let class = compiler::compile_class(interner, &defn, None)
+                .ok_or_else(|| Error::msg(format!("")))?;
+
+            return Ok(class);
         }
 
-        let super_class = if let Some(ref super_class) = defn.super_class {
-            let symbol = self.intern_symbol(super_class);
-            match self.lookup_global(symbol) {
-                Some(Value::Class(class)) => class,
-                _ => self.load_class(super_class)?,
-            }
-        } else {
-            self.core.object_class.clone()
-        };
-
-        let class = compiler::compile_class(&mut self.interner, &defn, Some(&super_class))
-            .ok_or_else(|| Error::msg(format!("")))?;
-        set_super_class(&class, &super_class, &self.core.metaclass_class);
-
-        Ok(class)
+        Err(anyhow!("could not find the '{}' system class", class_name))
     }
 
     /// Get the **Nil** class.
@@ -472,9 +422,7 @@ impl Universe {
     pub fn primitive_class(&self) -> SOMRef<Class> {
         self.core.primitive_class.clone()
     }
-}
 
-impl Universe {
     /// Intern a symbol.
     pub fn intern_symbol(&mut self, symbol: &str) -> Interned {
         self.interner.intern(symbol)
@@ -501,7 +449,7 @@ impl Universe {
     }
 }
 
-impl Universe {
+impl UniverseBC {
     /// Call `escapedBlock:` on the given value, if it is defined.
     pub fn escaped_block(
         &mut self,
@@ -511,22 +459,12 @@ impl Universe {
     ) -> Option<()> {
         let method_name = self.intern_symbol("escapedBlock:");
         let method = value.lookup_method(self, method_name)?;
-
-        let holder = method.holder().upgrade().unwrap();
-        let kind = FrameKind::Method {
-            method,
-            holder,
-            self_value: value.clone(),
-        };
-
-        let frame = interpreter.push_frame(kind);
-        frame.borrow_mut().args.push(value);
-        frame.borrow_mut().args.push(Value::Block(block));
-
+        interpreter.push_method_frame(method, vec![value, Value::Block(block)]);
         Some(())
     }
 
     /// Call `doesNotUnderstand:` on the given value, if it is defined.
+    #[allow(unreachable_code, unused_variables)]
     pub fn does_not_understand(
         &mut self,
         interpreter: &mut Interpreter,
@@ -534,21 +472,14 @@ impl Universe {
         symbol: Interned,
         args: Vec<Value>,
     ) -> Option<()> {
+        #[cfg(debug_assertions)]
+        // dbg!(&interpreter.stack);
+        panic!("does not understand: {:?}, called on {:?}", self.interner.lookup(symbol), &value);
+        
         let method_name = self.intern_symbol("doesNotUnderstand:arguments:");
         let method = value.lookup_method(self, method_name)?;
 
-        let holder = method.holder().upgrade().unwrap();
-        let kind = FrameKind::Method {
-            method,
-            holder,
-            self_value: value.clone(),
-        };
-
-        let frame = interpreter.push_frame(kind);
-        frame.borrow_mut().args.push(value);
-        frame.borrow_mut().args.push(Value::Symbol(symbol));
-        let args = Value::Array(Rc::new(RefCell::new(args)));
-        frame.borrow_mut().args.push(args);
+        interpreter.push_method_frame(method, vec![value, Value::Symbol(symbol), Value::Array(Rc::new(RefCell::new(args)))]);
 
         Some(())
     }
@@ -563,37 +494,22 @@ impl Universe {
         let method_name = self.intern_symbol("unknownGlobal:");
         let method = value.lookup_method(self, method_name)?;
 
-        let holder = method.holder().upgrade().unwrap();
-        let kind = FrameKind::Method {
-            method,
-            holder,
-            self_value: value.clone(),
-        };
-
-        let frame = interpreter.push_frame(kind);
-        frame.borrow_mut().args.push(value);
-        frame.borrow_mut().args.push(Value::Symbol(name));
+        interpreter.current_frame.borrow_mut().bytecode_idx = interpreter.bytecode_idx;
+        interpreter.push_method_frame(method, vec![value, Value::Symbol(name)]);
 
         Some(())
     }
 
     /// Call `System>>#initialize:` with the given name, if it is defined.
-    pub fn initialize(&mut self, interpreter: &mut Interpreter, args: Vec<Value>) -> Option<()> {
+    pub fn initialize(&mut self, args: Vec<Value>) -> Option<Interpreter> {
         let method_name = self.interner.intern("initialize:");
         let method = Value::System.lookup_method(self, method_name)?;
 
-        let kind = FrameKind::Method {
-            method,
-            holder: self.system_class(),
-            self_value: Value::System,
-        };
 
-        let frame = interpreter.push_frame(kind);
-        frame.borrow_mut().args.push(Value::System);
-        let args = Value::Array(Rc::new(RefCell::new(args)));
-        frame.borrow_mut().args.push(args);
+        let frame = Rc::new(RefCell::new(Frame::from_method(method, vec![Value::System, Value::Array(Rc::new(RefCell::new(args)))])));
+        let interpreter = Interpreter::new(Rc::clone(&frame));
 
-        Some(())
+        Some(interpreter)
     }
 }
 

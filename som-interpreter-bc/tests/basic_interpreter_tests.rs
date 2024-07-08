@@ -1,19 +1,21 @@
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use som_interpreter_bc::compiler;
-use som_interpreter_bc::frame::FrameKind;
+use som_interpreter_bc::frame::Frame;
 use som_interpreter_bc::interpreter::Interpreter;
-use som_interpreter_bc::universe::Universe;
+use som_interpreter_bc::universe::UniverseBC;
 use som_interpreter_bc::value::Value;
 use som_lexer::{Lexer, Token};
 use som_parser::lang;
 
-fn setup_universe() -> Universe {
+fn setup_universe() -> UniverseBC {
     let classpath = vec![
         PathBuf::from("../core-lib/Smalltalk"),
         PathBuf::from("../core-lib/TestSuite/BasicInterpreterTests"),
     ];
-    Universe::with_classpath(classpath).expect("could not setup test universe")
+    UniverseBC::with_classpath(classpath).expect("could not setup test universe")
 }
 
 #[test]
@@ -158,7 +160,6 @@ fn basic_interpreter_tests() {
     ];
 
     for (counter, (expr, expected)) in tests.iter().enumerate() {
-        let mut interpreter = Interpreter::new();
         println!("testing: '{}'", expr);
 
         let line = format!(
@@ -173,7 +174,7 @@ fn basic_interpreter_tests() {
             "could not fully tokenize test expression"
         );
 
-        let class_def = som_parser::apply(lang::class_def(), tokens.as_slice()).unwrap();
+        let class_def = som_parser::apply(lang::class_def(), tokens.as_slice(), None).unwrap();
 
         let object_class = universe.object_class();
         let class =
@@ -198,12 +199,7 @@ fn basic_interpreter_tests() {
             .borrow()
             .lookup_method(method_name)
             .expect("method not found ??");
-        let kind = FrameKind::Method {
-            method,
-            holder: class.clone(),
-            self_value: Value::Class(class),
-        };
-        interpreter.push_frame(kind);
+        let mut interpreter = Interpreter::new(Rc::new(RefCell::new(Frame::from_method(method, vec![Value::System]))));
         if let Some(output) = interpreter.run(&mut universe) {
             assert_eq!(&output, expected, "unexpected test output value");
         }

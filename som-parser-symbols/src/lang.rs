@@ -1,164 +1,184 @@
+use std::rc::Rc;
 use som_core::ast::*;
+use som_core::ast::MethodDef::{Generic, InlinedDownToDo, InlinedIf, InlinedIfTrueIfFalse, InlinedToByDo, InlinedToDo, InlinedWhile};
 use som_lexer::Token;
 use som_parser_core::combinators::*;
 use som_parser_core::Parser;
+use crate::{AstGenCtxt, AstGenCtxtData, AstGenCtxtType, AstMethodGenCtxtType};
 
 macro_rules! opaque {
     ($expr:expr) => {{
-        move |input: &'a [Token]| $expr.parse(input)
+        move |input: &'a [Token], genctxt: AstGenCtxt<'a>| $expr.parse(input, genctxt)
     }};
 }
 
 /// A parser that expects to be nothing left in its input.
-pub fn eof<'a>() -> impl Parser<(), &'a [Token]> {
-    move |input: &'a [Token]| {
+pub fn eof<'a>() -> impl Parser<(), &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
         if input.is_empty() {
-            Some(((), input))
+            Some(((), input, genctxt))
         } else {
             None
         }
     }
 }
 
-pub fn exact<'a>(ch: Token) -> impl Parser<(), &'a [Token]> {
-    move |input: &'a [Token]| {
+pub fn exact<'a>(ch: Token) -> impl Parser<(), &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
         let (head, tail) = input.split_first()?;
         if *head == ch {
-            Some(((), tail))
+            Some(((), tail, genctxt))
         } else {
             None
         }
     }
 }
 
-pub fn exact_ident<'a, 'b: 'a>(string: &'b str) -> impl Parser<(), &'a [Token]> {
-    move |input: &'a [Token]| {
+pub fn exact_ident<'a, 'b: 'a>(string: &'b str) -> impl Parser<(), &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
         let (head, tail) = input.split_first()?;
         match head {
-            Token::Identifier(ref ident) if ident.as_str() == string => Some(((), tail)),
+            Token::Identifier(ref ident) if ident.as_str() == string => Some(((), tail, genctxt)),
             _ => None,
         }
     }
 }
 
-pub fn big_integer<'a>() -> impl Parser<String, &'a [Token]> {
-    move |input: &'a [Token]| {
-        let (sign, input) = optional(exact(Token::Minus)).parse(input)?;
+pub fn big_integer<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
+        let (sign, input, genctxt) = optional(exact(Token::Minus)).parse(input, genctxt)?;
         let sign = if sign.is_some() { "-" } else { "" };
 
         let (head, tail) = input.split_first()?;
         match head {
-            Token::LitBigInteger(value) => Some((format!("{}{}", sign, value), tail)),
+            Token::LitBigInteger(value) => Some((format!("{}{}", sign, value), tail, genctxt)),
             _ => None,
         }
     }
 }
 
-pub fn integer<'a>() -> impl Parser<i64, &'a [Token]> {
-    move |input: &'a [Token]| {
-        let (sign, input) = optional(exact(Token::Minus)).parse(input)?;
+pub fn integer<'a>() -> impl Parser<i64, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
+        let (sign, input, genctxt) = optional(exact(Token::Minus)).parse(input, genctxt)?;
         let sign = if sign.is_some() { -1 } else { 1 };
 
         let (head, tail) = input.split_first()?;
         match head {
-            Token::LitInteger(value) => Some((*value * sign, tail)),
+            Token::LitInteger(value) => Some((*value * sign, tail, genctxt)),
             _ => None,
         }
     }
 }
 
-pub fn double<'a>() -> impl Parser<f64, &'a [Token]> {
-    move |input: &'a [Token]| {
-        let (sign, input) = optional(exact(Token::Minus)).parse(input)?;
+pub fn double<'a>() -> impl Parser<f64, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
+        let (sign, input, genctxt) = optional(exact(Token::Minus)).parse(input, genctxt)?;
         let sign = if sign.is_some() { -1.0 } else { 1.0 };
 
         let (head, tail) = input.split_first()?;
         match head {
-            Token::LitDouble(value) => Some((*value * sign, tail)),
+            Token::LitDouble(value) => Some((*value * sign, tail, genctxt)),
             _ => None,
         }
     }
 }
 
-pub fn single_operator<'a>() -> impl Parser<&'static str, &'a [Token]> {
-    move |input: &'a [Token]| {
+pub fn single_operator<'a>() -> impl Parser<&'static str, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
         let (head, tail) = input.split_first()?;
         match head {
-            Token::Not => Some(("~", tail)),
-            Token::And => Some(("&", tail)),
-            Token::Or => Some(("|", tail)),
-            Token::Star => Some(("*", tail)),
-            Token::Div => Some(("/", tail)),
-            Token::Mod => Some(("\\", tail)),
-            Token::Plus => Some(("+", tail)),
-            Token::Equal => Some(("=", tail)),
-            Token::More => Some((">", tail)),
-            Token::Less => Some(("<", tail)),
-            Token::Comma => Some((",", tail)),
-            Token::At => Some(("@", tail)),
-            Token::Per => Some(("%", tail)),
-            Token::Minus => Some(("-", tail)),
+            Token::Not => Some(("~", tail, genctxt)),
+            Token::And => Some(("&", tail, genctxt)),
+            Token::Or => Some(("|", tail, genctxt)),
+            Token::Star => Some(("*", tail, genctxt)),
+            Token::Div => Some(("/", tail, genctxt)),
+            Token::Mod => Some(("\\", tail, genctxt)),
+            Token::Plus => Some(("+", tail, genctxt)),
+            Token::Equal => Some(("=", tail, genctxt)),
+            Token::More => Some((">", tail, genctxt)),
+            Token::Less => Some(("<", tail, genctxt)),
+            Token::Comma => Some((",", tail, genctxt)),
+            Token::At => Some(("@", tail, genctxt)),
+            Token::Per => Some(("%", tail, genctxt)),
+            Token::Minus => Some(("-", tail, genctxt)),
             _ => None,
         }
     }
 }
 
-pub fn operator_sequence<'a>() -> impl Parser<String, &'a [Token]> {
-    move |input: &'a [Token]| {
+pub fn operator_sequence<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
         let (head, tail) = input.split_first()?;
         match head {
-            Token::OperatorSequence(seq) => Some((seq.clone(), tail)),
+            Token::OperatorSequence(seq) => Some((seq.clone(), tail, genctxt)),
             _ => None,
         }
     }
 }
 
-pub fn operator<'a>() -> impl Parser<String, &'a [Token]> {
+pub fn operator<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
     single_operator().map(String::from).or(operator_sequence())
 }
 
-pub fn identifier<'a>() -> impl Parser<String, &'a [Token]> {
-    move |input: &'a [Token]| {
+pub fn identifier<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
         let (head, tail) = input.split_first()?;
         match head {
-            Token::Identifier(value) => Some((value.clone(), tail)),
+            Token::Identifier(value) => {
+                Some((value.clone(), tail, genctxt))
+            }
             _ => None,
         }
     }
 }
 
-pub fn string<'a>() -> impl Parser<String, &'a [Token]> {
-    move |input: &'a [Token]| {
+pub fn super_class<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
         let (head, tail) = input.split_first()?;
         match head {
-            Token::LitString(value) => Some((value.clone(), tail)),
+            Token::Identifier(value) => {
+                if !som_core::universe::SYSTEM_CLASS_NAMES.contains(&value.as_str()) && value != "nil" {
+                    genctxt.borrow_mut().load_super_class_and_set_fields(value);
+                }
+                Some((value.clone(), tail, genctxt))
+            }
             _ => None,
         }
     }
 }
 
-pub fn symbol<'a>() -> impl Parser<String, &'a [Token]> {
-    move |input: &'a [Token]| {
+pub fn string<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
         let (head, tail) = input.split_first()?;
         match head {
-            Token::LitSymbol(value) => Some((value.clone(), tail)),
+            Token::LitString(value) => Some((value.clone(), tail, genctxt)),
             _ => None,
         }
     }
 }
 
-pub fn array<'a>() -> impl Parser<Vec<Literal>, &'a [Token]> {
-    move |input: &'a [Token]| {
+pub fn symbol<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
+        let (head, tail) = input.split_first()?;
+        match head {
+            Token::LitSymbol(value) => Some((value.clone(), tail, genctxt)),
+            _ => None,
+        }
+    }
+}
+
+pub fn array<'a>() -> impl Parser<Vec<Literal>, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
         between(
             exact(Token::NewArray),
             many(literal()),
             exact(Token::EndTerm),
         )
-        .parse(input)
+            .parse(input, genctxt)
     }
 }
 
-pub fn literal<'a>() -> impl Parser<Literal, &'a [Token]> {
+pub fn literal<'a>() -> impl Parser<Literal, &'a [Token], AstGenCtxt<'a>> {
     (double().map(Literal::Double))
         .or(integer().map(Literal::Integer))
         .or(big_integer().map(Literal::BigInteger))
@@ -167,17 +187,17 @@ pub fn literal<'a>() -> impl Parser<Literal, &'a [Token]> {
         .or(array().map(Literal::Array))
 }
 
-pub fn keyword<'a>() -> impl Parser<String, &'a [Token]> {
-    move |input: &'a [Token]| {
+pub fn keyword<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
         let (head, tail) = input.split_first()?;
         match head {
-            Token::Keyword(value) => Some((value.clone(), tail)),
+            Token::Keyword(value) => Some((value.clone(), tail, genctxt)),
             _ => None,
         }
     }
 }
 
-pub fn unary_send<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn unary_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     opaque!(primary())
         .and(many(identifier()))
         .map(|(receiver, signatures)| {
@@ -193,7 +213,7 @@ pub fn unary_send<'a>() -> impl Parser<Expression, &'a [Token]> {
         })
 }
 
-pub fn binary_send<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn binary_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     unary_send()
         .and(many(operator().and(unary_send().map(Box::new))))
         .map(|(lhs, operands)| {
@@ -207,7 +227,7 @@ pub fn binary_send<'a>() -> impl Parser<Expression, &'a [Token]> {
         })
 }
 
-pub fn positional_send<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn positional_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     binary_send()
         .and(many(keyword().and(binary_send())))
         .map(|(receiver, pairs)| {
@@ -225,7 +245,7 @@ pub fn positional_send<'a>() -> impl Parser<Expression, &'a [Token]> {
         })
 }
 
-pub fn body<'a>() -> impl Parser<Body, &'a [Token]> {
+pub fn body<'a>() -> impl Parser<Body, &'a [Token], AstGenCtxt<'a>> {
     sep_by(exact(Token::Period), exit().or(statement()))
         .and(optional(exact(Token::Period)))
         .map(|(exprs, stopped)| Body {
@@ -234,34 +254,69 @@ pub fn body<'a>() -> impl Parser<Body, &'a [Token]> {
         })
 }
 
-pub fn locals<'a>() -> impl Parser<Vec<String>, &'a [Token]> {
-    between(exact(Token::Or), many(identifier()), exact(Token::Or))
+pub fn locals<'a>() -> impl Parser<Vec<String>, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
+        let (new_locals_names, input, genctxt) = between(exact(Token::Or), many(identifier()), exact(Token::Or)).parse(input, genctxt)?;
+        genctxt.borrow_mut().add_locals(&new_locals_names);
+        Some((new_locals_names, input, genctxt))
+    }
 }
 
-pub fn parameter<'a>() -> impl Parser<String, &'a [Token]> {
+pub fn class_instance_locals<'a>() -> impl Parser<Vec<String>, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
+        let (new_locals_names, input, genctxt) = between(exact(Token::Or), many(identifier()), exact(Token::Or)).parse(input, genctxt)?;
+        genctxt.borrow_mut().add_instance_fields(new_locals_names.clone());
+        Some((new_locals_names, input, genctxt))
+    }
+}
+
+pub fn class_static_locals<'a>() -> impl Parser<Vec<String>, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
+        let (new_locals_names, input, genctxt) = between(exact(Token::Or), many(identifier()), exact(Token::Or)).parse(input, genctxt)?;
+        genctxt.borrow_mut().add_static_fields(new_locals_names.clone());
+        Some((new_locals_names, input, genctxt))
+    }
+}
+
+pub fn parameter<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
     exact(Token::Colon).and_right(identifier())
 }
 
-pub fn parameters<'a>() -> impl Parser<Vec<String>, &'a [Token]> {
-    some(parameter()).and_left(exact(Token::Or))
+pub fn parameters<'a>() -> impl Parser<Vec<String>, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        let (param_names, input, genctxt) = some(parameter()).and_left(exact(Token::Or)).parse(input, genctxt)?;
+        genctxt.borrow_mut().add_params(&param_names);
+        Some((param_names, input, genctxt))
+    }
 }
 
-pub fn block<'a>() -> impl Parser<Expression, &'a [Token]> {
-    between(
-        exact(Token::NewBlock),
-        default(parameters()).and(default(locals())).and(body()),
-        exact(Token::EndBlock),
-    )
-    .map(|((parameters, locals), body)| {
-        Expression::Block(Block {
-            parameters,
-            locals,
+pub fn block<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt| {
+        let (_, input, genctxt) = exact(Token::NewBlock).parse(input, genctxt)?;
+
+        let new_genctxt = AstGenCtxtData::new_ctxt_from(genctxt, AstGenCtxtType::Block);
+
+        let (((parameters, locals), body), input, genctxt) = default(parameters())
+            .and(default(locals()))
+            .and(body())
+            .parse(input, new_genctxt)?;
+        // we unwrap here at the risk of panicking since if it fails we would want to adjust the scope - but atm we just panoc instead of recovering
+
+        let (_, input, genctxt) = exact(Token::EndBlock).parse(input, genctxt)?;
+
+        let new_genctxt = genctxt.borrow_mut().get_outer();
+
+        Some((Expression::Block(Rc::new(Block {
+            nbr_params: parameters.len(),
+            nbr_locals: locals.len(),
+            #[cfg(feature = "block-debug-info")]
+            dbg_info: Rc::clone(&new_genctxt).borrow().get_debug_info(),
             body,
-        })
-    })
+        })), input, new_genctxt))
+    }
 }
 
-pub fn term<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn term<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     between(
         exact(Token::NewTerm),
         assignment().or(expression()),
@@ -269,117 +324,244 @@ pub fn term<'a>() -> impl Parser<Expression, &'a [Token]> {
     )
 }
 
-pub fn exit<'a>() -> impl Parser<Expression, &'a [Token]> {
-    exact(Token::Exit)
-        .and_right(statement())
-        .map(|expr| Expression::Exit(Box::new(expr)))
+pub fn exit<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        let (expr, input, genctxt) = exact(Token::Exit).and_right(statement()).parse(input, Rc::clone(&genctxt))?;
+        let cur_scope = genctxt.borrow().get_method_scope();
+        Some((Expression::Exit(Box::new(expr), cur_scope), input, genctxt))
+    }
 }
 
-pub fn expression<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn expression<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     positional_send()
 }
 
-pub fn primary<'a>() -> impl Parser<Expression, &'a [Token]> {
-    (identifier().map(Expression::Reference))
-        .or(term())
-        .or(block())
-        .or(literal().map(Expression::Literal))
+pub fn primary<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        match identifier().parse(input, Rc::clone(&genctxt)) {
+            None => term()
+                .or(block())
+                .or(literal().map(Expression::Literal))
+                .parse(input, genctxt),
+            Some((name, input, genctxt)) => {
+                Some((genctxt.borrow().get_var_read(&name), input, Rc::clone(&genctxt)))
+            }
+        }
+    }
 }
 
-pub fn assignment<'a>() -> impl Parser<Expression, &'a [Token]> {
-    identifier()
-        .and_left(exact(Token::Assign))
-        .and(opaque!(statement()))
-        .map(|(name, expr)| Expression::Assignment(name, Box::new(expr)))
+
+pub fn assignment<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        match identifier()
+            .and_left(exact(Token::Assign))
+            .and(opaque!(statement())).parse(input, genctxt) {
+            Some(((name, expr), input, genctxt)) => {
+                Some((genctxt.borrow().get_var_write(&name, Box::new(expr.clone())), input, Rc::clone(&genctxt)))
+            }
+            None => None
+        }
+    }
 }
 
-pub fn statement<'a>() -> impl Parser<Expression, &'a [Token]> {
+pub fn statement<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     assignment().or(expression())
 }
 
-pub fn primitive<'a>() -> impl Parser<MethodBody, &'a [Token]> {
+pub fn primitive<'a>() -> impl Parser<MethodBody, &'a [Token], AstGenCtxt<'a>> {
     exact(Token::Primitive).map(|_| MethodBody::Primitive)
 }
 
-pub fn method_body<'a>() -> impl Parser<MethodBody, &'a [Token]> {
+// making several methods here to avoid having to make the general case be a "move" function, since I think that's a slowdown.
+#[cfg(feature = "block-debug-info")]
+pub fn method_body<'a>() -> impl Parser<MethodBody, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        let ((locals, body), input, genctxt) = between(
+            exact(Token::NewTerm),
+            default(locals()).and(body()),
+            exact(Token::EndTerm),
+        ).parse(input, genctxt)?;
+
+        let method_body = MethodBody::Body { 
+            locals_nbr: locals.len(),
+            body,
+            debug_info: genctxt.borrow().get_debug_info()
+        };
+        
+        Some((method_body, input, genctxt))
+    }
+}
+
+#[cfg(not(feature = "block-debug-info"))]
+pub fn method_body<'a>() -> impl Parser<MethodBody, &'a [Token], AstGenCtxt<'a>> {
     between(
         exact(Token::NewTerm),
         default(locals()).and(body()),
         exact(Token::EndTerm),
     )
-    .map(|(locals, body)| MethodBody::Body { locals, body })
+    .map(|(locals, body)| MethodBody::Body {
+        locals_nbr: locals.len(),
+        body
+    })
 }
 
-pub fn unary_method_def<'a>() -> impl Parser<MethodDef, &'a [Token]> {
+pub fn unary_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGenCtxt<'a>> {
     identifier()
         .and_left(exact(Token::Equal))
         .and(primitive().or(method_body()))
-        .map(|(signature, body)| MethodDef {
-            kind: MethodKind::Unary,
+        .map(|(signature, body)| Generic(GenericMethodDef {
             signature,
             body,
-        })
+        }))
 }
 
-pub fn positional_method_def<'a>() -> impl Parser<MethodDef, &'a [Token]> {
-    some(keyword().and(identifier()))
-        .and_left(exact(Token::Equal))
-        .and(primitive().or(method_body()))
-        .map(|(pairs, body)| {
-            let (signature, parameters) = pairs.into_iter().unzip();
+pub fn positional_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        let (pairs, input, genctxt) = some(keyword().and(identifier())).and_left(exact(Token::Equal)).parse(input, genctxt)?;
+        let (signature, parameters): (String, Vec<String>) = pairs.into_iter().unzip();
 
-            MethodDef {
-                kind: MethodKind::Positional { parameters },
+        genctxt.borrow_mut().name = signature.clone();
+        genctxt.borrow_mut().add_params(&parameters);
+
+        let (body, input, genctxt) = primitive().or(method_body()).parse(input, genctxt)?;
+
+        let method_def = match signature.as_str() {
+            "whileTrue:" => {
+                InlinedWhile(GenericMethodDef {
+                    signature,
+                    body,
+                }, true)
+            },
+            "whileFalse:" => {
+                InlinedWhile(GenericMethodDef {
+                    signature,
+                    body,
+                }, false)
+            }
+            "ifTrue:" => {
+                InlinedIf(GenericMethodDef {
+                    signature,
+                    body,
+                }, true)
+            },
+            "ifFalse:" => {
+                InlinedIf(GenericMethodDef {
+                    signature,
+                    body,
+                }, false)
+            },
+            "ifTrue:ifFalse:" => {
+                InlinedIfTrueIfFalse(GenericMethodDef {
+                    signature,
+                    body,
+                })
+            },
+            "to:do:" => {
+                InlinedToDo(GenericMethodDef {
+                    signature,
+                    body,
+                })
+            },
+            "to:by:do:" => {
+                InlinedToByDo(GenericMethodDef {
+                    signature,
+                    body,
+                })
+            },
+            "downTo:do:" => {
+                InlinedDownToDo(GenericMethodDef {
+                    signature,
+                    body,
+                })
+            },
+            _ => Generic(GenericMethodDef {
                 signature,
                 body,
-            }
-        })
+            })
+        };
+
+        Some((method_def, input, genctxt))
+    }
 }
 
-pub fn operator_method_def<'a>() -> impl Parser<MethodDef, &'a [Token]> {
-    operator()
-        .and(identifier())
-        .and_left(exact(Token::Equal))
-        .and(primitive().or(method_body()))
-        .map(|((signature, rhs), body)| MethodDef {
-            kind: MethodKind::Operator { rhs },
-            signature,
-            body,
-        })
+pub fn operator_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        let ((op, rhs), input, genctxt) = operator().and(identifier()).and_left(exact(Token::Equal)).parse(input, genctxt)?;
+
+        genctxt.borrow_mut().add_params(&vec![rhs.clone()]);
+
+        primitive().or(method_body())
+            .map(|body| Generic(GenericMethodDef {
+                signature: op.clone(),
+                body,
+            })).parse(input, genctxt)
+    }
 }
 
-pub fn method_def<'a>() -> impl Parser<MethodDef, &'a [Token]> {
-    unary_method_def()
-        .or(positional_method_def())
-        .or(operator_method_def())
+pub fn instance_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        let genctxt = AstGenCtxtData::new_ctxt_from(genctxt, AstGenCtxtType::Method(AstMethodGenCtxtType::INSTANCE));
+
+        match unary_method_def()
+            .or(positional_method_def())
+            .or(operator_method_def())
+            .parse(input, Rc::clone(&genctxt)) {
+            Some((method_def, input, genctxt)) => {
+                let original_genctxt = genctxt.borrow_mut().get_outer();
+                Some((method_def, input, original_genctxt))
+            },
+            None => None,
+        }
+    }
 }
 
-pub fn class_def<'a>() -> impl Parser<ClassDef, &'a [Token]> {
-    identifier()
-        .and_left(exact(Token::Equal))
-        .and(optional(identifier()))
-        .and(between(
-            exact(Token::NewTerm),
-            default(locals()).and(many(method_def())).and(default(
-                exact(Token::Separator).and_right(default(locals()).and(many(method_def()))),
-            )),
-            exact(Token::EndTerm),
-        ))
-        .map(|((name, super_class), (instance_defns, static_defns))| {
-            let (instance_locals, instance_methods) = instance_defns;
-            let (static_locals, static_methods) = static_defns;
+pub fn class_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        let genctxt = AstGenCtxtData::new_ctxt_from(genctxt, AstGenCtxtType::Method(AstMethodGenCtxtType::CLASS));
 
-            ClassDef {
-                name,
-                super_class,
-                instance_locals,
-                instance_methods,
-                static_locals,
-                static_methods,
-            }
-        })
+        match unary_method_def()
+            .or(positional_method_def())
+            .or(operator_method_def())
+            .parse(input, Rc::clone(&genctxt)) {
+            Some((method_def, input, genctxt)) => {
+                let original_genctxt = genctxt.borrow_mut().get_outer();
+                Some((method_def, input, original_genctxt))
+            },
+            None => None,
+        }
+    }
 }
 
-pub fn file<'a>() -> impl Parser<ClassDef, &'a [Token]> {
+pub fn class_def<'a>() -> impl Parser<ClassDef, &'a [Token], AstGenCtxt<'a>> {
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        let (name, input, genctxt) = identifier().and_left(exact(Token::Equal)).parse(input, genctxt)?;
+
+        genctxt.borrow_mut().name = name.clone();
+        
+        optional(super_class())
+            .and(between(
+                exact(Token::NewTerm),
+                default(class_instance_locals()).and(many(instance_method_def())).and(default(
+                    exact(Token::Separator).and_right(default(class_static_locals()).and(many(class_method_def()))),
+                )),
+                exact(Token::EndTerm),
+            ))
+            .map(|(super_class, (instance_defns, static_defns))| {
+                let (instance_locals, instance_methods) = instance_defns;
+                let (static_locals, static_methods) = static_defns;
+
+                ClassDef {
+                    name: name.clone(),
+                    super_class,
+                    instance_locals,
+                    instance_methods,
+                    static_locals,
+                    static_methods,
+                }
+            }).parse(input, genctxt)
+    }
+}
+
+pub fn file<'a>() -> impl Parser<ClassDef, &'a [Token], AstGenCtxt<'a>> {
     class_def().and_left(eof())
 }

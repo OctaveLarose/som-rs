@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
@@ -8,10 +7,11 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use anyhow::{anyhow, Error};
+use som_core::universe::UniverseForParser;
 
 use crate::block::Block;
 use crate::class::Class;
-use crate::frame::{Frame, FrameKind};
+use crate::frame::Frame;
 use crate::interner::{Interned, Interner};
 use crate::invokable::{Invoke, Return};
 use crate::value::Value;
@@ -70,7 +70,7 @@ pub struct CoreClasses {
 ///
 /// It represents the complete state of the interpreter, like the known class definitions,
 /// the string interner and the stack frames.
-pub struct Universe {
+pub struct UniverseAST {
     /// The string interner for symbols.
     pub interner: Interner,
     /// The known global bindings.
@@ -85,7 +85,23 @@ pub struct Universe {
     pub frames: Vec<SOMRef<Frame>>,
 }
 
-impl Universe {
+impl UniverseForParser for UniverseAST {
+    fn load_class_and_get_all_fields(&mut self, class_name: &str) -> (Vec<String>, Vec<String>) {
+        match self.lookup_global(class_name) {
+            Some(Value::Class(c)) => { (c.borrow().local_names.clone(), c.borrow().class().borrow().local_names.clone()) }
+            None => {
+                let cls = self.load_class(class_name).expect(&format!("Failed to parse class: {}", class_name));
+                let instance_field_names = cls.borrow().local_names.clone();
+                let class_field_names = cls.borrow().class().borrow().local_names.clone();
+                (instance_field_names, class_field_names)
+            }
+            Some(val) => unreachable!("superclass accessed from parser is not actually a class, but {:?}", val)
+        }
+    }
+}
+
+
+impl UniverseAST {
     /// Initialize the universe from the given classpath.
     pub fn with_classpath(classpath: Vec<PathBuf>) -> Result<Self, Error> {
         let interner = Interner::with_capacity(100);
@@ -213,6 +229,99 @@ impl Universe {
         })
     }
 
+    /// Load a class from its name into this universe.
+    pub fn load_class(&mut self, class_name: impl Into<String>) -> Result<SOMRef<Class>, Error> {
+        let class_name = class_name.into();
+        let paths: Vec<PathBuf> = self.classpath.iter().map(|path| path.clone()).collect(); // TODO change back, same as BC
+
+        for path in paths {
+            let mut path = path.join(class_name.as_str());
+            path.set_extension("som");
+
+            // Read file contents.
+            let contents = match fs::read_to_string(path.as_path()) {
+                Ok(contents) => contents,
+                Err(_) => continue,
+            };
+
+            // Collect all tokens from the file.
+            let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
+                .skip_comments(true)
+                .skip_whitespace(true)
+                .collect();
+
+            // Parse class definition from the tokens.
+            let defn = match som_parser::parse_file(tokens.as_slice(), self) {
+                Some(defn) => defn,
+                None => continue,
+            };
+
+            if defn.name != class_name {
+                return Err(anyhow!(
+                    "{}: class name is different from file name.",
+                    path.display(),
+                ));
+            }
+
+            let super_class = if let Some(ref super_class) = defn.super_class {
+                match self.lookup_global(super_class) {
+                    Some(Value::Class(super_class)) => super_class,
+                    _ => unreachable!("we should have already loaded and cached the superclass during parsing"),
+                }
+            } else {
+                self.core.object_class.clone()
+            };
+
+            let class = Class::from_class_def(defn).map_err(Error::msg)?;
+            set_super_class(&class, &super_class, &self.core.metaclass_class);
+
+            /*fn has_duplicated_field(class: &SOMRef<Class>) -> Option<(String, (String, String))> {
+                let super_class_iterator = std::iter::successors(Some(class.clone()), |class| {
+                    class.borrow().super_class()
+                });
+                let mut map = HashMap::<String, String>::new();
+                for class in super_class_iterator {
+                    let class_name = class.borrow().name().to_string();
+                    for (field, _) in class.borrow().locals.iter() {
+                        let field_name = field.clone();
+                        match map.entry(field_name.clone()) {
+                            Entry::Occupied(entry) => {
+                                return Some((field_name, (class_name, entry.get().clone())))
+                            }
+                            Entry::Vacant(v) => {
+                                v.insert(class_name.clone());
+                            }
+                        }
+                    }
+                }
+                return None;
+            }*/
+
+            /*if let Some((field, (c1, c2))) = has_duplicated_field(&class) {
+                return Err(anyhow!(
+                    "the field named '{}' is defined more than once (by '{}' and '{}', where the latter inherits from the former)",
+                    field, c1, c2,
+                ));
+            }
+
+            if let Some((field, (c1, c2))) = has_duplicated_field(&class.borrow().class()) {
+                return Err(anyhow!(
+                    "the field named '{}' is defined more than once (by '{}' and '{}', where the latter inherits from the former)",
+                    field, c1, c2,
+                ));
+            }*/
+
+            self.globals.insert(
+                class.borrow().name().to_string(),
+                Value::Class(class.clone()),
+            );
+
+            return Ok(class);
+        }
+
+        Err(anyhow!("could not find the '{}' class", class_name))
+    }
+
     /// Load a system class (with an incomplete hierarchy).
     pub fn load_system_class(
         classpath: &[impl AsRef<Path>],
@@ -237,7 +346,7 @@ impl Universe {
                 .collect();
 
             // Parse class definition from the tokens.
-            let defn = match som_parser::parse_file(tokens.as_slice()) {
+            let defn = match som_parser::parse_file_no_universe(tokens.as_slice()) {
                 Some(defn) => defn,
                 None => return Err(anyhow!("could not parse the '{}' system class", class_name)),
             };
@@ -255,142 +364,9 @@ impl Universe {
         Err(anyhow!("could not find the '{}' system class", class_name))
     }
 
-    /// Load a class from its name into this universe.
-    pub fn load_class(&mut self, class_name: impl Into<String>) -> Result<SOMRef<Class>, Error> {
-        let class_name = class_name.into();
-        for path in self.classpath.iter() {
-            let mut path = path.join(class_name.as_str());
-            path.set_extension("som");
-
-            // Read file contents.
-            let contents = match fs::read_to_string(path.as_path()) {
-                Ok(contents) => contents,
-                Err(_) => continue,
-            };
-
-            // Collect all tokens from the file.
-            let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
-                .skip_comments(true)
-                .skip_whitespace(true)
-                .collect();
-
-            // Parse class definition from the tokens.
-            let defn = match som_parser::parse_file(tokens.as_slice()) {
-                Some(defn) => defn,
-                None => continue,
-            };
-
-            if defn.name != class_name {
-                return Err(anyhow!(
-                    "{}: class name is different from file name.",
-                    path.display(),
-                ));
-            }
-
-            let super_class = if let Some(ref super_class) = defn.super_class {
-                match self.lookup_global(super_class) {
-                    Some(Value::Class(super_class)) => super_class,
-                    _ => self.load_class(super_class)?,
-                }
-            } else {
-                self.core.object_class.clone()
-            };
-
-            let class = Class::from_class_def(defn).map_err(Error::msg)?;
-            set_super_class(&class, &super_class, &self.core.metaclass_class);
-
-            fn has_duplicated_field(class: &SOMRef<Class>) -> Option<(String, (String, String))> {
-                let super_class_iterator = std::iter::successors(Some(class.clone()), |class| {
-                    class.borrow().super_class()
-                });
-                let mut map = HashMap::<String, String>::new();
-                for class in super_class_iterator {
-                    let class_name = class.borrow().name().to_string();
-                    for (field, _) in class.borrow().locals.iter() {
-                        let field_name = field.clone();
-                        match map.entry(field_name.clone()) {
-                            Entry::Occupied(entry) => {
-                                return Some((field_name, (class_name, entry.get().clone())))
-                            }
-                            Entry::Vacant(v) => {
-                                v.insert(class_name.clone());
-                            }
-                        }
-                    }
-                }
-                return None;
-            }
-
-            if let Some((field, (c1, c2))) = has_duplicated_field(&class) {
-                return Err(anyhow!(
-                    "the field named '{}' is defined more than once (by '{}' and '{}', where the latter inherits from the former)",
-                    field, c1, c2,
-                ));
-            }
-
-            if let Some((field, (c1, c2))) = has_duplicated_field(&class.borrow().class()) {
-                return Err(anyhow!(
-                    "the field named '{}' is defined more than once (by '{}' and '{}', where the latter inherits from the former)",
-                    field, c1, c2,
-                ));
-            }
-
-            self.globals.insert(
-                class.borrow().name().to_string(),
-                Value::Class(class.clone()),
-            );
-
-            return Ok(class);
-        }
-
-        Err(anyhow!("could not find the '{}' class", class_name))
-    }
-
-    /// Load a class from its path into this universe.
-    pub fn load_class_from_path(&mut self, path: impl AsRef<Path>) -> Result<SOMRef<Class>, Error> {
-        let path = path.as_ref();
-        let file_stem = path
-            .file_stem()
-            .ok_or_else(|| anyhow!("The given path has no file stem"))?;
-
-        // Read file contents.
-        let contents = match fs::read_to_string(path) {
-            Ok(contents) => contents,
-            Err(err) => return Err(Error::from(err)),
-        };
-
-        // Collect all tokens from the file.
-        let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str())
-            .skip_comments(true)
-            .skip_whitespace(true)
-            .collect();
-
-        // Parse class definition from the tokens.
-        let defn = match som_parser::parse_file(tokens.as_slice()) {
-            Some(defn) => defn,
-            None => return Err(Error::msg("could not parse file")),
-        };
-
-        if defn.name.as_str() != file_stem {
-            return Err(anyhow!(
-                "{}: class name is different from file name.",
-                path.display(),
-            ));
-        }
-
-        let super_class = if let Some(ref super_class) = defn.super_class {
-            match self.lookup_global(super_class) {
-                Some(Value::Class(class)) => class,
-                _ => self.load_class(super_class)?,
-            }
-        } else {
-            self.core.object_class.clone()
-        };
-
-        let class = Class::from_class_def(defn).map_err(Error::msg)?;
-        set_super_class(&class, &super_class, &self.core.metaclass_class);
-
-        Ok(class)
+    /// Get the **Object** class.
+    pub fn object_class(&self) -> SOMRef<Class> {
+        self.core.object_class.clone()
     }
 
     /// Get the **Nil** class.
@@ -465,10 +441,18 @@ impl Universe {
     }
 }
 
-impl Universe {
+impl UniverseAST {
     /// Execute a piece of code within a new stack frame.
-    pub fn with_frame<T>(&mut self, kind: FrameKind, func: impl FnOnce(&mut Self) -> T) -> T {
-        let frame = Rc::new(RefCell::new(Frame::from_kind(kind)));
+    // pub fn with_frame<T>(&mut self, kind: FrameKind, self_value: Value, nbr_locals: usize, func: impl FnOnce(&mut Self) -> T) -> T {
+    //     let frame = Rc::new(RefCell::new(Frame::from_kind(kind, nbr_locals, self_value)));
+    //     self.frames.push(frame);
+    //     let ret = func(self);
+    //     self.frames.pop();
+    //     ret
+    // }
+
+    pub fn with_frame<T>(&mut self, nbr_locals: usize, args: Vec<Value>, func: impl FnOnce(&mut Self) -> T) -> T {
+        let frame = Rc::new(RefCell::new(Frame::new_frame(nbr_locals, args)));
         self.frames.push(frame);
         let ret = func(self);
         self.frames.pop();
@@ -496,16 +480,22 @@ impl Universe {
     }
 
     /// Search for a local binding.
-    pub fn lookup_local(&self, name: impl AsRef<str>) -> Option<Value> {
-        let name = name.as_ref();
-        match name {
-            "self" | "super" => {
-                let frame = self.current_frame();
-                let self_value = frame.borrow().get_self();
-                Some(self_value)
-            }
-            name => self.current_frame().borrow().lookup_local(name),
-        }
+    pub fn lookup_local(&self, idx: usize) -> Value {
+        self.current_frame().borrow().lookup_local(idx)
+    }
+
+    /// Look up a variable we know to have been defined in another scope.
+    pub fn lookup_non_local(&self, idx: usize, target_scope: usize) -> Value {
+        self.current_frame().borrow().lookup_non_local(idx, target_scope)
+    }
+
+    /// Look up a field.
+    pub fn lookup_field(&self, idx: usize) -> Value {
+        self.current_frame().borrow().lookup_field(idx)
+    }
+
+    pub fn lookup_arg(&self, idx: usize, scope: usize) -> Value {
+        self.current_frame().borrow().lookup_arg(idx, scope)
     }
 
     /// Returns whether a global binding of the specified name exists.
@@ -521,19 +511,31 @@ impl Universe {
     }
 
     /// Assign a value to a local binding.
-    pub fn assign_local(&mut self, name: impl AsRef<str>, value: Value) -> Option<()> {
-        self.current_frame().borrow_mut().assign_local(name, value)
+    pub fn assign_local(&mut self, idx: usize, value: &Value) {
+        self.current_frame().borrow_mut().assign_local(idx, value)
+    }
+
+    pub fn assign_non_local(&mut self, idx: usize, scope: usize, value: &Value) {
+        self.current_frame().borrow_mut().assign_non_local(idx, scope, value)
+    }
+
+    pub fn assign_field(&mut self, idx: usize, value: &Value) {
+        self.current_frame().borrow_mut().assign_field(idx, value)
+    }
+
+    pub fn assign_arg(&mut self, idx: usize, scope: usize, value: &Value) {
+        self.current_frame().borrow_mut().assign_arg(idx, scope, value)
     }
 
     /// Assign a value to a global binding.
-    pub fn assign_global(&mut self, name: impl AsRef<str>, value: Value) -> Option<()> {
+    pub fn assign_global(&mut self, name: impl AsRef<str>, value: &Value) -> Option<()> {
         self.globals
-            .insert(name.as_ref().to_string(), value)
+            .insert(name.as_ref().to_string(), value.clone())
             .map(|_| ())
     }
 }
 
-impl Universe {
+impl UniverseAST {
     /// Call `escapedBlock:` on the given value, if it is defined.
     pub fn escaped_block(&mut self, value: Value, block: Rc<Block>) -> Option<Return> {
         let initialize = value.lookup_method(self, "escapedBlock:")?;
@@ -552,6 +554,8 @@ impl Universe {
         let sym = self.intern_symbol(symbol.as_ref());
         let sym = Value::Symbol(sym);
         let args = Value::Array(Rc::new(RefCell::new(args)));
+
+       // eprintln!("Couldn't invoke {}; exiting.", symbol.as_ref()); std::process::exit(1);
 
         Some(initialize.invoke(self, vec![value, sym, args]))
     }
@@ -588,6 +592,7 @@ fn set_super_class(
     metaclass_class: &SOMRef<Class>,
 ) {
     class.borrow_mut().set_super_class(super_class);
+
     class
         .borrow()
         .class()

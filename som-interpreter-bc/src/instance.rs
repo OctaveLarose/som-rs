@@ -43,14 +43,18 @@ impl Instance {
     }
 
     /// Search for a local binding.
-    pub fn lookup_local(&self, idx: usize) -> Option<Value> {
-        self.locals.get(idx).cloned()
+    pub fn lookup_local(&self, idx: usize) -> Value {
+        unsafe { self.locals.get_unchecked(idx).clone() }
     }
 
     /// Assign a value to a local binding.
-    pub fn assign_local(&mut self, idx: usize, value: Value) -> Option<()> {
-        *self.locals.get_mut(idx)? = value;
-        Some(())
+    pub fn assign_local(&mut self, idx: usize, value: Value) {
+        unsafe { *self.locals.get_unchecked_mut(idx) = value; }
+    }
+    
+    /// Checks whether there exists a local binding of a given index.
+    pub fn has_local(&self, idx: usize) -> bool {
+        idx < self.locals.len()
     }
 }
 

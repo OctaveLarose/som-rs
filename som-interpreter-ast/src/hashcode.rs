@@ -66,7 +66,7 @@ impl Hash for Value {
             Value::Invokable(value) => {
                 hasher.write(b"#mthd#");
                 value.hash(hasher);
-            }
+            },
         }
     }
 }
@@ -74,20 +74,14 @@ impl Hash for Value {
 impl Hash for Class {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         self.name.hash(hasher);
-        self.locals.iter().for_each(|(key, value)| {
-            key.hash(hasher);
-            value.hash(hasher);
-        });
+        self.locals.hash(hasher)
     }
 }
 
 impl Hash for Instance {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         self.class.borrow().hash(hasher);
-        self.locals.iter().for_each(|(key, value)| {
-            key.hash(hasher);
-            value.hash(hasher);
-        });
+        self.locals.hash(hasher)
     }
 }
 

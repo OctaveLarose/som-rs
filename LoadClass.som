@@ -1,0 +1,97 @@
+LoadClass = Benchmark (
+
+tests = ( "Now ordered by alphabetical order to improve maintainability"
+        ^ #EmptyTest,
+          #SpecialSelectorsTest,
+          #SpecialSelectors2Test,
+          #SpecialSelectors3Test,
+          #SpecialSelectors4Test,
+          #SpecialSelectors5Test,
+          #ArrayTest,
+          #Array2Test,
+          #Array3Test,
+          #Array4Test,
+          #Array5Test,
+          #BlockTest,
+          #Block2Test,
+          #Block3Test,
+          #Block4Test,
+          #Block5Test,
+          #BooleanTest,
+          #Boolean2Test,
+          #Boolean3Test,
+          #Boolean4Test,
+          #Boolean5Test,
+          #ClassLoadingTest,
+          #ClassLoading2Test,
+          #ClassLoading3Test,
+          #ClassLoading4Test,
+          #ClassLoading5Test,
+          #ClosureTest,
+          #Closure2Test,
+          #Closure3Test,
+          #Closure4Test,
+          #Closure5Test,
+          #CoercionTest,
+          #Coercion2Test,
+          #Coercion3Test,
+          #Coercion4Test,
+          #Coercion5Test,
+          #CompilerReturnTest,
+          #CompilerReturn2Test,
+          #CompilerReturn3Test,
+          #CompilerReturn4Test,
+          #CompilerReturn5Test,
+          #DictionaryTest,
+          #Dictionary2Test,
+          #Dictionary3Test,
+          #Dictionary4Test,
+          #Dictionary5Test,
+          #DoesNotUnderstandTest,
+          #DoesNotUnderstand2Test,
+          #DoesNotUnderstand3Test,
+          #DoesNotUnderstand4Test,
+          #DoesNotUnderstand5Test,
+          #PreliminaryTest,
+          #Preliminary2Test,
+          #Preliminary3Test,
+          #Preliminary4Test,
+          #Preliminary5Test,
+          #SelfBlockTest,
+          #SelfBlock2Test,
+          #SelfBlock3Test,
+          #SelfBlock4Test,
+          #SelfBlock5Test,
+          #SuperTest,
+          #Super2Test,
+          #Super3Test,
+          #Super4Test,
+          #Super5Test,
+          #SystemTest,
+          #System2Test,
+          #System3Test,
+          #System4Test,
+          #System5Test,
+          #VectorTest,
+          #Vector2Test,
+          #Vector3Test,
+          #Vector4Test,
+          #Vector5Test
+    )
+
+    benchmark = (
+        ^ self loadALot
+    )
+
+    loadALot = (
+        | cls |
+        self tests do: [ :test |
+            cls := system load: test.
+        ].
+        ^ 42
+    )
+
+    verifyResult: result = (
+      ^ self assert: 42 equals: result
+    )
+)

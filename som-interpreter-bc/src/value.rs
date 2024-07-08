@@ -8,7 +8,7 @@ use crate::class::Class;
 use crate::instance::Instance;
 use crate::interner::Interned;
 use crate::method::Method;
-use crate::universe::Universe;
+use crate::universe::UniverseBC;
 use crate::SOMRef;
 
 /// Represents an SOM value.
@@ -44,7 +44,7 @@ pub enum Value {
 
 impl Value {
     /// Get the class of the current value.
-    pub fn class(&self, universe: &Universe) -> SOMRef<Class> {
+    pub fn class(&self, universe: &UniverseBC) -> SOMRef<Class> {
         match self {
             Self::Nil => universe.nil_class(),
             Self::System => universe.system_class(),
@@ -64,30 +64,41 @@ impl Value {
     }
 
     /// Search for a given method for this value.
-    pub fn lookup_method(&self, universe: &Universe, signature: Interned) -> Option<Rc<Method>> {
+    pub fn lookup_method(&self, universe: &UniverseBC, signature: Interned) -> Option<Rc<Method>> {
         self.class(universe).borrow().lookup_method(signature)
     }
 
     /// Search for a local binding within this value.
-    pub fn lookup_local(&self, idx: usize) -> Option<Self> {
+    pub fn lookup_local(&self, idx: usize) -> Self {
         match self {
             Self::Instance(instance) => instance.borrow().lookup_local(idx),
             Self::Class(class) => class.borrow().lookup_local(idx),
-            _ => None,
+            v => unreachable!("Attempting to look up a local in {:?}", v),
         }
     }
 
     /// Assign a value to a local binding within this value.
-    pub fn assign_local(&mut self, idx: usize, value: Self) -> Option<()> {
+    pub fn assign_local(&mut self, idx: usize, value: Self) {
         match self {
             Self::Instance(instance) => instance.borrow_mut().assign_local(idx, value),
             Self::Class(class) => class.borrow_mut().assign_local(idx, value),
-            _ => None,
+            v => unreachable!("Attempting to assign a local in {:?}", v),
+        }
+    }
+    
+    /// Checks if a value has a local variable (field) at the given index. Used by the instVarAt and instVarAtPut primitives.
+    /// Basically, we want normal field lookups/assignments to not be able to fail (through unsafe) to be fast, since we know the bytecode we emitted that needs them is sound.
+    /// But those prims are free to be used and abused by devs, so they CAN fail, and we need to check that they won't fail before we invoke them. Hence this `has_local`.
+    pub fn has_local(&self, index: usize) -> bool {
+        match self {
+            Self::Instance(instance) => instance.borrow().has_local(index),
+            Self::Class(class) => class.borrow().has_local(index),
+            _ => false,
         }
     }
 
     /// Get the string representation of this value.
-    pub fn to_string(&self, universe: &Universe) -> String {
+    pub fn to_string(&self, universe: &UniverseBC) -> String {
         match self {
             Self::Nil => "nil".to_string(),
             Self::System => "system".to_string(),
