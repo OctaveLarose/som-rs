@@ -34,7 +34,13 @@ impl AstMethodCompiler {
             Expression::NonLocalVarWrite(a, b, c) => AstExpression::NonLocalVarWrite(a, b, Box::new(self.parse_expression(c.as_ref()))),
             Expression::ArgWrite(a, b, c) => AstExpression::ArgWrite(a, b, Box::new(self.parse_expression(c.as_ref()))),
             Expression::FieldWrite(a, b) => AstExpression::FieldWrite(a, Box::new(self.parse_expression(b.as_ref()))),
-            Expression::Message(a) => AstExpression::Message(Box::new(self.parse_message(a.as_ref()))),
+            Expression::Message(msg) => {
+                let maybe_inlined = msg.inline_if_possible(42);
+                match maybe_inlined {
+                    None => AstExpression::Message(Box::new(self.parse_message(msg.as_ref()))),
+                    Some(v) => AstExpression::InlinedCall(Box::new(v))
+                }
+            }
             Expression::SuperMessage(a) => AstExpression::SuperMessage(Box::new(self.parse_super_message(a.as_ref()))),
             Expression::BinaryOp(a) => AstExpression::BinaryOp(Box::new(self.parse_binary_op(a.as_ref()))),
             Expression::Exit(a, b) => AstExpression::Exit(Box::new(self.parse_expression(a.as_ref())), b),
@@ -66,10 +72,6 @@ impl AstMethodCompiler {
     }
 
     pub fn parse_message(&self, msg: &ast::Message) -> AstMessage {
-        if msg.inline_if_possible(42).is_some() {
-            todo!()
-        }
-
         AstMessage {
             receiver: self.parse_expression(&msg.receiver),
             signature: msg.signature.clone(),

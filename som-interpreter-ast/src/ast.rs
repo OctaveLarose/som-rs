@@ -1,4 +1,11 @@
 use std::rc::Rc;
+use crate::specialized::if_inlined_node::IfInlinedNode;
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum InlinedNode {
+    IfInlined(IfInlinedNode)
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstBody {
@@ -23,6 +30,8 @@ pub enum AstExpression {
     Exit(Box<AstExpression>, usize),
     Literal(som_core::ast::Literal),
     Block(Rc<AstBlock>),
+    /// Call to an inlined method node (no dispatching like a message would)
+    InlinedCall(Box<InlinedNode>)
 }
 
 #[derive(Debug, Clone, PartialEq)]
