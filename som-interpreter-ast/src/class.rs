@@ -10,7 +10,7 @@ use crate::method::{Method, MethodKind};
 use crate::primitives;
 use crate::value::Value;
 use crate::{SOMRef, SOMWeakRef};
-use crate::ast::AstMethodDef;
+use crate::compiler::AstMethodCompiler;
 use crate::specialized::down_to_do_node::DownToDoNode;
 use crate::specialized::if_node::IfNode;
 use crate::specialized::if_true_if_false_node::IfTrueIfFalseNode;
@@ -103,7 +103,7 @@ impl Class {
                 let signature = method.signature.clone();
                 let kind = match method.body {
                     MethodBody::Primitive => MethodKind::NotImplemented(signature.clone()),
-                    MethodBody::Body { .. } => MethodKind::Defined(AstMethodDef::from_parser_ast(method)),
+                    MethodBody::Body { .. } => MethodKind::Defined(AstMethodCompiler::parse_method_def(method)),
                 };
                 let method = Method {
                     kind,
@@ -149,7 +149,7 @@ impl Class {
                     _ => {
                         match method.body {
                             MethodBody::Primitive => MethodKind::NotImplemented(signature.clone()),
-                            MethodBody::Body { .. } => MethodKind::Defined(AstMethodDef::from_parser_ast(method))
+                            MethodBody::Body { .. } => MethodKind::Defined(AstMethodCompiler::parse_method_def(method))
                         }
                     }
                 };

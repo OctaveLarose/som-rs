@@ -14,8 +14,12 @@ macro_rules! propagate {
     };
 }
 
-/// TODO doc
+/// AST specific to the AST interpreter
 pub mod ast;
+/// Generates the AST
+mod compiler;
+/// Inlining specific messages, such as control flow.
+pub mod inliner;
 
 /// Facilities for manipulating blocks.
 pub mod block;
@@ -44,9 +48,6 @@ pub mod value;
 
 /// Specialized AST nodes
 pub mod specialized;
-
-/// Inlining specific messages, such as control flow.
-pub mod inliner;
 
 /// A strong and owning reference to an object.
 pub type SOMRef<T> = Rc<RefCell<T>>;
