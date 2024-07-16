@@ -45,6 +45,9 @@ pub mod value;
 /// Specialized AST nodes
 pub mod specialized;
 
+/// Inlining specific messages, such as control flow.
+pub mod inliner;
+
 /// A strong and owning reference to an object.
 pub type SOMRef<T> = Rc<RefCell<T>>;
 /// A weak reference to an object.

@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use som_core::ast;
 use som_core::ast::{Expression, MethodBody};
+use crate::inliner::PrimMessageInliner;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExprRef(u32);
@@ -16,7 +17,7 @@ pub struct AstBody {
 impl AstBody {
     pub fn from_parser_ast(method_body: &ast::Body) -> AstBody {
         AstBody {
-            exprs: method_body.exprs.iter().map(|e| AstExpression::from_parser_ast(e)).collect()
+            exprs: method_body.exprs.iter().map(AstExpression::from_parser_ast).collect()
         }
     }
 }
@@ -124,6 +125,10 @@ pub struct AstSuperMessage {
 
 impl AstMessage {
     pub fn from_parser_ast(method_body: &ast::Message) -> AstMessage {
+        if method_body.inline_if_possible(42).is_some() {
+            todo!()
+        }
+        
         AstMessage {
             receiver: AstExpression::from_parser_ast(&method_body.receiver),
             signature: method_body.signature.clone(),
@@ -156,7 +161,7 @@ impl AstMethodBody {
     pub fn from_parser_ast(method_body: &ast::MethodBody) -> AstMethodBody {
         match method_body {
             MethodBody::Primitive => {AstMethodBody::Primitive}
-            MethodBody::Body { locals_nbr, body} => {
+            MethodBody::Body { locals_nbr, body, ..} => {
                 AstMethodBody::Body { locals_nbr: *locals_nbr, body: AstBody::from_parser_ast(body) }
             }
         }
