@@ -10,6 +10,7 @@ use crate::inliner::PrimMessageInliner;
 pub struct AstMethodCompilerCtxt {
     nbr_args: usize,
     nbr_locals: usize,
+    pub inlining_level: usize // todo getter/setter
 }
 
 impl AstMethodCompilerCtxt {

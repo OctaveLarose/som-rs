@@ -1,7 +1,8 @@
+use std::rc::Rc;
 use som_core::ast;
 use som_core::ast::{Block, Expression};
 
-use crate::ast::{AstBody, AstExpression, InlinedNode};
+use crate::ast::{AstBlock, AstBody, AstExpression, InlinedNode};
 use crate::compiler::AstMethodCompilerCtxt;
 use crate::specialized::if_inlined_node::IfInlinedNode;
 
@@ -9,6 +10,7 @@ pub trait PrimMessageInliner {
     fn inline_if_possible(&self, ctxt: &mut AstMethodCompilerCtxt) -> Option<InlinedNode>;
     fn inline_expression(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Expression) -> Option<AstBody>;
     fn inline_block(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Block) -> Option<AstBody>;
+    fn adapt_block_after_outer_inlined(&self, ctxt: &mut AstMethodCompilerCtxt, blk: &Rc<Block>) -> Option<AstBlock>;
     fn inline_if_true_or_if_false(&self, ctxt: &mut AstMethodCompilerCtxt, jump_type: bool) -> Option<InlinedNode>;
 }
 
@@ -27,7 +29,20 @@ impl PrimMessageInliner for ast::Message {
         let nbr_of_args_pre_inlining = ctxt.get_nbr_args();
         
         let expr = match expression {
-            Expression::Block(blk) => self.inline_block(ctxt, blk), // main one 99% of the time. we inline blocks. todo or do we adapt them?
+            Expression::Block(blk) => {
+                match ctxt.inlining_level {
+                    0 => {
+                        ctxt.inlining_level += 1;
+                        let inlined_blk = self.inline_block(ctxt, blk);
+                        ctxt.inlining_level -= 1;
+                        inlined_blk
+                    },
+                    _ => {
+                        let new_blk = self.adapt_block_after_outer_inlined(ctxt, blk)?;
+                        Some(AstBody { exprs: vec![AstExpression::Block(Rc::new(new_blk))] })
+                    }
+                }
+            }
             _ => {
                 let expr = match expression {
                     Expression::LocalVarRead(idx) => AstExpression::LocalVarRead(idx + nbr_of_locals_pre_inlining),
@@ -83,13 +98,20 @@ impl PrimMessageInliner for ast::Message {
         ctxt.add_nbr_args(blk.nbr_params);
         ctxt.add_nbr_locals(blk.nbr_locals);
         
-        todo!("no block inlining yet - it's repeatedly inlining expressions, though. plus adapting inner blocks, so we might need to keep track of some inlining context level.")
+        let all_exprs_unflattened: Vec<AstBody> = blk.body.exprs.iter().filter_map(|e| self.inline_expression(ctxt, e)).collect();
+        
+        let mut all_exprs = vec![];
+        for a in all_exprs_unflattened {
+            all_exprs.extend(a.exprs)
+        }
+        
+        Some(AstBody { exprs: all_exprs })
+    }
+    fn adapt_block_after_outer_inlined(&self, ctxt: &mut AstMethodCompilerCtxt, blk: &Rc<Block>) -> Option<AstBlock> {
+        todo!()
     }
 
     fn inline_if_true_or_if_false(&self, ctxt: &mut AstMethodCompilerCtxt, expected_bool: bool) -> Option<InlinedNode> {
-        // dbg!(&self.receiver);
-        // dbg!(&self.values);
-
         let cond_instrs = self.inline_expression(ctxt, &self.receiver)?;
         let body_instrs = self.inline_expression(ctxt, self.values.first()?)?;
 
