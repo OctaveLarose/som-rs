@@ -8,15 +8,15 @@ use crate::value::Value::Nil;
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfInlinedNode {
     pub(crate) expected_bool: bool,
-    pub(crate) cond: AstBody,
-    pub(crate) body: AstBody
+    pub(crate) cond_instrs: AstBody,
+    pub(crate) body_instrs: AstBody
 }
 
 impl Evaluate for IfInlinedNode {
     fn evaluate(&self, universe: &mut UniverseAST) -> Return {
-        let cond_result = propagate!(self.cond.evaluate(universe));
+        let cond_result = propagate!(self.cond_instrs.evaluate(universe));
         if cond_result == Value::Boolean(self.expected_bool) {
-            self.body.evaluate(universe)
+            self.body_instrs.evaluate(universe)
         } else {
             Return::Local(Nil)
         } 

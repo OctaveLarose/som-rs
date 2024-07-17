@@ -32,6 +32,7 @@ pub enum AstExpression {
     Block(Rc<AstBlock>),
     /// Call to an inlined method node (no dispatching like a message would)
     InlinedCall(Box<InlinedNode>)
+    // todo we might want a SEQUENCENODE of some kind. instead of relying on AstBody at all, actually.
 }
 
 #[derive(Debug, Clone, PartialEq)]
