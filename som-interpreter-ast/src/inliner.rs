@@ -17,7 +17,7 @@ pub trait PrimMessageInliner {
 impl PrimMessageInliner for ast::Message {
     fn inline_if_possible(&self, ctxt: &mut AstMethodCompilerCtxt) -> Option<InlinedNode> {
         match self.signature.as_str() {
-            "ifTrue:" => self.inline_if_true_or_if_false(ctxt, true),
+            // "ifTrue:" => self.inline_if_true_or_if_false(ctxt, true),
             "ifFalse:" => self.inline_if_true_or_if_false(ctxt, false),
             _ => None,
         }
@@ -82,7 +82,7 @@ impl PrimMessageInliner for ast::Message {
                     Expression::Message(msg) => ctxt.parse_message_maybe_inline(msg), // todo - can this recursive inlining cause issues? I assume it's fine?
                     Expression::SuperMessage(super_msg) => AstExpression::SuperMessage(Box::new(ctxt.parse_super_message(super_msg))),
                     Expression::BinaryOp(bin_op) => AstExpression::BinaryOp(Box::new(ctxt.parse_binary_op(bin_op))),
-                    Expression::Exit(expr, scope) => AstExpression::Exit(Box::new(ctxt.parse_expression(expr)), scope - 1),
+                    Expression::Exit(expr, scope) => AstExpression::Exit(Box::new(ctxt.parse_expression(expr)), scope - 1), // todo incorrect: the expression should get inlined also.
                     Expression::Literal(lit) => AstExpression::Literal(lit.clone()),
                     Expression::Block(_) => unreachable!()
                 };

@@ -7,9 +7,9 @@ use crate::value::Value::Nil;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfInlinedNode {
-    pub(crate) expected_bool: bool,
-    pub(crate) cond_instrs: AstBody,
-    pub(crate) body_instrs: AstBody
+    pub expected_bool: bool,
+    pub cond_instrs: AstBody,
+    pub body_instrs: AstBody
 }
 
 impl Evaluate for IfInlinedNode {

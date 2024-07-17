@@ -17,7 +17,7 @@ macro_rules! propagate {
 /// AST specific to the AST interpreter
 pub mod ast;
 /// Generates the AST
-mod compiler;
+pub mod compiler;
 /// Inlining specific messages, such as control flow.
 pub mod inliner;
 

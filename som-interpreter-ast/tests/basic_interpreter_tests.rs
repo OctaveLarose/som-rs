@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use som_interpreter_ast::ast::AstExpression;
+use som_interpreter_ast::compiler::AstMethodCompilerCtxt;
 
 use som_interpreter_ast::evaluate::Evaluate;
 use som_interpreter_ast::invokable::Return;
@@ -167,7 +168,8 @@ fn basic_interpreter_tests() {
         );
 
         let ast_parser = som_parser::apply(lang::expression(), tokens.as_slice(), None).unwrap();
-        let ast = AstExpression::from_parser_ast(&ast_parser);
+        let mut compiler = AstMethodCompilerCtxt::default();
+        let ast = AstMethodCompilerCtxt::parse_expression(&mut compiler, &ast_parser);
         
         // let signature = universe.intern_symbol(expr.split(' ').skip(1).next().unwrap_or("unknown"));
 
