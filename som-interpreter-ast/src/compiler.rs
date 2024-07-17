@@ -94,7 +94,7 @@ impl AstMethodCompilerCtxt {
     pub fn parse_message_maybe_inline(&mut self, msg: &ast::Message) -> AstExpression {
         let maybe_inlined = msg.inline_if_possible(self);
         if let Some(inlined_node) = maybe_inlined {
-            dbg!(&inlined_node);
+            // dbg!(&inlined_node);
             return AstExpression::InlinedCall(Box::new(inlined_node));
         }
 
