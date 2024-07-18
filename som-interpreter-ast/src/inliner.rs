@@ -3,7 +3,7 @@ use std::rc::Rc;
 use som_core::ast;
 use som_core::ast::{Block, Expression};
 
-use crate::ast::{AstBinaryOp, AstBlock, AstBody, AstExpression, InlinedNode};
+use crate::ast::{AstBinaryOp, AstBlock, AstBody, AstExpression, AstMessage, AstSuperMessage, InlinedNode};
 use crate::compiler::AstMethodCompilerCtxt;
 use crate::specialized::if_inlined_node::IfInlinedNode;
 
@@ -13,6 +13,7 @@ pub trait PrimMessageInliner {
     fn parse_expr_in_prev_scope(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Expression) -> Option<AstExpression>;
     fn inline_block(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Block) -> Option<AstBody>;
     fn adapt_block_after_outer_inlined(&self, ctxt: &mut AstMethodCompilerCtxt, blk: &Rc<Block>, adjust_scope_by: usize) -> Option<AstBlock>;
+    fn adapt_block_expression_after_outer_inlined(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Expression, adjust_scope_by: usize) -> Option<AstExpression>;
     fn inline_if_true_or_if_false(&self, ctxt: &mut AstMethodCompilerCtxt, jump_type: bool) -> Option<InlinedNode>;
 }
 
@@ -73,10 +74,28 @@ impl PrimMessageInliner for ast::Message {
                 }
             }
             Expression::GlobalRead(a) => AstExpression::GlobalRead(a.clone()),
-            Expression::FieldRead(idx) => AstExpression::FieldRead(idx - 1),
-            Expression::FieldWrite(idx, expr) => AstExpression::FieldWrite(idx - 1, Box::new(ctxt.parse_expression(expr))),
-            Expression::Message(msg) => ctxt.parse_message_maybe_inline(msg), // todo - can this recursive inlining cause issues? I assume it's fine?
-            Expression::SuperMessage(super_msg) => AstExpression::SuperMessage(Box::new(ctxt.parse_super_message(super_msg))),
+            Expression::FieldRead(idx) => AstExpression::FieldRead(*idx),
+            Expression::FieldWrite(idx, expr) => AstExpression::FieldWrite(idx - 1, Box::new(self.parse_expr_in_prev_scope(ctxt, expr).unwrap())),
+            Expression::Message(msg) => {
+                // todo maybe enable this code bit. not sure if can cause issues
+                // if let Some(inlined_node) = self.inline_if_possible(ctxt) {
+                //     return AstExpression::InlinedCall(Box::new(inlined_node));
+                // }
+
+                AstExpression::Message(Box::new(AstMessage {
+                    receiver: self.parse_expr_in_prev_scope(ctxt, &msg.receiver).unwrap(),
+                    signature: msg.signature.clone(),
+                    values: msg.values.iter().filter_map(|e| self.parse_expr_in_prev_scope(ctxt, e)).collect(),
+                }))
+            }
+            Expression::SuperMessage(super_msg) => {
+                AstExpression::SuperMessage(Box::new(AstSuperMessage {
+                    receiver_name: super_msg.receiver_name.clone(),
+                    is_static_class_call: super_msg.is_static_class_call,
+                    signature: super_msg.signature.clone(),
+                    values: super_msg.values.iter().filter_map(|e| self.parse_expr_in_prev_scope(ctxt, e)).collect(),
+                }))
+            },
             Expression::BinaryOp(bin_op) => {
                 AstExpression::BinaryOp(Box::new(AstBinaryOp {
                     op: bin_op.op.clone(),
@@ -102,49 +121,8 @@ impl PrimMessageInliner for ast::Message {
     }
 
     fn adapt_block_after_outer_inlined(&self, ctxt: &mut AstMethodCompilerCtxt, blk: &Rc<Block>, adjust_scope_by: usize) -> Option<AstBlock> {
-        let exprs: Vec<AstExpression> = blk.body.exprs.iter().map(|og_expr| {
-            match og_expr {
-                Expression::NonLocalVarRead(up_idx, _) | Expression::NonLocalVarWrite(up_idx, _, _)
-                | Expression::ArgRead(up_idx, _) | Expression::ArgWrite(up_idx, _, _) => {
-                    let new_up_idx = match *up_idx {
-                        0 => 0, // local var/arg, not affected by inlining, stays the same
-                        d if d > adjust_scope_by => *up_idx - 1,
-                        _ => *up_idx,
-                    };
-
-                    // todo ACTUALLY shouldn't the idx be adjusted depending on the amount of inlined variables in the block? make a test for that! and for the args case too!
-
-                    match og_expr {
-                        Expression::NonLocalVarRead(_, idx) => {
-                            match new_up_idx {
-                                0 => AstExpression::LocalVarRead(*idx),
-                                _ => AstExpression::NonLocalVarRead(new_up_idx, *idx),
-                            }
-                        }
-                        Expression::NonLocalVarWrite(_, idx, expr) => {
-                            let new_expr = Box::new(AstMethodCompilerCtxt::parse_expression(ctxt, expr));
-                            match new_up_idx {
-                                0 => AstExpression::LocalVarWrite(*idx, new_expr),
-                                _ => AstExpression::NonLocalVarWrite(new_up_idx, *idx, new_expr),
-                            }
-                        }
-                        Expression::ArgRead(_, idx) => { AstExpression::ArgRead(new_up_idx, *idx) }
-                        Expression::ArgWrite(_, idx, expr) => {
-                            let new_expr = Box::new(AstMethodCompilerCtxt::parse_expression(ctxt, expr));
-                            AstExpression::ArgWrite(new_up_idx, *idx, new_expr)
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-                Expression::Exit(expr, scope) => {
-                    AstExpression::Exit(Box::new(AstMethodCompilerCtxt::parse_expression(ctxt, expr)), scope - 1)
-                }
-                Expression::Block(blk) => {
-                    let new_block = self.adapt_block_after_outer_inlined(ctxt, blk, adjust_scope_by).unwrap();
-                    AstExpression::Block(Rc::new(new_block))
-                }
-                e => AstMethodCompilerCtxt::parse_expression(ctxt, e),
-            }
+        let exprs: Vec<AstExpression> = blk.body.exprs.iter().filter_map(|og_expr| {
+            self.adapt_block_expression_after_outer_inlined(ctxt, og_expr, adjust_scope_by)
         }).collect();
 
         Some(AstBlock {
@@ -154,13 +132,83 @@ impl PrimMessageInliner for ast::Message {
         })
     }
 
+    fn adapt_block_expression_after_outer_inlined(&self, ctxt: &mut AstMethodCompilerCtxt, og_expr: &Expression, adjust_scope_by: usize) -> Option<AstExpression> {
+        let new_expr = match og_expr {
+            Expression::NonLocalVarRead(up_idx, _) | Expression::NonLocalVarWrite(up_idx, _, _)
+            | Expression::ArgRead(up_idx, _) | Expression::ArgWrite(up_idx, _, _) => {
+                let new_up_idx = match *up_idx {
+                    0 => 0, // local var/arg, not affected by inlining, stays the same
+                    d if d > adjust_scope_by => *up_idx - 1,
+                    _ => *up_idx,
+                };
+
+                // todo ACTUALLY shouldn't the idx be adjusted depending on the amount of inlined variables in the block? make a test for that! and for the args case too!
+
+                match og_expr {
+                    Expression::NonLocalVarRead(_, idx) => {
+                        match new_up_idx {
+                            0 => AstExpression::LocalVarRead(*idx),
+                            _ => AstExpression::NonLocalVarRead(new_up_idx, *idx),
+                        }
+                    }
+                    Expression::NonLocalVarWrite(_, idx, expr) => {
+                        let new_expr = Box::new(AstMethodCompilerCtxt::parse_expression(ctxt, expr));
+                        match new_up_idx {
+                            0 => AstExpression::LocalVarWrite(*idx, new_expr),
+                            _ => AstExpression::NonLocalVarWrite(new_up_idx, *idx, new_expr),
+                        }
+                    }
+                    Expression::ArgRead(_, idx) => { AstExpression::ArgRead(new_up_idx, *idx) }
+                    Expression::ArgWrite(_, idx, expr) => {
+                        let new_expr = Box::new(AstMethodCompilerCtxt::parse_expression(ctxt, expr));
+                        AstExpression::ArgWrite(new_up_idx, *idx, new_expr)
+                    },
+                    _ => unreachable!(),
+                }
+            }
+            Expression::Exit(expr, scope) => {
+                AstExpression::Exit(Box::new(self.adapt_block_expression_after_outer_inlined(ctxt, expr, adjust_scope_by).unwrap()), scope - 1) // todo not necessarily scope - 1, afaik?
+            }
+            Expression::Block(blk) => {
+                let new_block = self.adapt_block_after_outer_inlined(ctxt, blk, adjust_scope_by).unwrap();
+                AstExpression::Block(Rc::new(new_block))
+            }
+            Expression::Message(msg) => {
+                AstExpression::Message(Box::new(AstMessage {
+                    receiver: self.adapt_block_expression_after_outer_inlined(ctxt, &msg.receiver, adjust_scope_by).unwrap(),
+                    signature: msg.signature.clone(),
+                    values: msg.values.iter().filter_map(|e| self.adapt_block_expression_after_outer_inlined(ctxt, e, adjust_scope_by)).collect(),
+                }))
+            }
+            Expression::SuperMessage(super_msg) => {
+                AstExpression::SuperMessage(Box::new(AstSuperMessage {
+                    receiver_name: super_msg.receiver_name.clone(),
+                    is_static_class_call: super_msg.is_static_class_call,
+                    signature: super_msg.signature.clone(),
+                    values: super_msg.values.iter().filter_map(|e| self.adapt_block_expression_after_outer_inlined(ctxt, e, adjust_scope_by)).collect(),
+                }))
+            },
+            Expression::BinaryOp(bin_op) => {
+                AstExpression::BinaryOp(Box::new(AstBinaryOp {
+                    op: bin_op.op.clone(),
+                    lhs: self.adapt_block_expression_after_outer_inlined(ctxt, &bin_op.lhs, adjust_scope_by)?,
+                    rhs: self.adapt_block_expression_after_outer_inlined(ctxt, &bin_op.rhs, adjust_scope_by)?,
+                }))
+            }
+            e => AstMethodCompilerCtxt::parse_expression(ctxt, e),
+        };
+
+        Some(new_expr)
+    }
+
     fn inline_if_true_or_if_false(&self, ctxt: &mut AstMethodCompilerCtxt, expected_bool: bool) -> Option<InlinedNode> {
         let if_inlined_node = IfInlinedNode {
             expected_bool,
-            cond_instrs: self.inline_expression(ctxt, &self.receiver)?,
+            cond_instrs: AstBody { exprs: vec![ctxt.parse_expression(&self.receiver)] },
             body_instrs: self.inline_expression(ctxt, self.values.first()?)?,
         };
 
+        // dbg!(&self);
         // dbg!(&if_inlined_node);
 
         Some(InlinedNode::IfInlined(if_inlined_node))
