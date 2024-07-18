@@ -106,10 +106,13 @@ impl PrimMessageInliner for ast::Message {
     }
 
     fn inline_block(&self, ctxt: &mut AstMethodCompilerCtxt, blk: &Block) -> Option<AstBody> {
+        let inlined_block = Some(AstBody { exprs: blk.body.exprs.iter().filter_map(|e| self.get_inline_expression(ctxt, e)).collect() });
+
+        // todo: shouldn't inner blocks should know about locals/args ahead of time though? i *think* it's fine because we make a new context from the outer block itself.
         ctxt.add_nbr_args(blk.nbr_params);
         ctxt.add_nbr_locals(blk.nbr_locals);
 
-        Some(AstBody { exprs: blk.body.exprs.iter().filter_map(|e| self.get_inline_expression(ctxt, e)).collect() })
+        inlined_block
     }
 
     fn adapt_block_after_outer_inlined(&self, _ctxt: &mut AstMethodCompilerCtxt, blk: &Rc<Block>, adjust_scope_by: usize) -> Option<AstBlock> {

@@ -40,16 +40,17 @@ impl AstMethodCompilerCtxt {
     }
     
     pub fn parse_method_def(method_def: &ast::MethodDef) -> AstMethodDef {
-        let mut compiler = AstMethodCompilerCtxt::default();
         AstMethodDef {
             signature: method_def.signature.clone(),
             body: {
                 match &method_def.body {
                     MethodBody::Primitive => { AstMethodBody::Primitive }
                     MethodBody::Body { locals_nbr, body, .. } => {
+                        let mut compiler = AstMethodCompilerCtxt::init(0, *locals_nbr); // todo nbr args shouldn't be 0 though? we can calculate it from the signature if need be.
+                        
                         AstMethodBody::Body {
-                            locals_nbr: *locals_nbr,
                             body: compiler.parse_body(body),
+                            locals_nbr: compiler.get_nbr_locals(),
                         }
                     }
                 }
