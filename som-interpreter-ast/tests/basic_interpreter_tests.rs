@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use som_interpreter_ast::ast::AstExpression;
 use som_interpreter_ast::compiler::AstMethodCompilerCtxt;
 
 use som_interpreter_ast::evaluate::Evaluate;

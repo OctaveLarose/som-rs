@@ -1,30 +1,17 @@
-use std::path::PathBuf;
-
-use som_interpreter_ast::ast::{AstBinaryOp, AstBody, AstMethodBody, AstMethodDef};
+use som_interpreter_ast::ast::{AstBinaryOp, AstBody, AstMethodBody};
 use som_interpreter_ast::ast::AstExpression::*;
 use som_interpreter_ast::ast::InlinedNode::IfInlined;
 use som_interpreter_ast::compiler::AstMethodCompilerCtxt;
 use som_interpreter_ast::specialized::if_inlined_node::IfInlinedNode;
-use som_interpreter_ast::universe::UniverseAST;
 use som_lexer::{Lexer, Token};
 use som_parser::lang;
-
-fn setup_universe() -> UniverseAST {
-    let classpath = vec![
-        PathBuf::from("../core-lib/Smalltalk"),
-    ];
-    UniverseAST::with_classpath(classpath).expect("could not setup test universe")
-}
 
 fn get_ast(class_txt: &str) -> AstMethodBody {
     let mut lexer = Lexer::new(class_txt)
         .skip_comments(true)
         .skip_whitespace(true);
     let tokens: Vec<Token> = lexer.by_ref().collect();
-    assert!(
-        lexer.text().is_empty(),
-        "could not fully tokenize test expression"
-    );
+    assert!(lexer.text().is_empty(), "could not fully tokenize test expression");
 
     let method_def = som_parser::apply(lang::instance_method_def(), tokens.as_slice(), None).unwrap();
 
