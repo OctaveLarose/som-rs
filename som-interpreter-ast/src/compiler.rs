@@ -31,6 +31,14 @@ impl AstMethodCompilerCtxt {
 }
 
 impl AstMethodCompilerCtxt {
+    pub fn init(nbr_args: usize, nbr_locals: usize) -> Self {
+        Self {
+            nbr_args,
+            nbr_locals,
+            inlining_level: 0,
+        }
+    }
+    
     pub fn parse_method_def(method_def: &ast::MethodDef) -> AstMethodDef {
         let mut compiler = AstMethodCompilerCtxt::default();
         AstMethodDef {

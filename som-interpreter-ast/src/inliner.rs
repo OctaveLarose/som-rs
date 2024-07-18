@@ -9,8 +9,7 @@ use crate::specialized::if_inlined_node::IfInlinedNode;
 
 pub trait PrimMessageInliner {
     fn inline_if_possible(&self, ctxt: &mut AstMethodCompilerCtxt) -> Option<InlinedNode>;
-    fn inline_expression(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Expression) -> Option<AstBody>;
-    fn parse_expr_in_prev_scope(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Expression) -> Option<AstExpression>;
+    fn get_inline_expression(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Expression) -> Option<AstExpression>;
     fn inline_block(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Block) -> Option<AstBody>;
     fn adapt_block_after_outer_inlined(&self, ctxt: &mut AstMethodCompilerCtxt, blk: &Rc<Block>, adjust_scope_by: usize) -> Option<AstBlock>;
     fn adapt_block_expression_after_outer_inlined(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Expression, adjust_scope_by: usize) -> Option<AstExpression>;
@@ -20,21 +19,14 @@ pub trait PrimMessageInliner {
 impl PrimMessageInliner for ast::Message {
     fn inline_if_possible(&self, ctxt: &mut AstMethodCompilerCtxt) -> Option<InlinedNode> {
         match self.signature.as_str() {
-            // "ifTrue:" => self.inline_if_true_or_if_false(ctxt, true),
+            "ifTrue:" => self.inline_if_true_or_if_false(ctxt, true),
             "ifFalse:" => self.inline_if_true_or_if_false(ctxt, false),
             _ => None,
         }
     }
 
-    fn inline_expression(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Expression) -> Option<AstBody> {
-        match expression {
-            Expression::Block(blk) => self.inline_block(ctxt, blk),
-            _ => Some(AstBody { exprs: vec![self.parse_expr_in_prev_scope(ctxt, expression)?] })
-        }
-    }
-
     #[allow(dead_code, unreachable_code, unused_variables)]
-    fn parse_expr_in_prev_scope(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Expression) -> Option<AstExpression> {
+    fn get_inline_expression(&self, ctxt: &mut AstMethodCompilerCtxt, expression: &Expression) -> Option<AstExpression> {
         let nbr_of_locals_pre_inlining = ctxt.get_nbr_locals();
         let nbr_of_args_pre_inlining = ctxt.get_nbr_args();
 
@@ -45,7 +37,7 @@ impl PrimMessageInliner for ast::Message {
             }
             Expression::LocalVarRead(idx) => AstExpression::LocalVarRead(idx + nbr_of_locals_pre_inlining),
             Expression::LocalVarWrite(idx, expr) => {
-                AstExpression::LocalVarWrite(idx + nbr_of_locals_pre_inlining, Box::new(self.parse_expr_in_prev_scope(ctxt, expr)?))
+                AstExpression::LocalVarWrite(idx + nbr_of_locals_pre_inlining, Box::new(self.get_inline_expression(ctxt, expr)?))
             }
             Expression::NonLocalVarRead(scope, idx) => {
                 match *scope - 1 {
@@ -54,7 +46,7 @@ impl PrimMessageInliner for ast::Message {
                 }
             }
             Expression::NonLocalVarWrite(scope, idx, expr) => {
-                let ast_expr = Box::new(self.parse_expr_in_prev_scope(ctxt, expr)?);
+                let ast_expr = Box::new(self.get_inline_expression(ctxt, expr)?);
                 match *scope - 1 {
                     0 => AstExpression::LocalVarWrite(*idx, ast_expr),
                     _ => AstExpression::NonLocalVarWrite(*scope - 1, *idx, ast_expr)
@@ -67,7 +59,7 @@ impl PrimMessageInliner for ast::Message {
                 }
             }
             Expression::ArgWrite(scope, idx, expr) => {
-                let ast_expr = Box::new(self.parse_expr_in_prev_scope(ctxt, expr)?);
+                let ast_expr = Box::new(self.get_inline_expression(ctxt, expr)?);
                 match *scope {
                     0 => AstExpression::ArgWrite(0, idx + nbr_of_args_pre_inlining, ast_expr),
                     _ => AstExpression::ArgWrite(*scope - 1, *idx, ast_expr)
@@ -75,7 +67,7 @@ impl PrimMessageInliner for ast::Message {
             }
             Expression::GlobalRead(a) => AstExpression::GlobalRead(a.clone()),
             Expression::FieldRead(idx) => AstExpression::FieldRead(*idx),
-            Expression::FieldWrite(idx, expr) => AstExpression::FieldWrite(idx - 1, Box::new(self.parse_expr_in_prev_scope(ctxt, expr).unwrap())),
+            Expression::FieldWrite(idx, expr) => AstExpression::FieldWrite(*idx, Box::new(self.get_inline_expression(ctxt, expr).unwrap())),
             Expression::Message(msg) => {
                 // todo maybe enable this code bit. not sure if can cause issues
                 // if let Some(inlined_node) = self.inline_if_possible(ctxt) {
@@ -83,9 +75,9 @@ impl PrimMessageInliner for ast::Message {
                 // }
 
                 AstExpression::Message(Box::new(AstMessage {
-                    receiver: self.parse_expr_in_prev_scope(ctxt, &msg.receiver).unwrap(),
+                    receiver: self.get_inline_expression(ctxt, &msg.receiver).unwrap(),
                     signature: msg.signature.clone(),
-                    values: msg.values.iter().filter_map(|e| self.parse_expr_in_prev_scope(ctxt, e)).collect(),
+                    values: msg.values.iter().filter_map(|e| self.get_inline_expression(ctxt, e)).collect(),
                 }))
             }
             Expression::SuperMessage(super_msg) => {
@@ -93,18 +85,18 @@ impl PrimMessageInliner for ast::Message {
                     receiver_name: super_msg.receiver_name.clone(),
                     is_static_class_call: super_msg.is_static_class_call,
                     signature: super_msg.signature.clone(),
-                    values: super_msg.values.iter().filter_map(|e| self.parse_expr_in_prev_scope(ctxt, e)).collect(),
+                    values: super_msg.values.iter().filter_map(|e| self.get_inline_expression(ctxt, e)).collect(),
                 }))
-            },
+            }
             Expression::BinaryOp(bin_op) => {
                 AstExpression::BinaryOp(Box::new(AstBinaryOp {
                     op: bin_op.op.clone(),
-                    lhs: self.parse_expr_in_prev_scope(ctxt, &bin_op.lhs)?,
-                    rhs: self.parse_expr_in_prev_scope(ctxt, &bin_op.rhs)?,
+                    lhs: self.get_inline_expression(ctxt, &bin_op.lhs)?,
+                    rhs: self.get_inline_expression(ctxt, &bin_op.rhs)?,
                 }))
             }
             Expression::Exit(expr, scope) => {
-                let inline_expr = self.parse_expr_in_prev_scope(ctxt, expr)?;
+                let inline_expr = self.get_inline_expression(ctxt, expr)?;
                 AstExpression::Exit(Box::new(inline_expr), scope - 1)
             }
             Expression::Literal(lit) => AstExpression::Literal(lit.clone()),
@@ -117,13 +109,16 @@ impl PrimMessageInliner for ast::Message {
         ctxt.add_nbr_args(blk.nbr_params);
         ctxt.add_nbr_locals(blk.nbr_locals);
 
-        Some(AstBody { exprs: blk.body.exprs.iter().filter_map(|e| self.parse_expr_in_prev_scope(ctxt, e)).collect() })
+        Some(AstBody { exprs: blk.body.exprs.iter().filter_map(|e| self.get_inline_expression(ctxt, e)).collect() })
     }
 
-    fn adapt_block_after_outer_inlined(&self, ctxt: &mut AstMethodCompilerCtxt, blk: &Rc<Block>, adjust_scope_by: usize) -> Option<AstBlock> {
-        let exprs: Vec<AstExpression> = blk.body.exprs.iter().filter_map(|og_expr| {
-            self.adapt_block_expression_after_outer_inlined(ctxt, og_expr, adjust_scope_by)
-        }).collect();
+    fn adapt_block_after_outer_inlined(&self, _ctxt: &mut AstMethodCompilerCtxt, blk: &Rc<Block>, adjust_scope_by: usize) -> Option<AstBlock> {
+        let mut blk_ctxt = AstMethodCompilerCtxt::init(blk.nbr_params, blk.nbr_locals);
+
+        let exprs: Vec<AstExpression> = blk.body.exprs.iter()
+            .filter_map(|og_expr| {
+                self.adapt_block_expression_after_outer_inlined(&mut blk_ctxt, og_expr, adjust_scope_by)
+            }).collect();
 
         Some(AstBlock {
             nbr_params: blk.nbr_params,
@@ -162,7 +157,7 @@ impl PrimMessageInliner for ast::Message {
                     Expression::ArgWrite(_, idx, expr) => {
                         let new_expr = Box::new(AstMethodCompilerCtxt::parse_expression(ctxt, expr));
                         AstExpression::ArgWrite(new_up_idx, *idx, new_expr)
-                    },
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -174,11 +169,15 @@ impl PrimMessageInliner for ast::Message {
                 AstExpression::Block(Rc::new(new_block))
             }
             Expression::Message(msg) => {
-                AstExpression::Message(Box::new(AstMessage {
-                    receiver: self.adapt_block_expression_after_outer_inlined(ctxt, &msg.receiver, adjust_scope_by).unwrap(),
-                    signature: msg.signature.clone(),
-                    values: msg.values.iter().filter_map(|e| self.adapt_block_expression_after_outer_inlined(ctxt, e, adjust_scope_by)).collect(),
-                }))
+                if let Some(inlined_method) = msg.inline_if_possible(ctxt) {
+                    AstExpression::InlinedCall(Box::new(inlined_method))
+                } else {
+                    AstExpression::Message(Box::new(AstMessage {
+                        receiver: self.adapt_block_expression_after_outer_inlined(ctxt, &msg.receiver, adjust_scope_by).unwrap(),
+                        signature: msg.signature.clone(),
+                        values: msg.values.iter().filter_map(|e| self.adapt_block_expression_after_outer_inlined(ctxt, e, adjust_scope_by)).collect(),
+                    }))
+                }
             }
             Expression::SuperMessage(super_msg) => {
                 AstExpression::SuperMessage(Box::new(AstSuperMessage {
@@ -187,7 +186,7 @@ impl PrimMessageInliner for ast::Message {
                     signature: super_msg.signature.clone(),
                     values: super_msg.values.iter().filter_map(|e| self.adapt_block_expression_after_outer_inlined(ctxt, e, adjust_scope_by)).collect(),
                 }))
-            },
+            }
             Expression::BinaryOp(bin_op) => {
                 AstExpression::BinaryOp(Box::new(AstBinaryOp {
                     op: bin_op.op.clone(),
@@ -202,10 +201,15 @@ impl PrimMessageInliner for ast::Message {
     }
 
     fn inline_if_true_or_if_false(&self, ctxt: &mut AstMethodCompilerCtxt, expected_bool: bool) -> Option<InlinedNode> {
+        let body_blk = match self.values.first() {
+            Some(Expression::Block(blk)) => blk,
+            _ => return None
+        };
+
         let if_inlined_node = IfInlinedNode {
             expected_bool,
             cond_instrs: AstBody { exprs: vec![ctxt.parse_expression(&self.receiver)] },
-            body_instrs: self.inline_expression(ctxt, self.values.first()?)?,
+            body_instrs: self.inline_block(ctxt, body_blk)?,
         };
 
         // dbg!(&self);
