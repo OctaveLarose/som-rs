@@ -179,7 +179,7 @@ impl Display for AstExpression {
             AstExpression::BinaryOp(op) => {
                 writeln!(f, "BinaryOp({})", op.op)?;
                 writeln!(indented(f), "LHS:")?;
-                writeln!(indented(&mut indented(f)), "{}", op.lhs)?;
+                write!(indented(&mut indented(f)), "{}", op.lhs)?;
                 writeln!(indented(f), "RHS:")?;
                 write!(indented(&mut indented(f)), "{}", op.rhs)
             }

@@ -18,7 +18,6 @@ fn get_ast(class_txt: &str) -> AstMethodBody {
     AstMethodCompilerCtxt::parse_method_def(&method_def).body
 }
 
-#[ignore] // todo re-enable
 #[test]
 fn if_true_inlining_ok() {
     let very_basic = "run = (

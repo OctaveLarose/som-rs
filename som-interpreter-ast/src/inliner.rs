@@ -73,13 +73,8 @@ impl PrimMessageInliner for ast::Message {
                 // if let Some(inlined_node) = self.inline_if_possible(target_ctxt) {
                 //     return Some(AstExpression::InlinedCall(Box::new(inlined_node)));
                 // }
-                let receiver  = self.get_inline_expression(target_ctxt, &msg.receiver)?;
-                // if msg.signature == "ifTrue:" {
-                //     dbg!("wow");
-                // }
-                // todo remove
                 AstExpression::Message(Box::new(AstMessage {
-                    receiver,
+                    receiver: self.get_inline_expression(target_ctxt, &msg.receiver)?,
                     signature: msg.signature.clone(),
                     values: msg.values.iter().filter_map(|val| self.get_inline_expression(target_ctxt, val)).collect(),
                 }))

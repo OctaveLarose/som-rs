@@ -86,10 +86,12 @@ impl AstMethodCompilerCtxt {
     }
 
     pub fn parse_block(&mut self, blk: &ast::Block) -> AstBlock {
+        let mut block_compiler = Self::init(blk.nbr_params, blk.nbr_locals);
+        let body = block_compiler.parse_body(&blk.body);
         AstBlock {
-            nbr_params: blk.nbr_params,
-            nbr_locals: blk.nbr_locals,
-            body: self.parse_body(&blk.body),
+            nbr_params: block_compiler.get_nbr_args(),
+            nbr_locals: block_compiler.get_nbr_locals(),
+            body,
         }
     }
 
