@@ -193,7 +193,7 @@ impl Display for AstExpression {
                 writeln!(indented(f), "{}", block)
             }
             AstExpression::InlinedCall(inlined_node) => match inlined_node.as_ref() {
-                InlinedNode::IfInlined(node) => writeln!(f, "IfInlinedNode: {:?}", node),
+                InlinedNode::IfInlined(node) => writeln!(f, "{}", node),
             },
         }
     }

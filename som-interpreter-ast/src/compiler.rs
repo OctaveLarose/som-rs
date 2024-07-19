@@ -10,7 +10,7 @@ use crate::inliner::PrimMessageInliner;
 pub struct AstMethodCompilerCtxt {
     nbr_args: usize,
     nbr_locals: usize,
-    pub inlining_level: usize // todo getter/setter
+    // pub inlining_level: usize // todo getter
 }
 
 impl AstMethodCompilerCtxt {
@@ -31,11 +31,12 @@ impl AstMethodCompilerCtxt {
 }
 
 impl AstMethodCompilerCtxt {
+    // pub fn init(nbr_args: usize, nbr_locals: usize, inlining_level: usize) -> Self {
     pub fn init(nbr_args: usize, nbr_locals: usize) -> Self {
         Self {
             nbr_args,
             nbr_locals,
-            inlining_level: 0,
+            // inlining_level
         }
     }
     
@@ -104,7 +105,7 @@ impl AstMethodCompilerCtxt {
     }
 
     pub fn parse_message_maybe_inline(&mut self, msg: &ast::Message) -> AstExpression {
-        let maybe_inlined = msg.inline_if_possible(self);
+        let maybe_inlined = self.inline_if_possible(msg);
         if let Some(inlined_node) = maybe_inlined {
             return AstExpression::InlinedCall(Box::new(inlined_node));
         }
