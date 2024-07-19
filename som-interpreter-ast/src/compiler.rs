@@ -10,7 +10,7 @@ use crate::inliner::PrimMessageInliner;
 pub struct AstMethodCompilerCtxt {
     nbr_args: usize,
     nbr_locals: usize,
-    // pub inlining_level: usize // todo getter
+    pub inlining_level: usize // todo getter
 }
 
 impl AstMethodCompilerCtxt {
@@ -31,12 +31,11 @@ impl AstMethodCompilerCtxt {
 }
 
 impl AstMethodCompilerCtxt {
-    // pub fn init(nbr_args: usize, nbr_locals: usize, inlining_level: usize) -> Self {
-    pub fn init(nbr_args: usize, nbr_locals: usize) -> Self {
+    pub fn init(nbr_args: usize, nbr_locals: usize, inlining_level: usize) -> Self {
         Self {
             nbr_args,
             nbr_locals,
-            // inlining_level
+            inlining_level
         }
     }
     
@@ -48,7 +47,7 @@ impl AstMethodCompilerCtxt {
                     MethodBody::Primitive => { AstMethodBody::Primitive }
                     MethodBody::Body { locals_nbr, body, .. } => {
                         let args_nbr = method_def.signature.chars().filter(|e| *e == ':').count(); // not sure if needed
-                        let mut compiler = AstMethodCompilerCtxt::init(args_nbr, *locals_nbr);
+                        let mut compiler = AstMethodCompilerCtxt::init(args_nbr, *locals_nbr, 1);
                         
                         AstMethodBody::Body {
                             body: compiler.parse_body(body),
@@ -87,7 +86,7 @@ impl AstMethodCompilerCtxt {
     }
 
     pub fn parse_block(&mut self, blk: &ast::Block) -> AstBlock {
-        let mut block_compiler = Self::init(blk.nbr_params, blk.nbr_locals);
+        let mut block_compiler = Self::init(blk.nbr_params, blk.nbr_locals, 1);
         let body = block_compiler.parse_body(&blk.body);
         AstBlock {
             nbr_params: block_compiler.get_nbr_args(),

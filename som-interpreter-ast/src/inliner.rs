@@ -25,7 +25,6 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
         }
     }
 
-    #[allow(dead_code, unreachable_code, unused_variables)]
     fn get_inline_expression(&mut self, expression: &Expression) -> Option<AstExpression> {
         let nbr_of_locals_pre_inlining = self.get_nbr_locals();
         let nbr_of_args_pre_inlining = self.get_nbr_args();
@@ -40,39 +39,41 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                 AstExpression::LocalVarWrite(idx + nbr_of_locals_pre_inlining, Box::new(self.get_inline_expression(expr)?))
             }
             Expression::NonLocalVarRead(scope, idx) => {
-                match *scope - 1 {
+                match *scope - self.inlining_level {
                     0 => AstExpression::LocalVarRead(*idx),
-                    _ => AstExpression::NonLocalVarRead(*scope - 1, *idx)
+                    _ => AstExpression::NonLocalVarRead(*scope - self.inlining_level, *idx)
                 }
             }
             Expression::NonLocalVarWrite(scope, idx, expr) => {
                 let ast_expr = Box::new(self.get_inline_expression(expr)?);
-                match *scope - 1 {
+                match *scope - self.inlining_level {
                     0 => AstExpression::LocalVarWrite(*idx, ast_expr),
-                    _ => AstExpression::NonLocalVarWrite(*scope - 1, *idx, ast_expr)
+                    _ => AstExpression::NonLocalVarWrite(*scope - self.inlining_level, *idx, ast_expr)
                 }
             }
             Expression::ArgRead(scope, idx) => {
                 match *scope {
                     0 => AstExpression::ArgRead(0, idx + nbr_of_args_pre_inlining),
-                    _ => AstExpression::ArgRead(*scope - 1, *idx)
+                    _ => AstExpression::ArgRead(*scope - self.inlining_level, *idx)
                 }
             }
             Expression::ArgWrite(scope, idx, expr) => {
                 let ast_expr = Box::new(self.get_inline_expression(expr)?);
                 match *scope {
                     0 => AstExpression::ArgWrite(0, idx + nbr_of_args_pre_inlining, ast_expr),
-                    _ => AstExpression::ArgWrite(*scope - 1, *idx, ast_expr)
+                    _ => AstExpression::ArgWrite(*scope - self.inlining_level, *idx, ast_expr)
                 }
             }
             Expression::GlobalRead(a) => AstExpression::GlobalRead(a.clone()),
             Expression::FieldRead(idx) => AstExpression::FieldRead(*idx),
             Expression::FieldWrite(idx, expr) => AstExpression::FieldWrite(*idx, Box::new(self.get_inline_expression(expr)?)),
             Expression::Message(msg) => {
-                // todo enable this guy
-                // if let Some(inlined_node) = self.inline_if_possible(msg) {
-                //     return Some(AstExpression::InlinedCall(Box::new(inlined_node)));
-                // }
+                self.inlining_level += 1;
+                if let Some(inlined_node) = self.inline_if_possible(msg) {
+                    self.inlining_level -= 1;
+                    return Some(AstExpression::InlinedCall(Box::new(inlined_node)));
+                }
+                self.inlining_level -= 1;
                 AstExpression::Message(Box::new(AstMessage {
                     receiver: self.get_inline_expression(&msg.receiver)?,
                     signature: msg.signature.clone(),
@@ -96,7 +97,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
             }
             Expression::Exit(expr, scope) => {
                 let inline_expr = self.get_inline_expression(expr)?;
-                AstExpression::Exit(Box::new(inline_expr), scope - 1)
+                AstExpression::Exit(Box::new(inline_expr), scope - self.inlining_level)
             }
             Expression::Literal(lit) => AstExpression::Literal(lit.clone()),
         };
@@ -107,7 +108,6 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
     fn inline_block(&mut self, blk: &Block) -> Option<AstBody> {
         let inlined_block = Some(AstBody { exprs: blk.body.exprs.iter().filter_map(|e| self.get_inline_expression(e)).collect() });
 
-        // todo: shouldn't inner blocks should know about locals/args ahead of time though? i *think* it's fine because we make a new context from the outer block itself.
         self.add_nbr_args(blk.nbr_params);
         self.add_nbr_locals(blk.nbr_locals);
 
@@ -115,7 +115,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
     }
 
     fn adapt_block_after_outer_inlined(&mut self, blk: &Rc<Block>) -> Option<AstBlock> {
-        let mut blk_ctxt = AstMethodCompilerCtxt::init(blk.nbr_params, blk.nbr_locals);
+        let mut blk_ctxt = AstMethodCompilerCtxt::init(blk.nbr_params, blk.nbr_locals, 1);
 
         let exprs: Vec<AstExpression> = blk.body.exprs.iter()
             .filter_map(|og_expr| {
@@ -136,7 +136,8 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                 let new_up_idx = match *up_idx {
                     0 => 0, // local var/arg, not affected by inlining, stays the same
                     1 => 1, // non-local access to previous scope, which is getting inlined. no changes needed.
-                    _ => *up_idx - 1, // access to a scope beyond that one - now we need to account for the impact of inlining.
+                    // d if d <= self.inlining_level => d,
+                    _ => *up_idx - self.inlining_level, // access to a scope beyond that one - now we need to account for the impact of inlining.
                 };
 
                 // todo ACTUALLY shouldn't the idx be adjusted depending on the amount of inlined variables in the block? make a test for that! and for the args case too!
@@ -164,7 +165,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                 }
             }
             Expression::Exit(expr, scope) => {
-                AstExpression::Exit(Box::new(self.get_inline_expression_for_adapted_block(expr)?), scope - 1) // todo not necessarily scope - 1, afaik?
+                AstExpression::Exit(Box::new(self.get_inline_expression_for_adapted_block(expr)?), scope - self.inlining_level)
             }
             Expression::FieldWrite(idx, expr) => {
                 AstExpression::FieldWrite(*idx, Box::new(self.get_inline_expression_for_adapted_block(expr)?))
@@ -178,7 +179,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
             }
             Expression::Message(msg) => {
                 // todo enable nested inlining
-                // if let Some(inlined_method) = msg.inline_if_possible(target_ctxt) {
+                // if let Some(inlined_method) = self.inline_if_possible(msg) {
                 //     AstExpression::InlinedCall(Box::new(inlined_method))
                 // } else {
                 AstExpression::Message(Box::new(AstMessage {
@@ -220,7 +221,18 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
 
         let if_inlined_node = IfInlinedNode {
             expected_bool,
-            cond_instrs: AstBody { exprs: vec![self.parse_expression(&msg.receiver)] },
+            cond_instrs: {
+                match self.inlining_level {
+                    1 => AstBody { exprs: vec![self.parse_expression(&msg.receiver)] },
+                    _ => {
+                        // todo: this code works, but doesn't feel good. also, enabling inlining in nested blocks breaks. i reckon inlining level should be a function param instead! this might fix things, also.
+                        self.inlining_level -= 1;
+                        let ret = AstBody { exprs: vec![self.get_inline_expression(&msg.receiver)?] };
+                        self.inlining_level += 1;
+                        ret
+                    }
+                }
+            },
             body_instrs: self.inline_block(body_blk)?,
         };
 
