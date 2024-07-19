@@ -46,7 +46,8 @@ impl AstMethodCompilerCtxt {
                 match &method_def.body {
                     MethodBody::Primitive => { AstMethodBody::Primitive }
                     MethodBody::Body { locals_nbr, body, .. } => {
-                        let mut compiler = AstMethodCompilerCtxt::init(0, *locals_nbr); // todo nbr args shouldn't be 0 though? we can calculate it from the signature if need be.
+                        let args_nbr = method_def.signature.chars().filter(|e| *e == ':').count(); // not sure if needed
+                        let mut compiler = AstMethodCompilerCtxt::init(args_nbr, *locals_nbr);
                         
                         AstMethodBody::Body {
                             body: compiler.parse_body(body),
