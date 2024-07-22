@@ -10,7 +10,7 @@ use crate::inliner::PrimMessageInliner;
 pub struct AstMethodCompilerCtxt {
     nbr_args: usize,
     nbr_locals: usize,
-    inlining_scope_adjust: usize
+    pub inlining_scope_adjust: usize
 }
 
 impl AstMethodCompilerCtxt {
@@ -28,9 +28,9 @@ impl AstMethodCompilerCtxt {
     pub fn add_nbr_args(&mut self, nbr_to_add: usize) {
         self.nbr_args += nbr_to_add;
     }
-    pub fn get_inlining_scope_adjust(&self) -> usize { self.inlining_scope_adjust } 
-    pub fn incr_inlining_level(&mut self) { self.inlining_scope_adjust += 1; } 
-    pub fn decr_inlining_level(&mut self) { self.inlining_scope_adjust -= 1; } 
+    pub fn get_inlining_scope_adjust(&self) -> usize { self.inlining_scope_adjust }
+    pub fn incr_inlining_level(&mut self) { self.inlining_scope_adjust += 1; }
+    pub fn decr_inlining_level(&mut self) { self.inlining_scope_adjust -= 1; }
 }
 
 impl AstMethodCompilerCtxt {

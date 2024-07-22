@@ -173,25 +173,28 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
             }
             Expression::FieldWrite(idx, expr) => {
                 AstExpression::FieldWrite(*idx, Box::new(self.get_inline_expression_for_adapted_block(expr, adjust_scope_by)?))
-            },
+            }
             Expression::LocalVarWrite(idx, expr) => {
                 AstExpression::LocalVarWrite(*idx, Box::new(self.get_inline_expression_for_adapted_block(expr, adjust_scope_by)?))
-            },
+            }
             Expression::Block(blk) => {
                 let new_block = self.adapt_block_after_outer_inlined(blk, adjust_scope_by)?;
                 AstExpression::Block(Rc::new(new_block))
             }
             Expression::Message(msg) => {
-                // todo enable nested inlining
-                // if let Some(inlined_method) = self.inline_if_possible(msg) {
-                //     AstExpression::InlinedCall(Box::new(inlined_method))
-                // } else {
-                AstExpression::Message(Box::new(AstMessage {
-                    receiver: self.get_inline_expression_for_adapted_block(&msg.receiver, adjust_scope_by)?,
-                    signature: msg.signature.clone(),
-                    values: msg.values.iter().filter_map(|e| self.get_inline_expression_for_adapted_block(e, adjust_scope_by)).collect(),
-                }))
-                // }
+                let backup_scope = self.inlining_scope_adjust; // todo idk about this code but it makes sense to me. needs refactoring for sure though
+                self.inlining_scope_adjust = 1;
+                if let Some(inlined_method) = self.inline_if_possible(msg) {
+                    self.inlining_scope_adjust = backup_scope;
+                    AstExpression::InlinedCall(Box::new(inlined_method))
+                } else {
+                    self.inlining_scope_adjust = backup_scope;
+                    AstExpression::Message(Box::new(AstMessage {
+                        receiver: self.get_inline_expression_for_adapted_block(&msg.receiver, adjust_scope_by)?,
+                        signature: msg.signature.clone(),
+                        values: msg.values.iter().filter_map(|e| self.get_inline_expression_for_adapted_block(e, adjust_scope_by)).collect(),
+                    }))
+                }
             }
             Expression::SuperMessage(super_msg) => {
                 AstExpression::SuperMessage(Box::new(AstSuperMessage {
@@ -224,12 +227,12 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
         };
 
         let inlining_scope_adjust = self.get_inlining_scope_adjust();
-        
+
         let if_inlined_node = IfInlinedNode {
             expected_bool,
             cond_instrs: {
-                match inlining_scope_adjust - 1 { // the condition of an if block gets parsed in the "current" context... 
-                    0 => AstBody { exprs: vec![self.parse_expression(&msg.receiver)] }, 
+                match inlining_scope_adjust - 1 { // the condition of an if block gets parsed in the "current" context...
+                    0 => AstBody { exprs: vec![self.parse_expression(&msg.receiver)] },
                     adjust_receiver_scope_by => { // ...which is really "the body block's context minus one level" which is relevant when doing recursive inlining.
                         AstBody { exprs: vec![self.get_inline_expression(&msg.receiver, adjust_receiver_scope_by)?] }
                     }
