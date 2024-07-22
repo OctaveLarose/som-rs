@@ -33,22 +33,29 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
     }
 
     fn get_inline_expression(&mut self, expression: &Expression, adjust_scope_by: usize) -> Option<AstExpression> {
-        let nbr_of_locals_pre_inlining = self.get_nbr_locals(); // todo this must always get the right locals... i think?
-        let nbr_of_args_pre_inlining = self.get_nbr_args();
+        // let nbr_of_locals_pre_inlining = self.get_nbr_locals(); // todo this must always get the right locals... i think?
+        // let nbr_of_args_pre_inlining = self.get_nbr_args();
 
         let expr = match expression {
             Expression::Block(blk) => {
                 let new_blk = self.adapt_block_after_outer_inlined(blk, adjust_scope_by)?;
                 AstExpression::Block(Rc::new(new_blk))
             }
-            Expression::LocalVarRead(idx) => AstExpression::LocalVarRead(idx + nbr_of_locals_pre_inlining),
+            // Expression::LocalVarRead(idx) => AstExpression::LocalVarRead(idx + nbr_of_locals_pre_inlining),
+            Expression::LocalVarRead(idx) => AstExpression::LocalVarRead(*idx),
             Expression::LocalVarWrite(idx, expr) => {
-                AstExpression::LocalVarWrite(idx + nbr_of_locals_pre_inlining, Box::new(self.get_inline_expression(expr, adjust_scope_by)?))
+                // AstExpression::LocalVarWrite(idx + nbr_of_locals_pre_inlining, Box::new(self.get_inline_expression(expr, adjust_scope_by)?))
+                AstExpression::LocalVarWrite(*idx, Box::new(self.get_inline_expression(expr, adjust_scope_by)?))
             }
             Expression::NonLocalVarRead(scope, idx) => {
-                match *scope - adjust_scope_by {
-                    0 => AstExpression::LocalVarRead(*idx),
-                    _ => AstExpression::NonLocalVarRead(*scope - adjust_scope_by, *idx)
+                match *scope {
+                    1 => AstExpression::LocalVarRead(*idx), // todo this guy shouldn't be the only one to be special-cased. the logic needs to be generalized
+                    _ => {
+                        match *scope - adjust_scope_by {
+                            0 => AstExpression::LocalVarRead(*idx),
+                            new_scope => AstExpression::NonLocalVarRead(new_scope, *idx),
+                        }
+                    }
                 }
             }
             Expression::NonLocalVarWrite(scope, idx, expr) => {
@@ -60,14 +67,15 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
             }
             Expression::ArgRead(scope, idx) => {
                 match *scope {
-                    0 => AstExpression::ArgRead(0, idx + nbr_of_args_pre_inlining),
+                    x if x < adjust_scope_by => AstExpression::ArgRead(*scope, *idx), // todo eeehhhhh... sure?
+                    // 0 => AstExpression::ArgRead(0, *idx + nbr_of_args_pre_inlining),
                     _ => AstExpression::ArgRead(*scope - adjust_scope_by, *idx)
                 }
             }
             Expression::ArgWrite(scope, idx, expr) => {
                 let ast_expr = Box::new(self.get_inline_expression(expr, adjust_scope_by)?);
                 match *scope {
-                    0 => AstExpression::ArgWrite(0, idx + nbr_of_args_pre_inlining, ast_expr),
+                    0 => unreachable!("we're writing to self or blockself?"),
                     _ => AstExpression::ArgWrite(*scope - adjust_scope_by, *idx, ast_expr)
                 }
             }
@@ -140,8 +148,8 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                 let new_up_idx = match *up_idx {
                     0 => 0, // local var/arg, not affected by inlining, stays the same
                     1 => 1, // non-local access to previous scope, which is getting inlined. no changes needed.
-                    // d if d <= self.inlining_level => d,
-                    _ => *up_idx - adjust_scope_by, // access to a scope beyond that one - now we need to account for the impact of inlining.
+                    x if x < adjust_scope_by => x, // in general, if we're accessing stuff that are too close to have been affected by inlining, we're fine (hard to explain without a graph)
+                    _ => *up_idx - adjust_scope_by, // accessing a scope beyond that one: now we need to account for the impact of inlining.
                 };
 
                 // todo ACTUALLY shouldn't the idx be adjusted depending on the amount of inlined variables in the block? make a test for that! and for the args case too!
@@ -182,13 +190,9 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                 AstExpression::Block(Rc::new(new_block))
             }
             Expression::Message(msg) => {
-                let backup_scope = self.inlining_scope_adjust; // todo idk about this code but it makes sense to me. needs refactoring for sure though
-                self.inlining_scope_adjust = 1;
-                if let Some(inlined_method) = self.inline_if_possible(msg) {
-                    self.inlining_scope_adjust = backup_scope;
+                if let Some(inlined_method) = self.deeper_inline_if_possible(msg) {
                     AstExpression::InlinedCall(Box::new(inlined_method))
                 } else {
-                    self.inlining_scope_adjust = backup_scope;
                     AstExpression::Message(Box::new(AstMessage {
                         receiver: self.get_inline_expression_for_adapted_block(&msg.receiver, adjust_scope_by)?,
                         signature: msg.signature.clone(),
@@ -227,6 +231,14 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
         };
 
         let inlining_scope_adjust = self.get_inlining_scope_adjust();
+
+        if let Expression::BinaryOp(bin_op) = &msg.receiver {
+            if let Expression::LocalVarRead(0) = bin_op.lhs {
+                if let Expression::NonLocalVarRead(1, 0) = bin_op.rhs {
+                    dbg!("wow");
+                }
+            }
+        };
 
         let if_inlined_node = IfInlinedNode {
             expected_bool,

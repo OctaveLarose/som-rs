@@ -62,7 +62,6 @@ fn if_false_inlining_ok() {
 
     let resolve = get_ast(method_txt2);
 
-    dbg!(&resolve);
     assert_eq!(resolve,
                AstMethodBody::Body {
                    locals_nbr: 1,
@@ -89,4 +88,62 @@ fn if_false_inlining_ok() {
             ),
         ],
     }});
+}
+
+#[test]
+pub fn recursive_inlining() {
+    // from Hashtable.
+    let contains_key_txt = "containsKey: key = ( 
+        | idx e | 
+        e isNil ifFalse: [ 
+            e keys do: 
+                [ :k | 
+                    k = key ifTrue: [ 
+                        ^true 
+                    ] 
+                ] 
+        ]. 
+        )"; 
+
+    let ast_answer =  "AstMethodBody (2 locals):
+        AstBody:
+            IfInlinedNode (expected bool: false):
+                condition block:\
+                    AstBody:
+                        Message \"isNil\":
+                            Receiver:
+                                LocalVarRead(1)
+                            Values: (none)
+                body block:
+                    AstBody:
+                        Message \"do:\":
+                            Receiver:
+                                Message \"keys\":
+                                    Receiver:
+                                        LocalVarRead(1)
+                                    Values: (none)
+                            Values:
+                                Block:
+                                    AstBlock(1 params, 0 locals):
+                                        IfInlinedNode (expected bool: true):
+                                            condition block:
+                                                AstBody:
+                                                    BinaryOp(=)
+                                                        LHS:
+                                                            ArgRead(0, 1)
+                                                        RHS:
+                                                            ArgRead(1, 1)
+                                            body block:
+                                                AstBody:
+                                                    Exit(1)
+                                                        GlobalRead(true)";
+
+    let resolve = get_ast(contains_key_txt);
+    
+    dbg!(resolve.to_string());
+    
+    let cleaned_ast_answer: String = ast_answer.chars().filter(|c| !c.is_whitespace()).collect();
+    let cleaned_resolve: String = resolve.to_string().chars().filter(|c| !c.is_whitespace()).collect();
+    
+    assert_eq!(cleaned_ast_answer, cleaned_resolve);
 }
