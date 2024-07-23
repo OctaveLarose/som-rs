@@ -14,19 +14,16 @@ pub struct AstMethodCompilerCtxt {
 pub struct AstScopeCtxt {
     nbr_args: usize,
     nbr_locals: usize,
-    pub inlining_scope_adjust: usize, // todo remove
     pub is_getting_inlined: bool,
 }
 
 impl AstScopeCtxt {
     pub fn init(nbr_args: usize,
                 nbr_locals: usize,
-                inlining_scope_adjust: usize,
                 is_getting_inlined: bool) -> Self {
         Self {
             nbr_args,
             nbr_locals,
-            inlining_scope_adjust,
             is_getting_inlined,
         }
     }
@@ -45,9 +42,6 @@ impl AstScopeCtxt {
     pub fn add_nbr_args(&mut self, nbr_to_add: usize) {
         self.nbr_args += nbr_to_add;
     }
-    pub fn get_inlining_scope_adjust(&self) -> usize { self.inlining_scope_adjust }
-    pub fn incr_inlining_level(&mut self) { self.inlining_scope_adjust += 1; }
-    pub fn decr_inlining_level(&mut self) { self.inlining_scope_adjust -= 1; }
 }
 
 impl AstMethodCompilerCtxt {
@@ -59,7 +53,7 @@ impl AstMethodCompilerCtxt {
                     MethodBody::Primitive => { AstMethodBody::Primitive }
                     MethodBody::Body { locals_nbr, body, .. } => {
                         let args_nbr = method_def.signature.chars().filter(|e| *e == ':').count(); // not sure if needed
-                        let mut ctxt = AstMethodCompilerCtxt { scopes: vec![AstScopeCtxt::init(args_nbr, *locals_nbr, 1, false)] };
+                        let mut ctxt = AstMethodCompilerCtxt { scopes: vec![AstScopeCtxt::init(args_nbr, *locals_nbr, false)] };
 
                         AstMethodBody::Body {
                             body: ctxt.parse_body(body),
@@ -98,7 +92,7 @@ impl AstMethodCompilerCtxt {
     }
 
     pub fn parse_block(&mut self, blk: &ast::Block) -> AstBlock {
-        self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, 1, false));
+        self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, false));
 
         let body = self.parse_body(&blk.body);
         let bl = self.scopes.last().unwrap();

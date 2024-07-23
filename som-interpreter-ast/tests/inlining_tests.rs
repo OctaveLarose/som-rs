@@ -140,7 +140,7 @@ pub fn recursive_inlining() {
 
     let resolve = get_ast(contains_key_txt);
     
-    dbg!(resolve.to_string());
+    // dbg!(resolve.to_string());
     
     let cleaned_ast_answer: String = ast_answer.chars().filter(|c| !c.is_whitespace()).collect();
     let cleaned_resolve: String = resolve.to_string().chars().filter(|c| !c.is_whitespace()).collect();
