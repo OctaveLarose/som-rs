@@ -4,7 +4,7 @@ use som_core::ast;
 use som_core::ast::{Block, Expression};
 
 use crate::ast::{AstBinaryOp, AstBlock, AstBody, AstExpression, AstMessage, AstSuperMessage, InlinedNode};
-use crate::compiler::AstMethodCompilerCtxt;
+use crate::compiler::{AstMethodCompilerCtxt, AstScopeCtxt};
 use crate::specialized::if_inlined_node::IfInlinedNode;
 
 pub trait PrimMessageInliner {
@@ -26,9 +26,9 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
         }
     }
     fn deeper_inline_if_possible(&mut self, msg: &ast::Message) -> Option<InlinedNode> {
-        self.incr_inlining_level();
+        self.scopes.last_mut().unwrap().incr_inlining_level();
         let maybe_inline = self.inline_if_possible(msg);
-        self.decr_inlining_level();
+        self.scopes.last_mut().unwrap().decr_inlining_level();
         maybe_inline
     }
 
@@ -118,27 +118,35 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
     }
 
     fn inline_block(&mut self, blk: &Block, adjust_scope_by: usize) -> Option<AstBody> {
+        self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, adjust_scope_by, true));
+        
         let inlined_block = Some(AstBody { exprs: blk.body.exprs.iter().filter_map(|e| self.get_inline_expression(e, adjust_scope_by)).collect() });
 
-        self.add_nbr_args(blk.nbr_params);
-        self.add_nbr_locals(blk.nbr_locals);
+        self.scopes.pop();
+        
+        self.scopes.last_mut().unwrap().add_nbr_args(blk.nbr_params);
+        self.scopes.last_mut().unwrap().add_nbr_locals(blk.nbr_locals);
 
         inlined_block
     }
 
     fn adapt_block_after_outer_inlined(&mut self, blk: &Rc<Block>, adjust_scope_by: usize) -> Option<AstBlock> {
-        let mut blk_ctxt = AstMethodCompilerCtxt::init(blk.nbr_params, blk.nbr_locals, adjust_scope_by);
-
+        self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, adjust_scope_by, false));
+        
         let exprs: Vec<AstExpression> = blk.body.exprs.iter()
             .filter_map(|og_expr| {
-                blk_ctxt.get_inline_expression_for_adapted_block(og_expr, adjust_scope_by)
+                self.get_inline_expression_for_adapted_block(og_expr, adjust_scope_by)
             }).collect();
 
-        Some(AstBlock {
+        let adapted_inner_block = Some(AstBlock {
             nbr_params: blk.nbr_params,
             nbr_locals: blk.nbr_locals,
             body: AstBody { exprs },
-        })
+        });
+        
+        self.scopes.pop();
+
+        adapted_inner_block
     }
 
     fn get_inline_expression_for_adapted_block(&mut self, og_expr: &Expression, adjust_scope_by: usize) -> Option<AstExpression> {
@@ -218,7 +226,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
             Expression::GlobalRead(_) |
             Expression::LocalVarRead(_) |
             Expression::FieldRead(_) |
-            Expression::Literal(_) => AstMethodCompilerCtxt::parse_expression(self, og_expr)
+            Expression::Literal(_) => self.parse_expression(og_expr)
         };
 
         Some(new_expr)
@@ -230,15 +238,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
             _ => return None
         };
 
-        let inlining_scope_adjust = self.get_inlining_scope_adjust();
-
-        if let Expression::BinaryOp(bin_op) = &msg.receiver {
-            if let Expression::LocalVarRead(0) = bin_op.lhs {
-                if let Expression::NonLocalVarRead(1, 0) = bin_op.rhs {
-                    dbg!("wow");
-                }
-            }
-        };
+        let inlining_scope_adjust = self.scopes.last_mut().unwrap().get_inlining_scope_adjust();
 
         let if_inlined_node = IfInlinedNode {
             expected_bool,

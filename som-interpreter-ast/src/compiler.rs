@@ -6,14 +6,31 @@ use som_core::ast::{Expression, MethodBody};
 use crate::ast::{AstBinaryOp, AstBlock, AstBody, AstExpression, AstMessage, AstMethodBody, AstMethodDef, AstSuperMessage};
 use crate::inliner::PrimMessageInliner;
 
-#[derive(Debug, Default)]
 pub struct AstMethodCompilerCtxt {
-    nbr_args: usize,
-    nbr_locals: usize,
-    pub inlining_scope_adjust: usize
+    pub scopes: Vec<AstScopeCtxt>
 }
 
-impl AstMethodCompilerCtxt {
+#[derive(Debug, Default)]
+pub struct AstScopeCtxt {
+    nbr_args: usize,
+    nbr_locals: usize,
+    pub inlining_scope_adjust: usize, // todo remove
+    pub is_getting_inlined: bool,
+}
+
+impl AstScopeCtxt {
+    pub fn init(nbr_args: usize,
+                nbr_locals: usize,
+                inlining_scope_adjust: usize,
+                is_getting_inlined: bool) -> Self {
+        Self {
+            nbr_args,
+            nbr_locals,
+            inlining_scope_adjust,
+            is_getting_inlined,
+        }
+    }
+    
     pub fn get_nbr_locals(&self) -> usize {
         self.nbr_locals
     }
@@ -34,14 +51,6 @@ impl AstMethodCompilerCtxt {
 }
 
 impl AstMethodCompilerCtxt {
-    pub fn init(nbr_args: usize, nbr_locals: usize, inlining_scope_adjust: usize) -> Self {
-        Self {
-            nbr_args,
-            nbr_locals,
-            inlining_scope_adjust
-        }
-    }
-    
     pub fn parse_method_def(method_def: &ast::MethodDef) -> AstMethodDef {
         AstMethodDef {
             signature: method_def.signature.clone(),
@@ -50,11 +59,11 @@ impl AstMethodCompilerCtxt {
                     MethodBody::Primitive => { AstMethodBody::Primitive }
                     MethodBody::Body { locals_nbr, body, .. } => {
                         let args_nbr = method_def.signature.chars().filter(|e| *e == ':').count(); // not sure if needed
-                        let mut compiler = AstMethodCompilerCtxt::init(args_nbr, *locals_nbr, 1);
-                        
+                        let mut ctxt = AstMethodCompilerCtxt { scopes: vec![AstScopeCtxt::init(args_nbr, *locals_nbr, 1, false)] };
+
                         AstMethodBody::Body {
-                            body: compiler.parse_body(body),
-                            locals_nbr: compiler.get_nbr_locals(),
+                            body: ctxt.parse_body(body),
+                            locals_nbr: ctxt.scopes.last().unwrap().get_nbr_locals(),
                         }
                     }
                 }
@@ -89,13 +98,18 @@ impl AstMethodCompilerCtxt {
     }
 
     pub fn parse_block(&mut self, blk: &ast::Block) -> AstBlock {
-        let mut block_compiler = Self::init(blk.nbr_params, blk.nbr_locals, 1);
-        let body = block_compiler.parse_body(&blk.body);
-        AstBlock {
-            nbr_params: block_compiler.get_nbr_args(),
-            nbr_locals: block_compiler.get_nbr_locals(),
+        self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, 1, false));
+
+        let body = self.parse_body(&blk.body);
+        let bl = self.scopes.last().unwrap();
+        let output_blk = AstBlock {
+            nbr_params: bl.get_nbr_args(),
+            nbr_locals: bl.get_nbr_locals(),
             body,
-        }
+        };
+
+        self.scopes.pop();
+        output_blk
     }
 
     pub fn parse_binary_op(&mut self, binary_op: &ast::BinaryOp) -> AstBinaryOp {
@@ -111,7 +125,7 @@ impl AstMethodCompilerCtxt {
         if let Some(inlined_node) = maybe_inlined {
             return AstExpression::InlinedCall(Box::new(inlined_node));
         }
-
+        
         AstExpression::Message(Box::new(
             AstMessage {
                 receiver: self.parse_expression(&msg.receiver),
