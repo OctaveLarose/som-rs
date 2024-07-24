@@ -7,10 +7,49 @@ use crate::ast::{AstBinaryOp, AstBlock, AstBody, AstExpression, AstMessage, AstM
 use crate::inliner::PrimMessageInliner;
 
 pub struct AstMethodCompilerCtxt {
-    pub scopes: Vec<AstScopeCtxt>
+    pub scopes: Vec<AstScopeCtxt>,
 }
 
 impl AstMethodCompilerCtxt {
+    pub(crate) fn adapt_var_coords_from_inlining(&self, up_idx: usize, idx: usize) -> (usize, usize) {
+        let nbr_inlined_scopes_in_between = self.scopes.iter().rev().take(up_idx).filter(|e| e.is_getting_inlined).count();
+        
+        // new up index is the target var scope minus the number of inlined scopes in between the current scope and the target var scope
+        // if you do a NonLocalVarRead(3, 0), and there's 1 inlined scope before that (3) target, then now that target scope is only (2) scopes away.
+        let new_up_idx = match up_idx {
+            0 => 0,
+            _ => up_idx - nbr_inlined_scopes_in_between
+        };
+        
+        // new index is more complicated, since some variables can have gotten inlined into other scopes.
+        let new_idx = {
+            let lol = self.get_nbr_locals_in_scope_post_inlining(up_idx); // todo incorrect. see below
+            idx + (lol - 1)
+        };
+        
+        // _
+        // | |a b| 
+        // |       V SCOPE GETS INLINED (prev scope vars become |a b c| )
+        // |       _
+        // |       | |c|
+        // |       |     _
+        // |       |    | |d|
+        // |       |    |  VarRead(0, 0)... becomes: => VarRead(0, 0)
+        // |       |    |  VarRead(1, 0) => VarRead(1, 2)
+        // |       |    |  VarRead(2, 0) => VarRead(1, 1)
+        // |       |    |  VarRead(2, 1) => VarRead(1, 0)
+        // |       |    _
+        // |       _
+        // _
+        
+        (new_up_idx, new_idx)
+    }
+    
+    pub(crate) fn adapt_arg_coords_from_inlining(&self, up_idx: usize, idx: usize) -> (usize, usize) {
+        todo!("same code as adapt var coords, but calling get_nbr_args().")
+    }
+
+    // todo: not quuuite true to its name.
     pub(crate) fn get_nbr_locals_in_scope_post_inlining(&self, idx: usize) -> usize {
         let mut scope_iter = self.scopes.iter();
         let mut inline_scope_target = scope_iter.nth_back(idx);
@@ -24,18 +63,19 @@ impl AstMethodCompilerCtxt {
         nbr_locals_in_target_scope
     }
 
-    pub(crate) fn get_nbr_args_in_scope_post_inlining(&self, idx: usize) -> usize {
-        let mut scope_iter = self.scopes.iter();
-        let mut inline_scope_target = scope_iter.nth_back(idx);
-        let mut nbr_locals_in_target_scope = inline_scope_target.unwrap().get_nbr_args();
-
-        while inline_scope_target.unwrap().is_getting_inlined {
-            inline_scope_target = scope_iter.next_back();
-            nbr_locals_in_target_scope += inline_scope_target.unwrap().get_nbr_args();
-        }
-
-        nbr_locals_in_target_scope
-    }
+    // todo use
+    // pub(crate) fn get_nbr_args_in_scope_post_inlining(&self, idx: usize) -> usize {
+    //     let mut scope_iter = self.scopes.iter();
+    //     let mut inline_scope_target = scope_iter.nth_back(idx);
+    //     let mut nbr_locals_in_target_scope = inline_scope_target.unwrap().get_nbr_args();
+    // 
+    //     while inline_scope_target.unwrap().is_getting_inlined {
+    //         inline_scope_target = scope_iter.next_back();
+    //         nbr_locals_in_target_scope += inline_scope_target.unwrap().get_nbr_args();
+    //     }
+    // 
+    //     nbr_locals_in_target_scope
+    // }
 }
 
 #[derive(Debug, Default)]
@@ -55,7 +95,7 @@ impl AstScopeCtxt {
             is_getting_inlined,
         }
     }
-    
+
     pub fn get_nbr_locals(&self) -> usize {
         self.nbr_locals
     }
@@ -147,7 +187,7 @@ impl AstMethodCompilerCtxt {
         if let Some(inlined_node) = maybe_inlined {
             return AstExpression::InlinedCall(Box::new(inlined_node));
         }
-        
+
         AstExpression::Message(Box::new(
             AstMessage {
                 receiver: self.parse_expression(&msg.receiver),

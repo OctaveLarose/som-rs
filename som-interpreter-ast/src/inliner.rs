@@ -13,7 +13,7 @@ pub trait PrimMessageInliner {
     fn get_inline_expression(&mut self, expression: &Expression) -> Option<AstExpression>;
     fn inline_block(&mut self, expression: &Block) -> Option<AstBody>;
     fn adapt_block_after_outer_inlined(&mut self, blk: &Rc<Block>) -> Option<AstBlock>;
-    fn get_inline_expression_for_adapted_block(&mut self, expression: &Expression) -> Option<AstExpression>;
+    fn adapt_expr_from_inlining(&mut self, expression: &Expression) -> Option<AstExpression>;
     fn inline_if_true_or_if_false(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode>;
     fn inline_while(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode>;
 }
@@ -23,8 +23,8 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
         match msg.signature.as_str() {
             "ifTrue:" => self.inline_if_true_or_if_false(msg, true),
             "ifFalse:" => self.inline_if_true_or_if_false(msg, false),
-            "whileTrue:" => self.inline_while(msg, true),
-            "whileFalse:" => self.inline_while(msg, false),
+            // "whileTrue:" => self.inline_while(msg, true),
+            // "whileFalse:" => self.inline_while(msg, false),
             _ => None,
         }
     }
@@ -76,6 +76,8 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                     0 => {
                         let nbr_args_in_target_scope = self.scopes.iter().nth_back(1).unwrap().get_nbr_args();
                         // let nbr_args_in_target_scope = self.get_nbr_args_in_scope_post_inlining(1);
+                        // todo for future me: the fact that this get_nbr_args_in_scope_post_inlining didn't work makes me think my implem for this and the local vars isn't 100% correct.
+                        
                         match expression {
                             Expression::ArgRead(_, idx) => AstExpression::ArgRead(0, idx + nbr_args_in_target_scope),
                             Expression::ArgWrite(_, idx, expr) => AstExpression::ArgWrite(0, idx + nbr_args_in_target_scope, Box::new(self.get_inline_expression(expr)?)),
@@ -154,7 +156,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
 
         let exprs: Vec<AstExpression> = blk.body.exprs.iter()
             .filter_map(|og_expr| {
-                self.get_inline_expression_for_adapted_block(og_expr)
+                self.adapt_expr_from_inlining(og_expr)
             }).collect();
 
         let (nbr_params, nbr_locals) = {
@@ -173,47 +175,65 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
         adapted_inner_block
     }
 
-    fn get_inline_expression_for_adapted_block(&mut self, og_expr: &Expression) -> Option<AstExpression> {
+    fn adapt_expr_from_inlining(&mut self, og_expr: &Expression) -> Option<AstExpression> {
         let new_expr = match og_expr {
-            Expression::NonLocalVarRead(up_idx, _) | Expression::NonLocalVarWrite(up_idx, _, _)
-            | Expression::ArgRead(up_idx, _) | Expression::ArgWrite(up_idx, _, _) | Expression::Exit(_, up_idx) => {
-                let new_up_idx = match up_idx {
-                    0 => 0,
-                    _ => up_idx - self.scopes.iter().rev().take(*up_idx).filter(|e| e.is_getting_inlined).count() // minus the number of inlined scopes in between the current scope and the target var
-                };
-
-                // todo also the idx be adjusted depending on the amount of inlined variables in the block, IF the target block is an inline target
-
+            // Expression::NonLocalVarRead(up_idx, _) | Expression::NonLocalVarWrite(up_idx, _, _)
+            // | Expression::ArgRead(up_idx, _) | Expression::ArgWrite(up_idx, _, _) => {
+            //     let new_up_idx = match up_idx {
+            //         0 => 0,
+            //         _ => up_idx - self.scopes.iter().rev().take(*up_idx).filter(|e| e.is_getting_inlined).count() // minus the number of inlined scopes in between the current scope and the target var
+            //     };
+            // 
+            //     match og_expr {
+            //         Expression::NonLocalVarRead(_, idx) => {
+            //             match new_up_idx {
+            //                 0 => AstExpression::LocalVarRead(*idx),
+            //                 _ => AstExpression::NonLocalVarRead(new_up_idx, *idx),
+            //             }
+            //         }
+            //         Expression::NonLocalVarWrite(_, idx, expr) => {
+            //             let new_expr = Box::new(self.adapt_expr_from_inlining(expr)?);
+            //             match new_up_idx {
+            //                 0 => AstExpression::LocalVarWrite(*idx, new_expr),
+            //                 _ => AstExpression::NonLocalVarWrite(new_up_idx, *idx, new_expr),
+            //             }
+            //         }
+            //         Expression::ArgRead(_, idx) => { AstExpression::ArgRead(new_up_idx, *idx) }
+            //         Expression::ArgWrite(_, idx, expr) => {
+            //             let new_expr = Box::new(self.adapt_expr_from_inlining(expr)?);
+            //             AstExpression::ArgWrite(new_up_idx, *idx, new_expr)
+            //         }
+            //         _ => unreachable!(),
+            //     }
+            // }
+            Expression::NonLocalVarRead(up_idx, idx) | Expression::NonLocalVarWrite(up_idx, idx, _) => {
+                let (new_up_idx, new_idx) = self.adapt_var_coords_from_inlining(*up_idx, *idx);
+                debug_assert_ne!(new_up_idx, 0);
+                
                 match og_expr {
-                    Expression::NonLocalVarRead(_, idx) => {
-                        match new_up_idx {
-                            0 => AstExpression::LocalVarRead(*idx),
-                            _ => AstExpression::NonLocalVarRead(new_up_idx, *idx),
-                        }
-                    }
-                    Expression::NonLocalVarWrite(_, idx, expr) => {
-                        let new_expr = Box::new(self.get_inline_expression_for_adapted_block(expr)?);
-                        match new_up_idx {
-                            0 => AstExpression::LocalVarWrite(*idx, new_expr),
-                            _ => AstExpression::NonLocalVarWrite(new_up_idx, *idx, new_expr),
-                        }
-                    }
-                    Expression::ArgRead(_, idx) => { AstExpression::ArgRead(new_up_idx, *idx) }
-                    Expression::ArgWrite(_, idx, expr) => {
-                        let new_expr = Box::new(self.get_inline_expression_for_adapted_block(expr)?);
-                        AstExpression::ArgWrite(new_up_idx, *idx, new_expr)
-                    }
-                    Expression::Exit(expr, _) => {
-                        AstExpression::Exit(Box::new(self.get_inline_expression_for_adapted_block(expr)?), new_up_idx)
-                    }
-                    _ => unreachable!(),
+                    Expression::NonLocalVarRead(..) => AstExpression::NonLocalVarRead(new_up_idx, new_idx),
+                    Expression::NonLocalVarWrite(.., expr) => AstExpression::NonLocalVarWrite(new_up_idx, new_idx, Box::new(self.adapt_expr_from_inlining(expr)?)),
+                    _ => unreachable!()
                 }
             }
+            Expression::ArgRead(up_idx, idx) | Expression::ArgWrite(up_idx, idx, _) => {
+                let (new_up_idx, new_idx) = self.adapt_arg_coords_from_inlining(*up_idx, *idx);
+
+                match og_expr {
+                    Expression::ArgRead(..) => AstExpression::ArgRead(new_up_idx, new_idx),
+                    Expression::ArgWrite(.., expr) => AstExpression::ArgWrite(new_up_idx, new_idx, Box::new(self.adapt_expr_from_inlining(expr)?)),
+                    _ => unreachable!()
+                }
+            },
+            Expression::Exit(expr, up_idx) => {
+                let new_up_idx = up_idx - self.scopes.iter().rev().take(*up_idx).filter(|e| e.is_getting_inlined).count();
+                AstExpression::Exit(Box::new(self.adapt_expr_from_inlining(expr)?), new_up_idx)
+            }
             Expression::FieldWrite(idx, expr) => {
-                AstExpression::FieldWrite(*idx, Box::new(self.get_inline_expression_for_adapted_block(expr)?))
+                AstExpression::FieldWrite(*idx, Box::new(self.adapt_expr_from_inlining(expr)?))
             }
             Expression::LocalVarWrite(idx, expr) => {
-                AstExpression::LocalVarWrite(*idx, Box::new(self.get_inline_expression_for_adapted_block(expr)?))
+                AstExpression::LocalVarWrite(*idx, Box::new(self.adapt_expr_from_inlining(expr)?))
             }
             Expression::Block(blk) => {
                 let new_block = self.adapt_block_after_outer_inlined(blk)?;
@@ -224,9 +244,9 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                     AstExpression::InlinedCall(Box::new(inlined_method))
                 } else {
                     AstExpression::Message(Box::new(AstMessage {
-                        receiver: self.get_inline_expression_for_adapted_block(&msg.receiver)?,
+                        receiver: self.adapt_expr_from_inlining(&msg.receiver)?,
                         signature: msg.signature.clone(),
-                        values: msg.values.iter().filter_map(|e| self.get_inline_expression_for_adapted_block(e)).collect(),
+                        values: msg.values.iter().filter_map(|e| self.adapt_expr_from_inlining(e)).collect(),
                     }))
                 }
             }
@@ -235,14 +255,14 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                     receiver_name: super_msg.receiver_name.clone(),
                     is_static_class_call: super_msg.is_static_class_call,
                     signature: super_msg.signature.clone(),
-                    values: super_msg.values.iter().filter_map(|e| self.get_inline_expression_for_adapted_block(e)).collect(),
+                    values: super_msg.values.iter().filter_map(|e| self.adapt_expr_from_inlining(e)).collect(),
                 }))
             }
             Expression::BinaryOp(bin_op) => {
                 AstExpression::BinaryOp(Box::new(AstBinaryOp {
                     op: bin_op.op.clone(),
-                    lhs: self.get_inline_expression_for_adapted_block(&bin_op.lhs)?,
-                    rhs: self.get_inline_expression_for_adapted_block(&bin_op.rhs)?,
+                    lhs: self.adapt_expr_from_inlining(&bin_op.lhs)?,
+                    rhs: self.adapt_expr_from_inlining(&bin_op.rhs)?,
                 }))
             }
             Expression::GlobalRead(_) |
