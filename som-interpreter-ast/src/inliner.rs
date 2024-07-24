@@ -6,6 +6,7 @@ use som_core::ast::{Block, Expression};
 use crate::ast::{AstBinaryOp, AstBlock, AstBody, AstExpression, AstMessage, AstSuperMessage, InlinedNode};
 use crate::compiler::{AstMethodCompilerCtxt, AstScopeCtxt};
 use crate::specialized::if_inlined_node::IfInlinedNode;
+use crate::specialized::while_inlined_node::WhileInlinedNode;
 
 pub trait PrimMessageInliner {
     fn inline_if_possible(&mut self, msg: &ast::Message) -> Option<InlinedNode>;
@@ -14,6 +15,7 @@ pub trait PrimMessageInliner {
     fn adapt_block_after_outer_inlined(&mut self, blk: &Rc<Block>) -> Option<AstBlock>;
     fn get_inline_expression_for_adapted_block(&mut self, expression: &Expression) -> Option<AstExpression>;
     fn inline_if_true_or_if_false(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode>;
+    fn inline_while(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode>;
 }
 
 impl PrimMessageInliner for AstMethodCompilerCtxt {
@@ -21,6 +23,8 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
         match msg.signature.as_str() {
             "ifTrue:" => self.inline_if_true_or_if_false(msg, true),
             "ifFalse:" => self.inline_if_true_or_if_false(msg, false),
+            "whileTrue:" => self.inline_while(msg, true),
+            "whileFalse:" => self.inline_while(msg, false),
             _ => None,
         }
     }
@@ -32,7 +36,8 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                 AstExpression::Block(Rc::new(new_blk))
             }
             Expression::LocalVarRead(..) | Expression::LocalVarWrite(..) | Expression::NonLocalVarRead(..) | Expression::NonLocalVarWrite(..) => {
-                let nbr_locals_in_target_scope = self.scopes.iter().nth_back(1).unwrap().get_nbr_locals();
+                // let nbr_locals_in_target_scope = self.scopes.iter().nth_back(1).unwrap().get_nbr_locals();
+                let nbr_locals_in_target_scope = self.get_nbr_locals_in_scope_post_inlining(1);
 
                 match expression {
                     Expression::LocalVarRead(idx) => AstExpression::LocalVarRead(idx + nbr_locals_in_target_scope),
@@ -70,6 +75,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                 match up_idx {
                     0 => {
                         let nbr_args_in_target_scope = self.scopes.iter().nth_back(1).unwrap().get_nbr_args();
+                        // let nbr_args_in_target_scope = self.get_nbr_args_in_scope_post_inlining(1);
                         match expression {
                             Expression::ArgRead(_, idx) => AstExpression::ArgRead(0, idx + nbr_args_in_target_scope),
                             Expression::ArgWrite(_, idx, expr) => AstExpression::ArgWrite(0, idx + nbr_args_in_target_scope, Box::new(self.get_inline_expression(expr)?)),
@@ -273,5 +279,23 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
         // println!("{}", &if_inlined_node.body_instrs);
 
         Some(InlinedNode::IfInlined(if_inlined_node))
+    }
+
+    fn inline_while(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode> {
+        let (cond_blk, body_blk) = match (&msg.receiver, msg.values.first()) {
+            (Expression::Block(cond_blk), Some(Expression::Block(body_blk))) => (cond_blk, body_blk),
+            _ => return None
+        };
+
+        let while_inlined_node = WhileInlinedNode {
+            expected_bool,
+            cond_instrs: self.inline_block(cond_blk)?,
+            body_instrs: self.inline_block(body_blk)?,
+        };
+
+        // dbg!(&msg);
+        // println!("{}", &if_inlined_node.body_instrs);
+
+        Some(InlinedNode::WhileInlined(while_inlined_node))
     }
 }

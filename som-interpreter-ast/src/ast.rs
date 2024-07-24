@@ -2,11 +2,13 @@ use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 use indenter::indented;
 use crate::specialized::if_inlined_node::IfInlinedNode;
+use crate::specialized::while_inlined_node::WhileInlinedNode;
 use std::fmt::Write;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum InlinedNode {
-    IfInlined(IfInlinedNode)
+    IfInlined(IfInlinedNode),
+    WhileInlined(WhileInlinedNode)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -195,6 +197,7 @@ impl Display for AstExpression {
             }
             AstExpression::InlinedCall(inlined_node) => match inlined_node.as_ref() {
                 InlinedNode::IfInlined(node) => writeln!(f, "{}", node),
+                InlinedNode::WhileInlined(node) => writeln!(f, "{}", node),
             },
         }
     }

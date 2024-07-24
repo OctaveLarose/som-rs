@@ -10,6 +10,34 @@ pub struct AstMethodCompilerCtxt {
     pub scopes: Vec<AstScopeCtxt>
 }
 
+impl AstMethodCompilerCtxt {
+    pub(crate) fn get_nbr_locals_in_scope_post_inlining(&self, idx: usize) -> usize {
+        let mut scope_iter = self.scopes.iter();
+        let mut inline_scope_target = scope_iter.nth_back(idx);
+        let mut nbr_locals_in_target_scope = inline_scope_target.unwrap().get_nbr_locals();
+
+        while inline_scope_target.unwrap().is_getting_inlined {
+            inline_scope_target = scope_iter.next_back();
+            nbr_locals_in_target_scope += inline_scope_target.unwrap().get_nbr_locals();
+        }
+
+        nbr_locals_in_target_scope
+    }
+
+    pub(crate) fn get_nbr_args_in_scope_post_inlining(&self, idx: usize) -> usize {
+        let mut scope_iter = self.scopes.iter();
+        let mut inline_scope_target = scope_iter.nth_back(idx);
+        let mut nbr_locals_in_target_scope = inline_scope_target.unwrap().get_nbr_args();
+
+        while inline_scope_target.unwrap().is_getting_inlined {
+            inline_scope_target = scope_iter.next_back();
+            nbr_locals_in_target_scope += inline_scope_target.unwrap().get_nbr_args();
+        }
+
+        nbr_locals_in_target_scope
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct AstScopeCtxt {
     nbr_args: usize,

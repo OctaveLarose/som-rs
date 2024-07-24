@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use som_core::ast;
-use crate::ast::{AstBinaryOp, AstBlock, AstBody, AstExpression, AstMessage, AstMethodBody, AstMethodDef, AstSuperMessage, AstTerm};
+use crate::ast::{AstBinaryOp, AstBlock, AstBody, AstExpression, AstMessage, AstMethodBody, AstMethodDef, AstSuperMessage, AstTerm, InlinedNode};
 use crate::ast::InlinedNode::IfInlined;
 
 use crate::block::Block;
@@ -102,7 +102,8 @@ impl Evaluate for AstExpression {
             Self::SuperMessage(msg) => msg.evaluate(universe),
             Self::InlinedCall(inlined_node) => {
                 match inlined_node.as_ref() {
-                    IfInlined(if_inlined) => if_inlined.evaluate(universe) 
+                    IfInlined(if_inlined) => if_inlined.evaluate(universe),
+                    InlinedNode::WhileInlined(while_inlined) => while_inlined.evaluate(universe)
                 }
             }
         }
