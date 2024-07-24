@@ -112,14 +112,14 @@ fn basic_interpreter_tests() {
             "BlockInlining testOneLevelInliningWithLocalShadowFalse",
             Value::Integer(1),
         ),
-        // ( // todo REACTIVATE
-        //     "BlockInlining testShadowDoesntStoreWrongLocal",
-        //     Value::Integer(33),
-        // ),
-        // (
-        //     "BlockInlining testShadowDoesntReadUnrelated",
-        //     Value::Class(universe.nil_class()),
-        // ),
+        (
+            "BlockInlining testShadowDoesntStoreWrongLocal",
+            Value::Integer(33),
+        ),
+        (
+            "BlockInlining testShadowDoesntReadUnrelated",
+            Value::Class(universe.nil_class()),
+        ),
         ("BlockInlining testBlockNestedInIfTrue", Value::Integer(2)),
         ("BlockInlining testBlockNestedInIfFalse", Value::Integer(42)),
         ("BlockInlining testStackDisciplineTrue", Value::Integer(1)),

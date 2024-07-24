@@ -24,52 +24,77 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
             _ => None,
         }
     }
-    
-    fn get_inline_expression(&mut self, expression: &Expression) -> Option<AstExpression> {
-        let adjust_scope_by = self.scopes.iter().filter(|e| e.is_getting_inlined).count();
 
+    fn get_inline_expression(&mut self, expression: &Expression) -> Option<AstExpression> {
         let expr = match expression {
             Expression::Block(blk) => {
                 let new_blk = self.adapt_block_after_outer_inlined(blk)?;
                 AstExpression::Block(Rc::new(new_blk))
             }
-            // Expression::LocalVarRead(idx) => AstExpression::LocalVarRead(idx + nbr_of_locals_pre_inlining),
-            Expression::LocalVarRead(idx) => AstExpression::LocalVarRead(*idx),
-            Expression::LocalVarWrite(idx, expr) => {
-                // AstExpression::LocalVarWrite(idx + nbr_of_locals_pre_inlining, Box::new(self.get_inline_expression(expr)?))
-                AstExpression::LocalVarWrite(*idx, Box::new(self.get_inline_expression(expr)?))
+            Expression::LocalVarRead(..) | Expression::LocalVarWrite(..) | Expression::NonLocalVarRead(..) | Expression::NonLocalVarWrite(..) => {
+                let nbr_locals_in_target_scope = self.scopes.iter().nth_back(1).unwrap().get_nbr_locals();
+
+                match expression {
+                    Expression::LocalVarRead(idx) => AstExpression::LocalVarRead(idx + nbr_locals_in_target_scope),
+                    Expression::LocalVarWrite(idx, expr) => {
+                        AstExpression::LocalVarWrite(idx + nbr_locals_in_target_scope, Box::new(self.get_inline_expression(expr)?))
+                    }
+                    Expression::NonLocalVarRead(up_idx, ..) | Expression::NonLocalVarWrite(up_idx, ..) => {
+                        let new_up_idx = match up_idx {
+                            0 => 0,
+                            1 => 0,
+                            _ => up_idx - self.scopes.iter().rev().take(*up_idx).filter(|e| e.is_getting_inlined).count() // minus the number of inlined scopes in between the current scope and the target var
+                        };
+
+                        match new_up_idx {
+                            0 => {
+                                match expression {
+                                    Expression::NonLocalVarRead(.., idx) => AstExpression::LocalVarRead(*idx),
+                                    Expression::NonLocalVarWrite(_, idx, expr) => AstExpression::LocalVarWrite(*idx, Box::new(self.get_inline_expression(expr)?)),
+                                    _ => unreachable!()
+                                }
+                            }
+                            _ => {
+                                match expression {
+                                    Expression::NonLocalVarRead(.., idx) => AstExpression::NonLocalVarRead(new_up_idx, *idx),
+                                    Expression::NonLocalVarWrite(_, idx, expr) => AstExpression::NonLocalVarWrite(new_up_idx, *idx, Box::new(self.get_inline_expression(expr)?)),
+                                    _ => unreachable!()
+                                }
+                            }
+                        }
+                    }
+                    _ => unreachable!()
+                }
             }
-            Expression::NonLocalVarRead(scope, idx) => {
-                match *scope {
-                    1 => AstExpression::LocalVarRead(*idx), // todo this guy shouldn't be the only one to be special-cased. the logic needs to be generalized
+            Expression::ArgRead(up_idx, _) | Expression::ArgWrite(up_idx, _, _) => {
+                match up_idx {
+                    0 => {
+                        let nbr_args_in_target_scope = self.scopes.iter().nth_back(1).unwrap().get_nbr_args();
+                        match expression {
+                            Expression::ArgRead(_, idx) => AstExpression::ArgRead(0, idx + nbr_args_in_target_scope),
+                            Expression::ArgWrite(_, idx, expr) => AstExpression::ArgWrite(0, idx + nbr_args_in_target_scope, Box::new(self.get_inline_expression(expr)?)),
+                            _ => unreachable!()
+                        }
+                    }
                     _ => {
-                        match *scope - adjust_scope_by {
-                            0 => AstExpression::LocalVarRead(*idx),
-                            new_scope => AstExpression::NonLocalVarRead(new_scope, *idx),
+                        let new_up_idx = match up_idx {
+                            0 => 0,
+                            1 => 0,
+                            _ => up_idx - self.scopes.iter().rev().take(*up_idx).filter(|e| e.is_getting_inlined).count()
+                        };
+
+                        match expression {
+                            Expression::ArgRead(_, idx) => AstExpression::ArgRead(new_up_idx, *idx),
+                            Expression::ArgWrite(_, idx, expr) => AstExpression::ArgWrite(new_up_idx, *idx, Box::new(self.get_inline_expression(expr)?)),
+                            _ => unreachable!()
                         }
                     }
                 }
             }
-            Expression::NonLocalVarWrite(scope, idx, expr) => {
-                let ast_expr = Box::new(self.get_inline_expression(expr)?);
-                match *scope - adjust_scope_by {
-                    0 => AstExpression::LocalVarWrite(*idx, ast_expr),
-                    _ => AstExpression::NonLocalVarWrite(*scope - adjust_scope_by, *idx, ast_expr)
-                }
-            }
-            Expression::ArgRead(scope, idx) => {
-                match *scope {
-                    x if x < adjust_scope_by => AstExpression::ArgRead(*scope, *idx), // todo eeehhhhh... sure?
-                    // 0 => AstExpression::ArgRead(0, *idx + nbr_of_args_pre_inlining),
-                    _ => AstExpression::ArgRead(*scope - adjust_scope_by, *idx)
-                }
-            }
-            Expression::ArgWrite(scope, idx, expr) => {
-                let ast_expr = Box::new(self.get_inline_expression(expr)?);
-                match *scope {
-                    0 => unreachable!("we're writing to self or blockself?"),
-                    _ => AstExpression::ArgWrite(*scope - adjust_scope_by, *idx, ast_expr)
-                }
+            Expression::Exit(expr, scope) => {
+                let inline_expr = self.get_inline_expression(expr)?;
+                let adjust_scope_by = self.scopes.iter().rev().take(*scope).filter(|e| e.is_getting_inlined).count();
+                AstExpression::Exit(Box::new(inline_expr), scope - adjust_scope_by)
             }
             Expression::GlobalRead(a) => AstExpression::GlobalRead(a.clone()),
             Expression::FieldRead(idx) => AstExpression::FieldRead(*idx),
@@ -98,10 +123,6 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
                     lhs: self.get_inline_expression(&bin_op.lhs)?,
                     rhs: self.get_inline_expression(&bin_op.rhs)?,
                 }))
-            }
-            Expression::Exit(expr, scope) => {
-                let inline_expr = self.get_inline_expression(expr)?;
-                AstExpression::Exit(Box::new(inline_expr), scope - adjust_scope_by)
             }
             Expression::Literal(lit) => AstExpression::Literal(lit.clone()),
         };
