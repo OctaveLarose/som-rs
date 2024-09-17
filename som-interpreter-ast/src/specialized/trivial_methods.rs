@@ -16,7 +16,7 @@ pub struct TrivialGlobalMethod {
 }
 
 impl Evaluate for TrivialGlobalMethod {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         let name = self.global_name.as_str();
         // todo logic duplicated with globalread - need to avoid that
         universe.lookup_global(name)
@@ -36,7 +36,7 @@ pub struct TrivialGetterMethod {
 }
 
 impl Invoke for TrivialGetterMethod {
-    fn invoke(&self, _: &mut UniverseAST, args: Vec<Value>) -> Return {
+    fn invoke(&mut self, _: &mut UniverseAST, args: Vec<Value>) -> Return {
         match args.first().unwrap() {
             Value::Class(cls) => Return::Local(cls.borrow().class().borrow().lookup_field(self.field_idx)),
             Value::Instance(instance) => Return::Local(instance.borrow().lookup_local(self.field_idx)),
@@ -51,7 +51,7 @@ pub struct TrivialSetterMethod {
 }
 
 impl Invoke for TrivialSetterMethod {
-    fn invoke(&self, _: &mut UniverseAST, args: Vec<Value>) -> Return {
+    fn invoke(&mut self, _: &mut UniverseAST, args: Vec<Value>) -> Return {
         let val = args.get(1).unwrap();
         match args.first().unwrap() {
             Value::Class(cls) => {

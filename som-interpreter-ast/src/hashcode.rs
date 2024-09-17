@@ -53,7 +53,7 @@ impl Hash for Value {
             }
             Value::Block(value) => {
                 hasher.write(b"#blk#");
-                value.hash(hasher);
+                value.borrow().hash(hasher);
             }
             Value::Class(value) => {
                 hasher.write(b"#cls#");
@@ -65,7 +65,7 @@ impl Hash for Value {
             }
             Value::Invokable(value) => {
                 hasher.write(b"#mthd#");
-                value.hash(hasher);
+                value.borrow().hash(hasher);
             },
         }
     }

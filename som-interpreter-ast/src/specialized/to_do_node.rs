@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 use crate::block::Block;
 use crate::evaluate::Evaluate;
@@ -9,7 +10,7 @@ use crate::value::Value;
 pub struct ToDoNode {}
 
 impl Invoke for ToDoNode {
-    fn invoke(&self, universe: &mut UniverseAST, args: Vec<Value>) -> Return {
+    fn invoke(&mut self, universe: &mut UniverseAST, args: Vec<Value>) -> Return {
         let start_int_val = args.first().unwrap();
         let end_int_val = args.get(1).unwrap();
         let body_block_val = args.get(2).unwrap();
@@ -23,24 +24,25 @@ impl Invoke for ToDoNode {
 }
 
 impl ToDoNode {
-    fn do_int_loop(start_int: i64, end_int: i64, body_block: Rc<Block>, universe: &mut UniverseAST) -> Return {
+    fn do_int_loop(start_int: i64, end_int: i64, body_block: Rc<RefCell<Block>>, universe: &mut UniverseAST) -> Return {
+        let nbr_locals = body_block.borrow().block.borrow().nbr_locals;
         for i in start_int..=end_int {
             propagate!(universe.with_frame(
-                body_block.block.nbr_locals,
+                nbr_locals,
                 vec![Value::Block(Rc::clone(&body_block)), Value::Integer(i)],
-                |universe| body_block.evaluate(universe),
+                |universe| body_block.borrow_mut().evaluate(universe),
             ));
         }
         Return::Local(Value::Integer(start_int))
     }
 
-    fn do_double_loop(start_double: f64, end_double: f64, body_block: Rc<Block>, universe: &mut UniverseAST) -> Return {
+    fn do_double_loop(start_double: f64, end_double: f64, body_block: Rc<RefCell<Block>>, universe: &mut UniverseAST) -> Return {
         let mut i = start_double;
         while i <= end_double {
             propagate!(universe.with_frame(
-                body_block.block.nbr_locals,
+                body_block.borrow().block.borrow().nbr_locals,
                 vec![Value::Block(Rc::clone(&body_block)), Value::Double(i)],
-                |universe| body_block.evaluate(universe),
+                |universe| body_block.borrow_mut().evaluate(universe),
             ));
             i += 1.0
         }

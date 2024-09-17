@@ -22,15 +22,15 @@ pub enum Return {
 /// The trait for invoking methods and primitives.
 pub trait Invoke {
     /// Invoke within the given universe and with the given arguments.
-    fn invoke(&self, universe: &mut UniverseAST, args: Vec<Value>) -> Return;
+    fn invoke(&mut self, universe: &mut UniverseAST, args: Vec<Value>) -> Return;
 }
 
 impl Invoke for Method {
-    fn invoke(&self, universe: &mut UniverseAST, args: Vec<Value>) -> Return {
+    fn invoke(&mut self, universe: &mut UniverseAST, args: Vec<Value>) -> Return {
         // println!("--- Invoking \"{:1}\" ({:2})", &self.signature, &self.holder.upgrade().unwrap().borrow().name);
         // println!("--- ...with args: {:?}", &args);
 
-        match self.kind() {
+        match &mut self.kind {
             MethodKind::Defined(method) => {
                 universe.with_frame(
                     method.locals_nbr,

@@ -64,7 +64,7 @@ impl Frame {
     /// Get the self value for this frame.
     pub fn get_self(&self) -> Value {
         match self.params.first().unwrap() {
-            Value::Block(b) => b.frame.borrow().get_self(),
+            Value::Block(b) => b.borrow().frame.borrow().get_self(),
             s => s.clone()
         }
     }
@@ -155,14 +155,14 @@ impl Frame {
     pub fn nth_frame_back(&self, n: usize) -> SOMRef<Frame> {
         let mut target_frame: Rc<RefCell<Frame>> = match self.params.first().unwrap() { // todo optimize that also
             Value::Block(block) => {
-                Rc::clone(&block.frame)
+                Rc::clone(&block.borrow().frame)
             }
             v => panic!("attempting to access a non local var/arg from a method instead of a block: self wasn't blockself but {:?}.", v)
         };
         for _ in 1..n {
             target_frame = match Rc::clone(&target_frame).borrow().params.first().unwrap() {
                 Value::Block(block) => {
-                    Rc::clone(&block.frame)
+                    Rc::clone(&block.borrow().frame)
                 }
                 v => panic!("attempting to access a non local var/arg from a method instead of a block (but the original frame we were in was a block): self wasn't blockself but {:?}.", v)
             };
@@ -173,7 +173,7 @@ impl Frame {
         /// Get the method invocation frame for that frame.
     pub fn method_frame(frame: &SOMRef<Frame>) -> SOMRef<Frame> {
         if let Value::Block(b) = frame.borrow().params.first().unwrap() {
-            Frame::method_frame(&b.frame)
+            Frame::method_frame(&b.borrow().frame)
         } else {
             Rc::clone(frame)
         }

@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use som_core::ast;
@@ -156,7 +157,7 @@ impl AstMethodCompilerCtxt {
                 }
             }
             Expression::Literal(a) => AstExpression::Literal(a),
-            Expression::Block(a) => AstExpression::Block(Rc::new(self.parse_block(&a)))
+            Expression::Block(a) => AstExpression::Block(Rc::new(RefCell::new(self.parse_block(&a))))
         }
     }
 

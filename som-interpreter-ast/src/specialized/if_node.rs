@@ -11,7 +11,7 @@ pub struct IfNode {
 }
 
 impl Invoke for IfNode {
-    fn invoke(&self, universe: &mut UniverseAST, args: Vec<Value>) -> Return {
+    fn invoke(&mut self, universe: &mut UniverseAST, args: Vec<Value>) -> Return {
         let cond_block_val = unsafe { args.get_unchecked(0) };
         let body_block_arg = unsafe { args.get_unchecked(1) };
 
@@ -20,7 +20,7 @@ impl Invoke for IfNode {
             (a, b) => panic!("if[True|False] was not given a bool and a block as arguments, but {:?} and {:?}", a, b)
         };
 
-        let nbr_locals = body_block.block.nbr_locals;
+        let nbr_locals = body_block.borrow().block.borrow().nbr_locals;
 
         if bool_val != self.expected_bool {
             Return::Local(Nil)
@@ -28,7 +28,7 @@ impl Invoke for IfNode {
             universe.with_frame(
                 nbr_locals,
                 vec![Value::Block(Rc::clone(&body_block))],
-                |universe| body_block.evaluate(universe),
+                |universe| body_block.borrow_mut().evaluate(universe),
             )
         }
     }

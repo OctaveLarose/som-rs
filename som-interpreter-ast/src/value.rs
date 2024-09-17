@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
@@ -33,13 +34,13 @@ pub enum Value {
     /// An array of values.
     Array(SOMRef<Vec<Self>>),
     /// A block value, ready to be evaluated.
-    Block(Rc<Block>),
+    Block(Rc<RefCell<Block>>),
     /// A generic (non-primitive) class instance.
     Instance(SOMRef<Instance>),
     /// A bare class object.
     Class(SOMRef<Class>),
     /// A bare invokable.
-    Invokable(Rc<Method>),
+    Invokable(Rc<RefCell<Method>>),
 }
 
 impl Value {
@@ -56,10 +57,10 @@ impl Value {
             Self::Symbol(_) => universe.symbol_class(),
             Self::String(_) => universe.string_class(),
             Self::Array(_) => universe.array_class(),
-            Self::Block(block) => block.class(universe),
+            Self::Block(block) => block.borrow().class(universe),
             Self::Instance(instance) => instance.borrow().class(),
             Self::Class(class) => class.borrow().class(),
-            Self::Invokable(invokable) => invokable.class(universe),
+            Self::Invokable(invokable) => invokable.borrow().class(universe),
         }
     }
 
@@ -68,7 +69,7 @@ impl Value {
         &self,
         universe: &UniverseAST,
         signature: impl AsRef<str>,
-    ) -> Option<Rc<Method>> {
+    ) -> Option<Rc<RefCell<Method>>> {
         self.class(universe).borrow().lookup_method(signature)
     }
 
@@ -99,17 +100,18 @@ impl Value {
                     .collect();
                 format!("#({})", strings.join(" "))
             }
-            Self::Block(block) => format!("instance of Block{}", block.nb_parameters() + 1),
+            Self::Block(block) => format!("instance of Block{}", block.borrow().nb_parameters() + 1),
             Self::Instance(instance) => format!(
                 "instance of {} class",
                 instance.borrow().class().borrow().name(),
             ),
             Self::Class(class) => class.borrow().name().to_string(),
             Self::Invokable(invokable) => invokable
+                .borrow()
                 .holder()
                 .upgrade()
-                .map(|holder| format!("{}>>#{}", holder.borrow().name(), invokable.signature()))
-                .unwrap_or_else(|| format!("??>>#{}", invokable.signature())),
+                .map(|holder| format!("{}>>#{}", holder.borrow().name(), invokable.borrow().signature()))
+                .unwrap_or_else(|| format!("??>>#{}", invokable.borrow().signature())),
         }
     }
 }
@@ -157,10 +159,11 @@ impl fmt::Debug for Value {
             Self::Class(val) => f.debug_tuple("Class").field(&val.borrow()).finish(),
             Self::Invokable(val) => {
                 let signature = val
+                    .borrow()
                     .holder()
                     .upgrade()
-                    .map(|holder| format!("{}>>#{}", holder.borrow().name(), val.signature()))
-                    .unwrap_or_else(|| format!("??>>#{}", val.signature()));
+                    .map(|holder| format!("{}>>#{}", holder.borrow().name(), val.borrow().signature()))
+                    .unwrap_or_else(|| format!("??>>#{}", val.borrow().signature()));
                 f.debug_tuple("Invokable").field(&signature).finish()
             },
         }

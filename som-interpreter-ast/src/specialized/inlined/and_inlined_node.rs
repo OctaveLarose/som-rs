@@ -24,7 +24,7 @@ impl Display for AndInlinedNode {
 }
 
 impl Evaluate for AndInlinedNode {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         let first_result = propagate!(self.first.evaluate(universe));
         match first_result {
             Value::Boolean(false) => Return::Local(first_result),

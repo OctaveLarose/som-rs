@@ -24,7 +24,7 @@ impl Display for OrInlinedNode {
 }
 
 impl Evaluate for OrInlinedNode {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         let first_result = propagate!(self.first.evaluate(universe));
         match first_result {
             Value::Boolean(true) => Return::Local(first_result),

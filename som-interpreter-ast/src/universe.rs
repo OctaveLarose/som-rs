@@ -532,10 +532,11 @@ impl UniverseAST {
 
 impl UniverseAST {
     /// Call `escapedBlock:` on the given value, if it is defined.
-    pub fn escaped_block(&mut self, value: Value, block: Rc<Block>) -> Option<Return> {
+    pub fn escaped_block(&mut self, value: Value, block: Rc<RefCell<Block>>) -> Option<Return> {
         let initialize = value.lookup_method(self, "escapedBlock:")?;
 
-        Some(initialize.invoke(self, vec![value, Value::Block(block)]))
+        let x = Some(initialize.borrow_mut().invoke(self, vec![value, Value::Block(block)]));
+        x
     }
 
     /// Call `doesNotUnderstand:` on the given value, if it is defined.
@@ -552,7 +553,8 @@ impl UniverseAST {
 
        // eprintln!("Couldn't invoke {}; exiting.", symbol.as_ref()); std::process::exit(1);
 
-        Some(initialize.invoke(self, vec![value, sym, args]))
+        let x = Some(initialize.borrow_mut().invoke(self, vec![value, sym, args]));
+        x
     }
 
     /// Call `unknownGlobal:` on the given value, if it is defined.
@@ -560,7 +562,7 @@ impl UniverseAST {
         let sym = self.intern_symbol(name.as_ref());
         let method = value.lookup_method(self, "unknownGlobal:")?;
 
-        match method.invoke(self, vec![value, Value::Symbol(sym)]) {
+        let x = match method.borrow_mut().invoke(self, vec![value, Value::Symbol(sym)]) {
             Return::Local(value) | Return::NonLocal(value, _) => Some(Return::Local(value)),
             Return::Exception(err) => Some(Return::Exception(format!(
                 "(from 'System>>#unknownGlobal:') {}",
@@ -569,7 +571,8 @@ impl UniverseAST {
             Return::Restart => Some(Return::Exception(
                 "(from 'System>>#unknownGlobal:') incorrectly asked for a restart".to_string(),
             )),
-        }
+        };
+        x
     }
 
     /// Call `System>>#initialize:` with the given name, if it is defined.
@@ -577,7 +580,8 @@ impl UniverseAST {
         let initialize = Value::System.lookup_method(self, "initialize:")?;
         let args = Value::Array(Rc::new(RefCell::new(args)));
 
-        Some(initialize.invoke(self, vec![Value::System, args]))
+        let x = Some(initialize.borrow_mut().invoke(self, vec![Value::System, args]));
+        x
     }
 }
 

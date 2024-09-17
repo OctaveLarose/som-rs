@@ -12,11 +12,11 @@ use crate::value::Value;
 /// The trait for evaluating AST nodes.
 pub trait Evaluate {
     /// Evaluate the node within a given universe.
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return;
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return;
 }
 
 impl Evaluate for AstExpression {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         match self {
             Self::LocalVarWrite(idx, expr) => {
                 // TODO: this doesn't call the fastest path for evaluate, still has to dispatch the right expr even though it's always a var write. potential minor speedup there
@@ -96,7 +96,7 @@ impl Evaluate for AstExpression {
             Self::GlobalRead(name) =>
                 match name.as_str() {
                     "super" => Return::Local(universe.current_frame().borrow().get_self()),
-                    _ => universe.lookup_global(name)
+                    _ => universe.lookup_global(name.as_str())
                         .map(Return::Local)
                         .or_else(|| {
                             let frame = universe.current_frame();
@@ -108,7 +108,7 @@ impl Evaluate for AstExpression {
             Self::Message(msg) => msg.evaluate(universe),
             Self::SuperMessage(msg) => msg.evaluate(universe),
             Self::InlinedCall(inlined_node) => {
-                match inlined_node.as_ref() {
+                match inlined_node.as_mut() {
                     InlinedNode::IfInlined(if_inlined) => if_inlined.evaluate(universe),
                     InlinedNode::IfTrueIfFalseInlined(if_true_if_false_inlined) => if_true_if_false_inlined.evaluate(universe),
                     InlinedNode::WhileInlined(while_inlined) => while_inlined.evaluate(universe),
@@ -121,8 +121,8 @@ impl Evaluate for AstExpression {
 }
 
 impl Evaluate for AstBinaryOp {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
-        let (lhs, invokable) = match &self.lhs {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
+        let (lhs, invokable) = match &mut self.lhs {
             AstExpression::GlobalRead(ident) if ident == "super" => {
                 let frame = universe.current_frame();
                 let lhs = frame.borrow().get_self();
@@ -154,7 +154,7 @@ impl Evaluate for AstBinaryOp {
         // );
 
         if let Some(invokable) = invokable {
-            invokable.invoke(universe, vec![lhs, rhs])
+            invokable.borrow_mut().invoke(universe, vec![lhs, rhs])
         } else {
             universe
                 .does_not_understand(lhs.clone(), &self.op, vec![rhs])
@@ -171,7 +171,7 @@ impl Evaluate for AstBinaryOp {
 }
 
 impl Evaluate for ast::Literal {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         match self {
             Self::Array(array) => {
                 let mut output = Vec::with_capacity(array.len());
@@ -194,28 +194,28 @@ impl Evaluate for ast::Literal {
 }
 
 impl Evaluate for AstTerm {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         self.body.evaluate(universe)
     }
 }
 
-impl Evaluate for Rc<AstBlock> {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
-        Return::Local(Value::Block(Rc::new(Block {
+impl Evaluate for Rc<RefCell<AstBlock>> {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
+        Return::Local(Value::Block(Rc::new(RefCell::new(Block {
             block: Rc::clone(self),
             frame: Rc::clone(universe.current_frame()),
-        })))
+        }))))
     }
 }
 
 impl Evaluate for AstMessage {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         let receiver = propagate!(self.receiver.evaluate(universe));
         let invokable = receiver.lookup_method(universe, &self.signature);
         let args = {
             let mut output = Vec::with_capacity(self.values.len() + 1);
             output.push(receiver.clone());
-            for expr in &self.values {
+            for expr in &mut self.values {
                 let value = propagate!(expr.evaluate(universe));
                 output.push(value);
             }
@@ -232,7 +232,7 @@ impl Evaluate for AstMessage {
         // println!("invoking {}>>#{}", receiver.class(universe).borrow().name(), self.signature);
 
         match invokable {
-            Some(invokable) => invokable.invoke(universe, args),
+            Some(invokable) => invokable.borrow_mut().invoke(universe, args),
             None => {
                 let mut args = args;
                 args.remove(0);
@@ -252,7 +252,7 @@ impl Evaluate for AstMessage {
 }
 
 impl Evaluate for AstSuperMessage {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         let super_class = match universe.lookup_global(&self.receiver_name) {
             Some(Value::Class(cls)) => {
                 match self.is_static_class_call {
@@ -269,7 +269,7 @@ impl Evaluate for AstSuperMessage {
         let args = {
             let mut output = Vec::with_capacity(self.values.len() + 1);
             output.push(receiver.clone());
-            for expr in &self.values {
+            for expr in &mut self.values {
                 let value = propagate!(expr.evaluate(universe));
                 output.push(value);
             }
@@ -277,7 +277,7 @@ impl Evaluate for AstSuperMessage {
         };
 
         let value = match invokable {
-            Some(invokable) => invokable.invoke(universe, args),
+            Some(invokable) => invokable.borrow_mut().invoke(universe, args),
             None => {
                 let mut args = args;
                 args.remove(0);
@@ -300,9 +300,9 @@ impl Evaluate for AstSuperMessage {
 
 
 impl Evaluate for AstBody {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         let mut last_value = Value::Nil;
-        for expr in &self.exprs {
+        for expr in &mut self.exprs {
             last_value = propagate!(expr.evaluate(universe));
         }
         Return::Local(last_value)
@@ -310,7 +310,7 @@ impl Evaluate for AstBody {
 }
 
 impl Evaluate for AstMethodDef {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         let current_frame = universe.current_frame().clone();
 
         loop {
@@ -331,7 +331,7 @@ impl Evaluate for AstMethodDef {
 }
 
 impl Evaluate for Block {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
-        self.block.body.evaluate(universe)
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
+        self.block.borrow_mut().body.evaluate(universe)
     }
 }

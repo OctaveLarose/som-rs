@@ -21,10 +21,11 @@ pub mod block1 {
             _ => panic!("Calling value: on a block... not on a block?")
         };
 
+        let nbr_locals = block.borrow().block.borrow().nbr_locals;
         universe.with_frame(
-            block.block.nbr_locals,
+            nbr_locals,
             args,
-            |universe| block.evaluate(universe),
+            |universe| block.borrow_mut().evaluate(universe),
         )
     }
 
@@ -68,10 +69,12 @@ pub mod block2 {
             _ => panic!("Calling value: on a block... not on a block?")
         };
 
+        let nbr_locals = block.borrow().block.borrow().nbr_locals;
+        
         universe.with_frame(
-            block.block.nbr_locals,
+            nbr_locals,
             args,
-            |universe| block.evaluate(universe),
+            |universe| block.borrow_mut().evaluate(universe),
         )
     }
 
@@ -107,10 +110,12 @@ pub mod block3 {
             _ => panic!("Calling value: on a block... not on a block?")
         };
 
+        let nbr_locals = block.borrow().block.borrow().nbr_locals;
+        
         universe.with_frame(
-            block.block.nbr_locals,
+            nbr_locals,
             args,
-            |universe| block.evaluate(universe),
+            |universe| block.borrow_mut().evaluate(universe),
         )
     }
 

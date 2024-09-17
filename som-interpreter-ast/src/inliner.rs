@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use som_core::ast;
@@ -44,7 +45,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt {
         let expr = match expression {
             Expression::Block(blk) => {
                 let new_blk = self.adapt_block_after_outer_inlined(blk)?;
-                AstExpression::Block(Rc::new(new_blk))
+                AstExpression::Block(Rc::new(RefCell::new(new_blk)))
             }
             Expression::LocalVarRead(idx) | Expression::LocalVarWrite(idx, _) |
             Expression::NonLocalVarRead(_, idx) | Expression::NonLocalVarWrite(_, idx, _) => {

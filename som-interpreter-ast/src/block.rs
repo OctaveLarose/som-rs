@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
@@ -14,7 +15,7 @@ pub struct Block {
     /// Reference to the captured stack frame.
     pub frame: SOMRef<Frame>,
     /// Block definition from the AST.
-    pub block: Rc<AstBlock>
+    pub block: Rc<RefCell<AstBlock>>
 }
 
 impl Block {
@@ -30,7 +31,7 @@ impl Block {
 
     /// Retrieve the number of parameters this block accepts.
     pub fn nb_parameters(&self) -> usize {
-        self.block.nbr_params
+        self.block.borrow().nbr_params
     }
 }
 

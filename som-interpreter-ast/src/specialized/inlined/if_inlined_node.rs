@@ -26,7 +26,7 @@ impl Display for IfInlinedNode {
 }
 
 impl Evaluate for IfInlinedNode {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         let cond_result = propagate!(self.cond_expr.evaluate(universe));
         if cond_result == Value::Boolean(self.expected_bool) {
             self.body_instrs.evaluate(universe)

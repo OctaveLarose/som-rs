@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 use indenter::indented;
@@ -40,7 +41,7 @@ pub enum AstExpression {
     LocalExit(Box<AstExpression>),
     NonLocalExit(Box<AstExpression>, usize),
     Literal(som_core::ast::Literal),
-    Block(Rc<AstBlock>), // Rc here, while it's not an Rc in the parser/som-core AST since BC doesn't need that same Rc.
+    Block(Rc<RefCell<AstBlock>>), // Rc here, while it's not an Rc in the parser/som-core AST since BC doesn't need that same Rc.
     /// Call to an inlined method node (no dispatching like a message would)
     InlinedCall(Box<InlinedNode>),
     // todo we might want a SEQUENCENODE of some kind. instead of relying on AstBody at all, actually.
@@ -184,7 +185,7 @@ impl Display for AstExpression {
             AstExpression::Literal(literal) => writeln!(f, "Literal({:?})", literal),
             AstExpression::Block(block) => {
                 writeln!(f, "Block:")?;
-                writeln!(indented(f), "{}", block)
+                writeln!(indented(f), "{}", block.borrow())
             }
             AstExpression::InlinedCall(inlined_node) => match inlined_node.as_ref() {
                 InlinedNode::IfInlined(node) => writeln!(f, "{}", node),

@@ -28,7 +28,7 @@ impl Display for WhileInlinedNode {
 }
 
 impl Evaluate for WhileInlinedNode {
-    fn evaluate(&self, universe: &mut UniverseAST) -> Return {
+    fn evaluate(&mut self, universe: &mut UniverseAST) -> Return {
         loop {
             let cond_result = propagate!(self.cond_instrs.evaluate(universe));
             match cond_result {
