@@ -1,6 +1,6 @@
 use crate::frame::Frame;
 use crate::gc::SOMVM;
-use log::info;
+use log::debug;
 use mmtk::util::copy::{CopySemantics, GCWorkerCopyContext};
 use mmtk::util::{Address, ObjectReference};
 use mmtk::vm::*;
@@ -22,7 +22,7 @@ pub const IN_OBJECT_ADDRESS_OFFSET: isize = 0;
 pub const OBJECT_HEADER_OFFSET: usize = 8;
 
 // Mine. to put in GC headers
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum GCMagicId {
     Frame = 100,
     BlockInfo = 101,
@@ -63,7 +63,7 @@ impl ObjectModel<SOMVM> for VMObjectModel {
         semantics: CopySemantics,
         copy_context: &mut GCWorkerCopyContext<SOMVM>,
     ) -> ObjectReference {
-        info!("invoking copy (unfinished...)");
+        debug!("invoking copy (unfinished...)");
 
         // dbg!(&from);
         // let _from_ptr: *mut usize = unsafe { from.to_raw_address().as_mut_ref() };
@@ -96,7 +96,7 @@ impl ObjectModel<SOMVM> for VMObjectModel {
 
         copy_context.post_copy(to_obj, bytes, semantics);
 
-        info!("Copied object {} into {}", from, to_obj);
+        debug!("Copied object {} into {}", from, to_obj);
         
         to_obj
     }

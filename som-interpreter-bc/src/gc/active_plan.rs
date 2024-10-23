@@ -1,8 +1,10 @@
 use crate::gc::SOMVM;
 use crate::MMTK_TO_VM_INTERFACE;
+use mmtk::scheduler::GCWorker;
 use mmtk::util::opaque_pointer::*;
+use mmtk::util::ObjectReference;
 use mmtk::vm::ActivePlan;
-use mmtk::Mutator;
+use mmtk::{Mutator, ObjectQueue};
 
 pub struct VMActivePlan {}
 
@@ -26,5 +28,17 @@ impl ActivePlan<SOMVM> for VMActivePlan {
     fn number_of_mutators() -> usize {
         1 // TODO: is it always 1 right now though?
         // unimplemented!()
+    }
+
+    #[allow(unused)]
+    fn vm_trace_object<Q: ObjectQueue>(
+        queue: &mut Q,
+        object: ObjectReference,
+        _worker: &mut GCWorker<SOMVM>,
+    ) -> ObjectReference {
+        panic!("MMTk sometimes panics in its default implem of this function. thus i reimplemented this one on our side, but only for debug purposes. my understanding is that it should never be invoked.")
+        // info!("entering vm_trace_object");
+        // queue.enqueue(object);
+        // object
     }
 }

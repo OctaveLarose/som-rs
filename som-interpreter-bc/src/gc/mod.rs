@@ -65,7 +65,7 @@ lazy_static! {
     pub static ref MMTK_SINGLETON: MMTK<SOMVM> = {
         let mut builder = BUILDER.lock().unwrap();
 
-        let heap_success = mmtk_set_fixed_heap_size(&mut builder, 1048576);
+        let heap_success = mmtk_set_fixed_heap_size(&mut builder, 1024 * 1024);
         assert!(heap_success, "Couldn't set MMTk fixed heap size");
 
         // let gc_success = builder.set_option("plan", "NoGC");

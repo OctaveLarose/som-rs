@@ -3,21 +3,21 @@ use crate::class::Class;
 use crate::frame::Frame;
 use crate::gc::api::{mmtk_alloc, mmtk_bind_mutator, mmtk_destroy_mutator, mmtk_handle_user_collection_request, mmtk_initialize_collection};
 use crate::gc::object_model::{GCMagicId, OBJECT_REF_OFFSET};
-use crate::gc::scanning::{addr_to_slot, value_to_slot};
+use crate::gc::scanning::value_to_slot;
 use crate::gc::{SOMSlot, MMTK_HAS_RAN_INIT_COLLECTION, MMTK_SINGLETON, SOMVM};
 use crate::instance::Instance;
 use crate::method::Method;
 use crate::value::Value;
 use crate::{INTERPRETER_RAW_PTR, UNIVERSE_RAW_PTR};
 use core::mem::size_of;
-use log::{info, trace};
+use log::debug;
 use mmtk::util::alloc::{Allocator, BumpAllocator};
 use mmtk::util::constants::MIN_OBJECT_SIZE;
 use mmtk::util::{Address, OpaquePointer, VMMutatorThread, VMThread};
 use mmtk::vm::RootsWorkFactory;
 use mmtk::{memory_manager, AllocationSemantics, Mutator};
 use num_bigint::BigInt;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::marker::PhantomData;
 use std::sync::atomic::Ordering;
 use structopt::lazy_static;
@@ -108,16 +108,18 @@ impl<'a> Iterator for SOMMutatorIterator<'a> {
 
 impl GCInterface {
     pub fn block_for_gc(&mut self) {
-        info!("block for gc called");
+        debug!("block_for_gc called...");
 
         let before_blocking_count = self.start_the_world_count;
         while self.start_the_world_count <= before_blocking_count {
             // ... wait
         }
+
+        debug!("block_for_gc done.");
     }
 
     pub fn resume_mutators(&mut self) {
-        info!("resume_mutators called");
+        debug!("resume_mutators called");
         self.start_the_world_count += 1;
     }
 
@@ -125,9 +127,8 @@ impl GCInterface {
     where
         F: FnMut(&'static mut Mutator<SOMVM>),
     {
-        info!("stop_all_mutators called");
+        debug!("stop_all_mutators called");
         // mutator_visitor(self.mutator.as_mut());
-        // todo need to actually stop our mutator thread
     }
 
     pub(crate) fn get_mutator(&mut self, _tls: VMMutatorThread) -> &mut Mutator<SOMVM> {
@@ -135,7 +136,7 @@ impl GCInterface {
         self.mutator.as_mut()
     }
     pub fn get_all_mutators(&mut self) -> Box<dyn Iterator<Item = &mut Mutator<SOMVM>> + '_> {
-        info!("calling get_all_mutators");
+        debug!("calling get_all_mutators");
         // frankly not sure how to implement that one
         // Box::new(vec![self.mutator.as_mut()].iter())
 
@@ -153,18 +154,19 @@ impl GCInterface {
     }
 
     pub fn scan_vm_specific_roots(&self, mut factory: impl RootsWorkFactory<SOMSlot> + Sized) {
-        info!("calling scan_vm_specific_roots");
+        debug!("calling scan_vm_specific_roots");
         
         unsafe {
-            let mut to_process: Vec<SOMSlot> = vec![];
+            // let mut to_process: Vec<SOMSlot> = vec![];
+            let mut to_process: HashSet<SOMSlot> = HashSet::new();
 
             let current_frame_addr = &(*INTERPRETER_RAW_PTR).current_frame;
-            trace!("scanning root: current_frame (method: {})", current_frame_addr.to_obj().current_method.to_obj().signature);
-            to_process.push(addr_to_slot(Address::from_ref(current_frame_addr)));
+            debug!("scanning root: current_frame (method: {})", current_frame_addr.to_obj().current_method.to_obj().signature);
+            to_process.insert(SOMSlot::from_address(Address::from_ref(current_frame_addr)));
 
             for global in (*UNIVERSE_RAW_PTR).globals.values() {
                 match value_to_slot(global) {
-                    Some(slot) => to_process.push(slot),
+                    Some(slot) => {to_process.insert(slot);},
                     None => {}
                 }
             }
@@ -172,37 +174,43 @@ impl GCInterface {
             {
                 let core = &(*UNIVERSE_RAW_PTR).core;
 
-                to_process.push(addr_to_slot(Address::from_ref(&core.object_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.class_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.metaclass_class)));
-
-                to_process.push(addr_to_slot(Address::from_ref(&core.nil_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.integer_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.double_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.array_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.method_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.primitive_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.symbol_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.string_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.system_class)));
-
-                to_process.push(addr_to_slot(Address::from_ref(&core.block_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.block1_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.block2_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.block3_class)));
-
-                to_process.push(addr_to_slot(Address::from_ref(&core.boolean_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.true_class)));
-                to_process.push(addr_to_slot(Address::from_ref(&core.false_class)));
+                let core_class_refs = [
+                    &core.object_class,
+                    &core.class_class,
+                    &core.metaclass_class,
+                    &core.nil_class,
+                    &core.integer_class,
+                    &core.double_class,
+                    &core.array_class,
+                    &core.method_class,
+                    &core.primitive_class,
+                    &core.symbol_class,
+                    &core.string_class,
+                    &core.system_class,
+                    &core.block_class,
+                    &core.block1_class,
+                    &core.block2_class,
+                    &core.block3_class,
+                    &core.boolean_class,
+                    &core.true_class,
+                    &core.false_class,
+                ];
+                
+                for core_cls in core_class_refs {
+                    let addr = Address::from_ref(core_cls);
+                    let slot = SOMSlot::from_address(addr);
+                    to_process.insert(slot);
+                }
             }
+            debug!("scanning roots: all core classes");
 
-            // dbg!(&to_process);
-            factory.create_process_roots_work(to_process)
+            let to_process_vec: Vec<SOMSlot> = to_process.iter().map(|e| e.clone()).collect();
+            factory.create_process_roots_work(to_process_vec)
         }
     }
 
     pub fn scan_roots_in_mutator_thread(&self, _mutator: &mut Mutator<SOMVM>, _factory: impl RootsWorkFactory<SOMSlot> + Sized) {
-        info!("calling scan_roots_in_mutator_thread (DOES NOTHING AT THE MOMENT");
+        debug!("calling scan_roots_in_mutator_thread (DOES NOTHING AT THE MOMENT");
     }
 }
 
