@@ -1,6 +1,16 @@
 The Simple Object Machine
 =========================
 
+This is a fork of the original `som-rs` project, aiming to improve its performance.
+
+Currently, the AST is about 95% faster than the original, and the BC 85%. 
+This is achieved through many, many new optimisations and reworks to the original code.
+
+![speedup 24/10/24](https://rebench.stefan-marr.de/static/reports/som-rs-369a98-0da992/overview-micro.svg)
+
+
+=========================
+
 This is an implementation of the [**Simple Object Machine**], written in Rust.
 
 [**Simple Object Machine**]: https://som-st.github.io
