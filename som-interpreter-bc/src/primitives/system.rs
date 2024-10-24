@@ -4,7 +4,7 @@ use std::io::Write;
 
 use crate::class::Class;
 use crate::convert::{Nil, Primitive, StringLike, System};
-use crate::gc::gc_interface::GCRef;
+use crate::gc::gc_interface::{GCInterface, GCRef};
 use crate::interpreter::Interpreter;
 use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
@@ -166,6 +166,8 @@ fn global_put(
     value: Value,
 ) -> Result<Option<Value>, Error> {
     const _: &str = "System>>#global:put:";
+
+    GCInterface::safepoint_maybe_pause_for_gc();
 
     Ok(universe.assign_global(name, value.clone()).map(|_| value))
 }

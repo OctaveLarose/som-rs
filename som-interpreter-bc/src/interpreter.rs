@@ -2,13 +2,13 @@ use crate::block::Block;
 use crate::class::Class;
 use crate::compiler::Literal;
 use crate::frame::Frame;
+use crate::gc::gc_interface::{GCInterface, GCRef};
 use crate::instance::InstanceAccess;
 use crate::method::{Method, MethodKind};
 use crate::universe::Universe;
 use crate::value::Value;
 use anyhow::Context;
 use som_core::bytecode::Bytecode;
-use crate::gc::gc_interface::{GCInterface, GCRef};
 use som_core::interner::Interned;
 use std::time::Instant;
 
@@ -113,6 +113,8 @@ impl Interpreter {
     }
 
     pub fn pop_frame(&mut self) {
+        GCInterface::safepoint_maybe_pause_for_gc();
+        
         let new_current_frame = self.current_frame.to_obj().prev_frame;
         self.current_frame = new_current_frame;
         match new_current_frame.is_empty() {
@@ -125,6 +127,8 @@ impl Interpreter {
     }
 
     pub fn pop_n_frames(&mut self, n: u8) {
+        GCInterface::safepoint_maybe_pause_for_gc();
+
         let new_current_frame = Frame::nth_frame_back_through_frame_list(&self.current_frame, n + 1);
         self.current_frame = new_current_frame;
         match new_current_frame.is_empty() {
@@ -477,6 +481,8 @@ impl Interpreter {
             // we store the current bytecode idx to be able to correctly restore the bytecode state when we pop frames
             interpreter.current_frame.to_obj().bytecode_idx = interpreter.bytecode_idx;
 
+            GCInterface::safepoint_maybe_pause_for_gc();
+            
             let Some(method) = method else {
                 let args = interpreter.current_frame.to_obj().stack_n_last_elements(nb_params);
                 let self_value = interpreter.current_frame.clone().to_obj().stack_pop();

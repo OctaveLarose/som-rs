@@ -31,8 +31,8 @@ impl Scanning<SOMVM> for VMScanning {
             // let _ptr: *mut usize = unsafe { obj_addr.as_mut_ref() };
             let gc_id: &GCMagicId = VMObjectModel::ref_to_header(object).as_ref();
 
-            debug!("entering scan_object (type: {:?})", gc_id);
-            
+            // debug!("entering scan_object (type: {:?})", gc_id);
+
             match gc_id {
                 GCMagicId::Frame => {
                     let frame: &mut Frame = object.to_raw_address().as_mut_ref();
@@ -97,7 +97,7 @@ impl Scanning<SOMVM> for VMScanning {
                     }
                 }
                 GCMagicId::BlockInfo | GCMagicId::String | GCMagicId::ArrayU8 | GCMagicId::BigInt => {
-                    // no children: dead end in dependency graph
+                    // leaf nodes: no children.
                 }
             }
         }
@@ -108,8 +108,9 @@ impl Scanning<SOMVM> for VMScanning {
     }
 
     fn notify_initial_thread_scan_complete(_partial_scan: bool, _tls: VMWorkerThread) {
-        unimplemented!()
+        // do nothing.
     }
+
     fn scan_roots_in_mutator_thread(
         _tls: VMWorkerThread,
         mutator: &'static mut Mutator<SOMVM>,
@@ -135,6 +136,7 @@ fn visit_value<SV: SlotVisitor<SOMSlot>>(val: &Value, slot_visitor: &mut SV) {
     }
 }
 
+// not sure that one's functional? it -should- be, on paper.
 pub fn value_to_slot(val: &Value) -> Option<SOMSlot> {
     if let Some(gcref) = val.as_block() {
         Some(SOMSlot::from_address(Address::from_ref(&gcref)))

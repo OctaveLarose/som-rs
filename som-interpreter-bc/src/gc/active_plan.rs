@@ -36,7 +36,11 @@ impl ActivePlan<SOMVM> for VMActivePlan {
         object: ObjectReference,
         _worker: &mut GCWorker<SOMVM>,
     ) -> ObjectReference {
-        panic!("MMTk sometimes panics in its default implem of this function. thus i reimplemented this one on our side, but only for debug purposes. my understanding is that it should never be invoked.")
+        // I've had MMTk sometimes panic here. thus i reimplemented this one on our side, but only for debug purposes. 
+        // this should never be invoked.
+        
+        panic!("entering vm_trace_object for some reason: object {:?} not in mmtk space?", object)
+        
         // info!("entering vm_trace_object");
         // queue.enqueue(object);
         // object

@@ -7,10 +7,10 @@ use crate::block::Block;
 use crate::class::Class;
 use crate::compiler;
 use crate::frame::Frame;
+use crate::gc::gc_interface::{GCInterface, GCRef};
 use crate::interpreter::Interpreter;
 use crate::value::Value;
 use anyhow::{anyhow, Error};
-use crate::gc::gc_interface::{GCInterface, GCRef};
 use som_core::interner::{Interned, Interner};
 
 /// The core classes of the SOM interpreter.
@@ -461,6 +461,8 @@ impl Universe {
     ) -> Option<()> {
         let method_name = self.intern_symbol("unknownGlobal:");
         let method = value.lookup_method(self, method_name)?;
+
+        GCInterface::safepoint_maybe_pause_for_gc();
 
         interpreter.current_frame.to_obj().bytecode_idx = interpreter.bytecode_idx;
         interpreter.push_method_frame_with_args(method, &[value, Value::Symbol(name)], &mut self.gc_interface);

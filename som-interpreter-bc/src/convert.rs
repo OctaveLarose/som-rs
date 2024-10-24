@@ -8,6 +8,7 @@ use anyhow::{bail, Context, Error};
 
 use crate::block::Block;
 use crate::class::Class;
+use crate::gc::gc_interface::{GCInterface, GCRef};
 use crate::instance::Instance;
 use crate::interpreter::Interpreter;
 use crate::method::Method;
@@ -15,7 +16,6 @@ use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
 use crate::value::Value;
 use num_bigint::BigInt;
-use crate::gc::gc_interface::{GCInterface, GCRef};
 use som_core::interner::Interned;
 
 pub trait IntoValue {
@@ -449,7 +449,6 @@ macro_rules! derive_stuff {
                 $(
                     values.push($crate::convert::IntoValue::into_value($ty, heap));
                 )*
-                dbg!(&values);
                 let allocated = GCRef::<Vec<Value>>::alloc(values, heap);
                 $crate::value::Value::Array(allocated)
             }
