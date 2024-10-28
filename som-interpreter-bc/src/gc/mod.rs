@@ -2,10 +2,8 @@ extern crate libc;
 extern crate mmtk;
 
 use mmtk::vm::VMBinding;
-use mmtk::{MMTKBuilder, MMTK};
-use std::sync::atomic::AtomicBool;
-use std::sync::Mutex;
-use structopt::lazy_static::lazy_static;
+use mmtk::MMTK;
+use std::sync::OnceLock;
 
 pub mod active_plan;
 pub mod api;
@@ -44,7 +42,6 @@ impl VMBinding for SOMVM {
     const ALLOC_END_ALIGNMENT: usize = 1;
 }
 
-use crate::gc::api::mmtk_set_fixed_heap_size;
 use mmtk::util::{Address, ObjectReference};
 
 impl SOMVM {
@@ -58,31 +55,8 @@ impl SOMVM {
     }
 }
 
-
-lazy_static! {
-    pub static ref MMTK_HAS_RAN_INIT_COLLECTION: AtomicBool = AtomicBool::new(false);
-    pub static ref BUILDER: Mutex<MMTKBuilder> = Mutex::new(MMTKBuilder::new());
-    pub static ref MMTK_SINGLETON: MMTK<SOMVM> = {
-        let mut builder = BUILDER.lock().unwrap();
-
-        let heap_success = mmtk_set_fixed_heap_size(&mut builder, 1024 * 1024);
-        assert!(heap_success, "Couldn't set MMTk fixed heap size");
-
-        // let gc_success = builder.set_option("plan", "NoGC");
-        let gc_success = builder.set_option("plan", "MarkSweep");
-        // let gc_success = builder.set_option("plan", "SemiSpace");
-        assert!(gc_success, "Couldn't set GC plan");
-
-        // let ok = builder.set_option("stress_factor", DEFAULT_STRESS_FACTOR.to_string().as_str());
-        // assert!(ok);
-        // let ok = builder.set_option("analysis_factor", DEFAULT_STRESS_FACTOR.to_string().as_str());
-        // assert!(ok);
-
-        let ret = mmtk::memory_manager::mmtk_init::<SOMVM>(&builder);
-        *ret
-    };
-}
+pub static MMTK_SINGLETON: OnceLock<MMTK<SOMVM>> = OnceLock::new();
 
 fn mmtk() -> &'static MMTK<SOMVM> {
-    &MMTK_SINGLETON
+    &MMTK_SINGLETON.get().unwrap()
 }

@@ -1,4 +1,4 @@
-use crate::gc::{MMTK_SINGLETON, SOMVM};
+use crate::gc::{mmtk, SOMVM};
 use crate::MMTK_TO_VM_INTERFACE;
 use mmtk::util::opaque_pointer::*;
 use mmtk::util::Address;
@@ -21,8 +21,8 @@ impl Collection<SOMVM> for VMCollection {
         unsafe {(*MMTK_TO_VM_INTERFACE).resume_mutators();}
     }
 
-    fn block_for_gc(_tls: VMMutatorThread) {
-        unsafe {(*MMTK_TO_VM_INTERFACE).block_for_gc();}
+    fn block_for_gc(tls: VMMutatorThread) {
+        unsafe {(*MMTK_TO_VM_INTERFACE).block_for_gc(tls);}
     }
 
     fn spawn_gc_thread(_tls: VMThread, ctx: GCThreadContext<SOMVM>) {
@@ -38,7 +38,7 @@ impl Collection<SOMVM> for VMCollection {
             
             match ctx {
                 GCThreadContext::Worker(w) => {
-                    mmtk::memory_manager::start_worker::<SOMVM>(&MMTK_SINGLETON, worker_tls, w)
+                    mmtk::memory_manager::start_worker::<SOMVM>(mmtk(), worker_tls, w)
                 }
             }
         });

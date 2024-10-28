@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-
+use std::sync::atomic::Ordering;
 use crate::block::Block;
 use crate::class::Class;
 use crate::compiler;
 use crate::frame::Frame;
-use crate::gc::gc_interface::{GCInterface, GCRef};
+use crate::gc::gc_interface::{GCInterface, GCRef, IS_WORLD_STOPPED};
 use crate::interpreter::Interpreter;
 use crate::value::Value;
 use anyhow::{anyhow, Error};
@@ -214,6 +214,8 @@ impl Universe {
 
     /// Load a class from its name into this universe.
     pub fn load_class(&mut self, class_name: impl Into<String>) -> Result<GCRef<Class>, Error> {
+        debug_assert_eq!(IS_WORLD_STOPPED.load(Ordering::SeqCst), false);
+        
         let class_name = class_name.into();
 
         for path in self.classpath.iter() {

@@ -1,10 +1,10 @@
 use crate::block::{Block, BlockInfo};
 use crate::class::Class;
 use crate::frame::Frame;
-use crate::gc::api::{mmtk_alloc, mmtk_bind_mutator, mmtk_destroy_mutator, mmtk_handle_user_collection_request, mmtk_initialize_collection};
+use crate::gc::api::{mmtk_alloc, mmtk_bind_mutator, mmtk_destroy_mutator, mmtk_handle_user_collection_request, mmtk_initialize_collection, mmtk_set_fixed_heap_size};
 use crate::gc::object_model::{GCMagicId, OBJECT_REF_OFFSET};
 use crate::gc::scanning::value_to_slot;
-use crate::gc::{SOMSlot, MMTK_HAS_RAN_INIT_COLLECTION, MMTK_SINGLETON, SOMVM};
+use crate::gc::{SOMSlot, MMTK_SINGLETON, SOMVM};
 use crate::instance::Instance;
 use crate::method::Method;
 use crate::value::Value;
@@ -15,12 +15,11 @@ use mmtk::util::alloc::{Allocator, BumpAllocator};
 use mmtk::util::constants::MIN_OBJECT_SIZE;
 use mmtk::util::{Address, OpaquePointer, VMMutatorThread, VMThread};
 use mmtk::vm::RootsWorkFactory;
-use mmtk::{memory_manager, AllocationSemantics, Mutator};
+use mmtk::{memory_manager, AllocationSemantics, MMTKBuilder, Mutator};
 use num_bigint::BigInt;
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
-use structopt::lazy_static;
 
 static GC_OFFSET: usize = 0;
 static GC_ALIGN: usize = 8;
@@ -54,18 +53,38 @@ impl GCInterface {
     }
 
     fn init_mmtk() -> (VMMutatorThread, Box<Mutator<SOMVM>>, *mut BumpAllocator<SOMVM>) {
-        lazy_static::initialize(&MMTK_SINGLETON);
+        let builder: MMTKBuilder = {
+            let mut builder = MMTKBuilder::new();
+            
+            let heap_success = mmtk_set_fixed_heap_size(&mut builder, 1024 * 1024);
+            assert!(heap_success, "Couldn't set MMTk fixed heap size");
 
-        if !MMTK_HAS_RAN_INIT_COLLECTION.load(Ordering::Acquire) {
-            mmtk_initialize_collection(VMThread(OpaquePointer::UNINITIALIZED));
-            MMTK_HAS_RAN_INIT_COLLECTION.store(true, Ordering::Release);
-        }
+            // let gc_success = builder.set_option("plan", "NoGC");
+            let gc_success = builder.set_option("plan", "MarkSweep");
+            // let gc_success = builder.set_option("plan", "SemiSpace");
+            assert!(gc_success, "Couldn't set GC plan");
+
+            // let ok = builder.set_option("stress_factor", DEFAULT_STRESS_FACTOR.to_string().as_str());
+            // assert!(ok);
+            // let ok = builder.set_option("analysis_factor", DEFAULT_STRESS_FACTOR.to_string().as_str());
+            // assert!(ok);
+            
+            builder
+        };
+        
+        MMTK_SINGLETON.set({
+            let mmtk = mmtk::memory_manager::mmtk_init::<SOMVM>(&builder);
+            *mmtk
+        }).unwrap_or_else(|_| panic!("couldn't set the MMTk singleton"));
+
+        mmtk_initialize_collection(VMThread(OpaquePointer::UNINITIALIZED));
+        
 
         let tls = VMMutatorThread(VMThread(OpaquePointer::UNINITIALIZED)); // TODO: do I need a thread pointer here?
         let mutator = mmtk_bind_mutator(tls);
 
         let selector = memory_manager::get_allocator_mapping(
-            &MMTK_SINGLETON,
+            &MMTK_SINGLETON.get().unwrap(),
             AllocationSemantics::Default,
         );
         let default_allocator_offset = Mutator::<SOMVM>::get_allocator_base_offset(selector);
@@ -96,9 +115,11 @@ impl GCInterface {
 }
 
 impl GCInterface {
-    pub fn block_for_gc(&mut self) {
+    pub fn block_for_gc(&mut self, _tls: VMMutatorThread) {
         AtomicBool::store(&IS_WORLD_STOPPED, true, Ordering::SeqCst);
         debug!("block_for_gc: stopped the world!");
+        while AtomicBool::load(&IS_WORLD_STOPPED, Ordering::SeqCst) {}
+        debug!("block_for_gc: world no longer stopped.");
     }
 
     pub unsafe fn resume_mutators(&mut self) {
@@ -326,6 +347,8 @@ impl<T: HasTypeInfoForGC> GCRef<T> {
         let size = size + OBJECT_REF_OFFSET;
         
         let header_addr = mmtk_alloc(mutator, size, GC_ALIGN, GC_OFFSET, GC_SEMANTICS);
+        GCInterface::safepoint_maybe_pause_for_gc();
+        
         debug_assert!(!header_addr.is_zero());
         let obj_addr = SOMVM::object_start_to_ref(header_addr);
 

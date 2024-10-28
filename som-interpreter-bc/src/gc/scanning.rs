@@ -138,20 +138,23 @@ fn visit_value<SV: SlotVisitor<SOMSlot>>(val: &Value, slot_visitor: &mut SV) {
 
 // not sure that one's functional? it -should- be, on paper.
 pub fn value_to_slot(val: &Value) -> Option<SOMSlot> {
+    let addr_to_slot_fn = | address: Address | addr_to_slot(address);
+    // let addr_to_slot_fn = | address: Address | SOMSlot::from_address(address);
+    
     if let Some(gcref) = val.as_block() {
-        Some(SOMSlot::from_address(Address::from_ref(&gcref)))
+        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
     } else if let Some(gcref) = val.as_class() {
-        Some(SOMSlot::from_address(Address::from_ref(&gcref)))
+        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
     } else if let Some(gcref) = val.as_invokable() {
-        Some(SOMSlot::from_address(Address::from_ref(&gcref)))
+        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
     } else if let Some(gcref) = val.as_instance() {
-        Some(SOMSlot::from_address(Address::from_ref(&gcref)))
+        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
     } else if let Some(gcref) = val.as_big_integer() {
-        Some(SOMSlot::from_address(Address::from_ref(&gcref)))
+        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
     } else if let Some(gcref) = val.as_string() {
-        Some(SOMSlot::from_address(Address::from_ref(&gcref)))
+        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
     } else if let Some(gcref) = val.as_array() {
-        Some(SOMSlot::from_address(Address::from_ref(&gcref)))
+        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
     } else {
         None
     }
@@ -163,7 +166,7 @@ pub fn value_to_slot(val: &Value) -> Option<SOMSlot> {
 pub fn addr_to_slot(addr: Address) -> SOMSlot {
     let slot = SOMSlot::from_address(addr);
 
-    #[cfg(debug_assertions)]
+    // #[cfg(debug_assertions)]
     {
         // println!("\tprocess slot = {:?} - {:?}\n", slot, slot.load());
 
