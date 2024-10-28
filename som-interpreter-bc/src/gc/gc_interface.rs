@@ -1,7 +1,7 @@
 use crate::block::{Block, BlockInfo};
 use crate::class::Class;
 use crate::frame::Frame;
-use crate::gc::api::{mmtk_alloc, mmtk_bind_mutator, mmtk_destroy_mutator, mmtk_handle_user_collection_request, mmtk_initialize_collection, mmtk_set_fixed_heap_size};
+use crate::gc::api::{mmtk_alloc, mmtk_bind_mutator, mmtk_destroy_mutator, mmtk_handle_user_collection_request, mmtk_initialize_collection, mmtk_is_in_mmtk_spaces, mmtk_set_fixed_heap_size};
 use crate::gc::object_model::{GCMagicId, OBJECT_REF_OFFSET};
 use crate::gc::scanning::value_to_slot;
 use crate::gc::{SOMSlot, MMTK_SINGLETON, SOMVM};
@@ -14,6 +14,7 @@ use log::debug;
 use mmtk::util::alloc::{Allocator, BumpAllocator};
 use mmtk::util::constants::MIN_OBJECT_SIZE;
 use mmtk::util::{Address, OpaquePointer, VMMutatorThread, VMThread};
+use mmtk::vm::slot::Slot;
 use mmtk::vm::RootsWorkFactory;
 use mmtk::{memory_manager, AllocationSemantics, MMTKBuilder, Mutator};
 use num_bigint::BigInt;
@@ -158,8 +159,6 @@ impl GCInterface {
         debug!("calling scan_roots_in_mutator_thread");
 
         unsafe {
-            // let mut to_process: Vec<SOMSlot> = vec![];
-
             // using a set to not have duplicate entries, but seems a tad slow and perhaps unnecessary?
             let mut to_process: HashSet<SOMSlot> = HashSet::new();
 
@@ -168,68 +167,21 @@ impl GCInterface {
             let slot = SOMSlot::from_address(Address::from_ref(current_frame_addr));
             to_process.insert(slot);
 
-            // let x: Vec<Option<ObjectReference>> = to_process.iter().map(|e| e.load()).collect();
-            // dbg!(&x);
-
-            // dbg!(&(*UNIVERSE_RAW_PTR).globals);
-            for val in (*UNIVERSE_RAW_PTR).globals.values() {
-                // dbg!(&val);
-                match value_to_slot(val) {
-                    Some(slot) => {to_process.insert(slot);},
-                    None => {}
-                }
-                // dbg!();
-            }
-            //
-            // let x: Vec<Option<ObjectReference>> = to_process.iter().map(|e| {
-            //     dbg!(e);
-            //     let x = e.load();
-            //     dbg!(&x);
-            //     x
-            // }).collect();
-            // dbg!(&x);
-
-            {
-                let core = &(*UNIVERSE_RAW_PTR).core;
-
-                let core_class_refs = [
-                    &core.object_class,
-                    &core.class_class,
-                    &core.metaclass_class,
-                    &core.nil_class,
-                    &core.integer_class,
-                    &core.double_class,
-                    &core.array_class,
-                    &core.method_class,
-                    &core.primitive_class,
-                    &core.symbol_class,
-                    &core.string_class,
-                    &core.system_class,
-                    &core.block_class,
-                    &core.block1_class,
-                    &core.block2_class,
-                    &core.block3_class,
-                    &core.boolean_class,
-                    &core.true_class,
-                    &core.false_class,
-                ];
-
-                for core_cls in core_class_refs {
-                    let addr = Address::from_ref(core_cls);
+            for (_name, val) in (*UNIVERSE_RAW_PTR).globals.iter() {
+                if let Some(gcref) = val.as_class() {
+                    let addr = Address::from_ref(&gcref);
                     let slot = SOMSlot::from_address(addr);
-                    // dbg!(&core_cls);
-                    // dbg!(&slot);
-                    // dbg!(slot.load());
+                    debug_assert!(slot.load().is_some());
+                    debug_assert!(mmtk_is_in_mmtk_spaces(slot.load().unwrap()));
                     to_process.insert(slot);
+                } else {
+                    // dbg!("skipping {:?}", val);
                 }
             }
-            debug!("scanning roots: all core classes");
 
             let to_process_vec: Vec<SOMSlot> = to_process.drain().collect();
-            // dbg!(&to_process_vec);
-            // let x: Vec<Option<ObjectReference>> = to_process_vec.iter().map(|e| e.load()).collect();
-            // dbg!(&x);
-            factory.create_process_roots_work(to_process_vec)
+            factory.create_process_roots_work(to_process_vec);
+            debug!("scanning roots: finished");
         }
     }
     

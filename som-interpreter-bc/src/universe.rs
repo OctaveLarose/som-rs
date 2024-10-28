@@ -1,17 +1,18 @@
-use std::collections::HashMap;
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
 use crate::block::Block;
 use crate::class::Class;
 use crate::compiler;
 use crate::frame::Frame;
+use crate::gc::api::mmtk_is_in_mmtk_spaces;
 use crate::gc::gc_interface::{GCInterface, GCRef, IS_WORLD_STOPPED};
 use crate::interpreter::Interpreter;
 use crate::value::Value;
 use anyhow::{anyhow, Error};
+use mmtk::util::ObjectReference;
 use som_core::interner::{Interned, Interner};
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 
 /// The core classes of the SOM interpreter.
 ///
@@ -70,7 +71,8 @@ pub struct Universe {
     /// The string interner for symbols.
     pub interner: Interner,
     /// The known global bindings.
-    pub globals: HashMap<Interned, Value>,
+    // pub globals: HashMap<Interned, Value>,
+    pub globals: Vec<(Interned, Value)>,
     /// The path to search in for new classes.
     pub classpath: Vec<PathBuf>,
     /// The interpreter's core classes.
@@ -83,7 +85,7 @@ impl Universe {
     /// Initialize the universe from the given classpath.
     pub fn with_classpath(classpath: Vec<PathBuf>, mut gc_interface: GCInterface) -> Result<Self, Error> {
         let mut interner = Interner::with_capacity(100);
-        let mut globals = HashMap::new();
+        let mut globals = vec![];
 
         let object_class = Self::load_system_class(&mut interner, classpath.as_slice(), "Object", &mut gc_interface)?;
         let class_class = Self::load_system_class(&mut interner, classpath.as_slice(), "Class", &mut gc_interface)?;
@@ -157,30 +159,30 @@ impl Universe {
         set_super_class(&false_class, &boolean_class, &metaclass_class);
 
         #[rustfmt::skip] {
-            globals.insert(interner.intern("Object"), Value::Class(object_class));
-            globals.insert(interner.intern("Class"), Value::Class(class_class));
-            globals.insert(interner.intern("Metaclass"), Value::Class(metaclass_class));
-            globals.insert(interner.intern("Nil"), Value::Class(nil_class));
-            globals.insert(interner.intern("Integer"), Value::Class(integer_class));
-            globals.insert(interner.intern("Array"), Value::Class(array_class));
-            globals.insert(interner.intern("Method"), Value::Class(method_class));
-            globals.insert(interner.intern("Symbol"), Value::Class(symbol_class));
-            globals.insert(interner.intern("Primitive"), Value::Class(primitive_class));
-            globals.insert(interner.intern("String"), Value::Class(string_class));
-            globals.insert(interner.intern("System"), Value::Class(system_class));
-            globals.insert(interner.intern("Double"), Value::Class(double_class));
-            globals.insert(interner.intern("Boolean"), Value::Class(boolean_class));
-            globals.insert(interner.intern("True"), Value::Class(true_class));
-            globals.insert(interner.intern("False"), Value::Class(false_class));
-            globals.insert(interner.intern("Block"), Value::Class(block_class));
-            globals.insert(interner.intern("Block1"), Value::Class(block1_class));
-            globals.insert(interner.intern("Block2"), Value::Class(block2_class));
-            globals.insert(interner.intern("Block3"), Value::Class(block3_class));
+            globals.push((interner.intern("Object"), Value::Class(object_class)));
+            globals.push((interner.intern("Class"), Value::Class(class_class)));
+            globals.push((interner.intern("Metaclass"), Value::Class(metaclass_class)));
+            globals.push((interner.intern("Nil"), Value::Class(nil_class)));
+            globals.push((interner.intern("Integer"), Value::Class(integer_class)));
+            globals.push((interner.intern("Array"), Value::Class(array_class)));
+            globals.push((interner.intern("Method"), Value::Class(method_class)));
+            globals.push((interner.intern("Symbol"), Value::Class(symbol_class)));
+            globals.push((interner.intern("Primitive"), Value::Class(primitive_class)));
+            globals.push((interner.intern("String"), Value::Class(string_class)));
+            globals.push((interner.intern("System"), Value::Class(system_class)));
+            globals.push((interner.intern("Double"), Value::Class(double_class)));
+            globals.push((interner.intern("Boolean"), Value::Class(boolean_class)));
+            globals.push((interner.intern("True"), Value::Class(true_class)));
+            globals.push((interner.intern("False"), Value::Class(false_class)));
+            globals.push((interner.intern("Block"), Value::Class(block_class)));
+            globals.push((interner.intern("Block1"), Value::Class(block1_class)));
+            globals.push((interner.intern("Block2"), Value::Class(block2_class)));
+            globals.push((interner.intern("Block3"), Value::Class(block3_class)));
 
-            globals.insert(interner.intern("true"), Value::Boolean(true));
-            globals.insert(interner.intern("false"), Value::Boolean(false));
-            globals.insert(interner.intern("nil"), Value::NIL);
-            globals.insert(interner.intern("system"), Value::SYSTEM);
+            globals.push((interner.intern("true"), Value::Boolean(true)));
+            globals.push((interner.intern("false"), Value::Boolean(false)));
+            globals.push((interner.intern("nil"), Value::NIL));
+            globals.push((interner.intern("system"), Value::SYSTEM));
         };
 
         Ok(Self {
@@ -262,7 +264,7 @@ impl Universe {
             set_super_class(&class, &super_class, &self.core.metaclass_class);
 
             let symbol = self.intern_symbol(class.to_obj().name());
-            self.globals.insert(symbol, Value::Class(class));
+            self.globals.push((symbol, Value::Class(class)));
 
             return Ok(class);
         }
@@ -398,7 +400,7 @@ impl Universe {
     }
 
     pub fn has_global(&self, idx: Interned) -> bool {
-        self.globals.contains_key(&idx)
+        self.globals.iter().find(|(interned, _)| *interned == idx).is_some()
     }
 
     /// Lookup a symbol.
@@ -408,12 +410,17 @@ impl Universe {
 
     /// Search for a global binding.
     pub fn lookup_global(&self, idx: Interned) -> Option<Value> {
-        self.globals.get(&idx).cloned()
+        self.globals.iter().find(|(interned, _)| *interned == idx).map(|(_, value)| *value)
     }
 
     /// Assign a value to a global binding.
     pub fn assign_global(&mut self, name: Interned, value: Value) -> Option<()> {
-        self.globals.insert(name, value)?;
+        if value.is_class() {
+            unsafe {
+                debug_assert!(mmtk_is_in_mmtk_spaces(ObjectReference::from_raw_address_unchecked(value.as_class().unwrap().ptr)));
+            }
+        }
+        self.globals.push((name, value));
         Some(())
     }
 }
