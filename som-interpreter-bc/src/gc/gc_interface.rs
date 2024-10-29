@@ -1,9 +1,8 @@
 use crate::block::{Block, BlockInfo};
 use crate::class::Class;
 use crate::frame::Frame;
-use crate::gc::api::{mmtk_alloc, mmtk_bind_mutator, mmtk_destroy_mutator, mmtk_handle_user_collection_request, mmtk_initialize_collection, mmtk_is_in_mmtk_spaces, mmtk_set_fixed_heap_size};
+use crate::gc::api::{mmtk_alloc, mmtk_bind_mutator, mmtk_destroy_mutator, mmtk_handle_user_collection_request, mmtk_initialize_collection, mmtk_set_fixed_heap_size};
 use crate::gc::object_model::{GCMagicId, OBJECT_REF_OFFSET};
-use crate::gc::scanning::value_to_slot;
 use crate::gc::{SOMSlot, MMTK_SINGLETON, SOMVM};
 use crate::instance::Instance;
 use crate::method::Method;
@@ -13,7 +12,7 @@ use core::mem::size_of;
 use log::debug;
 use mmtk::util::alloc::{Allocator, BumpAllocator};
 use mmtk::util::constants::MIN_OBJECT_SIZE;
-use mmtk::util::{Address, OpaquePointer, VMMutatorThread, VMThread};
+use mmtk::util::{Address, ObjectReference, OpaquePointer, VMMutatorThread, VMThread};
 use mmtk::vm::slot::Slot;
 use mmtk::vm::RootsWorkFactory;
 use mmtk::{memory_manager, AllocationSemantics, MMTKBuilder, Mutator};
@@ -162,22 +161,46 @@ impl GCInterface {
             // using a set to not have duplicate entries, but seems a tad slow and perhaps unnecessary?
             let mut to_process: HashSet<SOMSlot> = HashSet::new();
 
+            // walk the frame list.
             let current_frame_addr = &(*INTERPRETER_RAW_PTR).current_frame;
             debug!("scanning root: current_frame (method: {})", current_frame_addr.to_obj().current_method.to_obj().signature);
             let slot = SOMSlot::from_address(Address::from_ref(current_frame_addr));
             to_process.insert(slot);
 
+            // walk the globals. since they're stored in a vec, we can't trivially give a slot/reference to them since creating one would be a value on the stack
+            // so we pin them at the moment. issue is that this prevents us from using semispace. so TODO a custom slot sounds like a better option
+            let mut pinned_globals = vec![];
             for (_name, val) in (*UNIVERSE_RAW_PTR).globals.iter() {
-                if let Some(gcref) = val.as_class() {
-                    let addr = Address::from_ref(&gcref);
-                    let slot = SOMSlot::from_address(addr);
-                    debug_assert!(slot.load().is_some());
-                    debug_assert!(mmtk_is_in_mmtk_spaces(slot.load().unwrap()));
-                    to_process.insert(slot);
-                } else {
-                    // dbg!("skipping {:?}", val);
+                // dbg!(&val);
+
+                if val.is_ptr_type() {
+                    let gcref_to_something: GCRef<()> = GCRef::from_u64(val.payload());
+                    pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref_to_something.ptr));
                 }
+                // else {
+                //     dbg!("skipping {:?}", val);
+                // }
+
+                // if let Some(gcref) = val.as_class() {
+                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
+                // } else if let Some(gcref) = val.as_block() {
+                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
+                // } else if let Some(gcref) = val.as_invokable() {
+                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
+                // } else if let Some(gcref) = val.as_instance() {
+                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
+                // } else if let Some(gcref) = val.as_big_integer() {
+                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
+                // } else if let Some(gcref) = val.as_string() {
+                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
+                // } else if let Some(gcref) = val.as_array() {
+                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
+                // } else {
+                //     // dbg!("skipping {:?}", val);
+                // }
             }
+            // dbg!(&pinned_globals);
+            factory.create_process_pinning_roots_work(pinned_globals);
 
             let to_process_vec: Vec<SOMSlot> = to_process.drain().collect();
             factory.create_process_roots_work(to_process_vec);

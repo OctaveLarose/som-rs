@@ -38,20 +38,7 @@ impl ActivePlan<SOMVM> for VMActivePlan {
     ) -> ObjectReference {
         // I've had MMTk sometimes panic here. thus i reimplemented this one on our side, but only for debug purposes. 
         // this should never be invoked.
-        // unsafe { dbg!(&(*UNIVERSE_RAW_PTR).globals);}
-        
-        // unsafe {
-        //     dbg!(object);
-        //     let addr = object.to_raw_address();
-        //     let globals: &Vec<(Interned, Value)> = addr.as_ref();
-        //     
-        //     dbg!(globals);
-        // }
         
         panic!("entering vm_trace_object for some reason: object {:?} not in mmtk space?", object)
-        
-        // info!("entering vm_trace_object");
-        // queue.enqueue(object);
-        // object
     }
 }
