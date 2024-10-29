@@ -85,6 +85,11 @@ impl Frame {
 
             // setting up the self-referential pointers for args/locals accesses
             frame.stack_ptr = frame_ptr.ptr.add(OFFSET_TO_STACK).as_mut_ref();
+            
+            // for idx in 0..stack_size {
+            //     *frame.stack_ptr.add(idx) = Value::NIL;
+            // }
+            
             frame.args_ptr = frame.stack_ptr.add(stack_size);
             frame.locals_ptr = frame.args_ptr.add(frame.nbr_args);
 

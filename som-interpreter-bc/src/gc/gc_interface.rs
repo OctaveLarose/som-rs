@@ -54,7 +54,7 @@ impl GCInterface {
         let builder: MMTKBuilder = {
             let mut builder = MMTKBuilder::new();
             
-            let heap_success = mmtk_set_fixed_heap_size(&mut builder, 1024 * 1024);
+            let heap_success = mmtk_set_fixed_heap_size(&mut builder, 1024 * 1024 * 64);
             assert!(heap_success, "Couldn't set MMTk fixed heap size");
 
             // let gc_success = builder.set_option("plan", "NoGC");
@@ -70,13 +70,14 @@ impl GCInterface {
             builder
         };
         
-        MMTK_SINGLETON.set({
-            let mmtk = mmtk::memory_manager::mmtk_init::<SOMVM>(&builder);
-            *mmtk
-        }).unwrap_or_else(|_| panic!("couldn't set the MMTk singleton"));
+        if MMTK_SINGLETON.get().is_none() {
+            MMTK_SINGLETON.set({
+                let mmtk = mmtk::memory_manager::mmtk_init::<SOMVM>(&builder);
+                *mmtk
+            }).unwrap_or_else(|_| panic!("couldn't set the MMTk singleton"));
 
-        mmtk_initialize_collection(VMThread(OpaquePointer::UNINITIALIZED));
-        
+            mmtk_initialize_collection(VMThread(OpaquePointer::UNINITIALIZED));
+        }
 
         let tls = VMMutatorThread(VMThread(OpaquePointer::UNINITIALIZED)); // TODO: do I need a thread pointer here?
         let mutator = mmtk_bind_mutator(tls);
