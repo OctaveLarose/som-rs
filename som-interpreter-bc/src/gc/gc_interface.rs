@@ -13,11 +13,9 @@ use log::debug;
 use mmtk::util::alloc::{Allocator, BumpAllocator};
 use mmtk::util::constants::MIN_OBJECT_SIZE;
 use mmtk::util::{Address, ObjectReference, OpaquePointer, VMMutatorThread, VMThread};
-use mmtk::vm::slot::Slot;
 use mmtk::vm::RootsWorkFactory;
 use mmtk::{memory_manager, AllocationSemantics, MMTKBuilder, Mutator};
 use num_bigint::BigInt;
-use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -106,7 +104,7 @@ impl GCInterface {
     /// Dispatches a manual collection request to MMTk.
     pub fn full_gc_request(&self) {
         mmtk_handle_user_collection_request(self.mutator_thread);
-        Self::safepoint_maybe_pause_for_gc()
+        // Self::safepoint_maybe_pause_for_gc()
     }
 
     pub fn allocate<T: HasTypeInfoForGC>(&mut self, obj: T) -> GCRef<T> {
@@ -159,28 +157,31 @@ impl GCInterface {
 
         unsafe {
             // using a set to not have duplicate entries, but seems a tad slow and perhaps unnecessary?
-            let mut to_process: HashSet<SOMSlot> = HashSet::new();
+            // let mut to_process: HashSet<SOMSlot> = HashSet::new();
+
+            let mut to_process: Vec<SOMSlot> = vec![];
 
             // walk the frame list.
             let current_frame_addr = &(*INTERPRETER_RAW_PTR).current_frame;
             debug!("scanning root: current_frame (method: {})", current_frame_addr.to_obj().current_method.to_obj().signature);
             let slot = SOMSlot::from_address(Address::from_ref(current_frame_addr));
-            to_process.insert(slot);
+            to_process.push(slot);
 
             // walk the globals. since they're stored in a vec, we can't trivially give a slot/reference to them since creating one would be a value on the stack
             // so we pin them at the moment. issue is that this prevents us from using semispace. so TODO a custom slot sounds like a better option
+            debug!("scanning roots: globals");
             let mut pinned_globals = vec![];
             for (_name, val) in (*UNIVERSE_RAW_PTR).globals.iter() {
                 // dbg!(&val);
 
                 if val.is_ptr_type() {
-                    let gcref_to_something: GCRef<()> = GCRef::from_u64(val.payload());
+                    let gcref_to_something: GCRef<()> = val.extract_gc_cell();
                     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref_to_something.ptr));
                 }
                 // else {
                 //     dbg!("skipping {:?}", val);
                 // }
-
+                
                 // if let Some(gcref) = val.as_class() {
                 //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
                 // } else if let Some(gcref) = val.as_block() {
@@ -202,14 +203,14 @@ impl GCInterface {
             // dbg!(&pinned_globals);
             factory.create_process_pinning_roots_work(pinned_globals);
 
-            let to_process_vec: Vec<SOMSlot> = to_process.drain().collect();
-            factory.create_process_roots_work(to_process_vec);
+            // let to_process_vec: Vec<SOMSlot> = to_process.drain().collect();
+            factory.create_process_roots_work(to_process);
             debug!("scanning roots: finished");
         }
     }
     
     // If GC is needed/ongoing, pause execution of main thread until GC is done.
-    pub fn safepoint_maybe_pause_for_gc() {
+    pub fn _safepoint_maybe_pause_for_gc() {
         while AtomicBool::load(&IS_WORLD_STOPPED, Ordering::SeqCst) {}
     }
 }
@@ -322,7 +323,7 @@ impl<T: HasTypeInfoForGC> GCRef<T> {
         let size = size + OBJECT_REF_OFFSET;
         
         let header_addr = mmtk_alloc(mutator, size, GC_ALIGN, GC_OFFSET, GC_SEMANTICS);
-        GCInterface::safepoint_maybe_pause_for_gc();
+        // GCInterface::safepoint_maybe_pause_for_gc();
         
         debug_assert!(!header_addr.is_zero());
         let obj_addr = SOMVM::object_start_to_ref(header_addr);

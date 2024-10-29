@@ -81,6 +81,10 @@ impl Scanning<SOMVM> for VMScanning {
                     for (_, method_ref) in class.methods.iter() {
                         slot_visitor.visit_slot(SOMSlot::from_address(Address::from_ref(method_ref)))
                     }
+
+                    // for (_, field_ref) in class.locals.iter() {
+                    //     slot_visitor.visit_slot(SOMSlot::from_address(Address::from_ref(field_ref)))
+                    // }
                 }
                 GCMagicId::Block => {
                     let block: &mut Block = object.to_raw_address().as_mut_ref();

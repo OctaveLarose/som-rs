@@ -113,7 +113,7 @@ impl Interpreter {
     }
 
     pub fn pop_frame(&mut self) {
-        GCInterface::safepoint_maybe_pause_for_gc();
+        // GCInterface::safepoint_maybe_pause_for_gc();
         
         let new_current_frame = self.current_frame.to_obj().prev_frame;
         self.current_frame = new_current_frame;
@@ -127,7 +127,7 @@ impl Interpreter {
     }
 
     pub fn pop_n_frames(&mut self, n: u8) {
-        GCInterface::safepoint_maybe_pause_for_gc();
+        // GCInterface::safepoint_maybe_pause_for_gc();
 
         let new_current_frame = Frame::nth_frame_back_through_frame_list(&self.current_frame, n + 1);
         self.current_frame = new_current_frame;
@@ -481,7 +481,7 @@ impl Interpreter {
             // we store the current bytecode idx to be able to correctly restore the bytecode state when we pop frames
             interpreter.current_frame.to_obj().bytecode_idx = interpreter.bytecode_idx;
 
-            GCInterface::safepoint_maybe_pause_for_gc();
+            // GCInterface::safepoint_maybe_pause_for_gc();
             
             let Some(method) = method else {
                 let args = interpreter.current_frame.to_obj().stack_n_last_elements(nb_params);

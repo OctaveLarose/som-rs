@@ -435,7 +435,7 @@ impl NaNBoxedVal {
     // }
 
     #[inline(always)]
-    fn extract_gc_cell<T>(self) -> GCRef<T> {
+    pub fn extract_gc_cell<T>(self) -> GCRef<T> {
         let ptr = self.extract_pointer_bits();
         GCRef::from_u64(ptr) // i doubt the compiler isn't making this conversion free
     }
