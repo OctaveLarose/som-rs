@@ -2,17 +2,17 @@ use crate::block::Block;
 use crate::class::Class;
 use crate::compiler::Literal;
 use crate::frame::Frame;
+use crate::gc::gc_interface::GCRef;
 use crate::gc::object_model::{GCMagicId, VMObjectModel};
 use crate::gc::SOMSlot;
 use crate::gc::SOMVM;
-use crate::instance::Instance;
+use crate::instance::{Instance, InstanceAccess};
 use crate::method::{Method, MethodKind};
 use crate::value::Value;
 use crate::MMTK_TO_VM_INTERFACE;
 use log::debug;
 use mmtk::util::opaque_pointer::*;
 use mmtk::util::{Address, ObjectReference};
-use mmtk::vm::slot::Slot;
 use mmtk::vm::SlotVisitor;
 use mmtk::vm::{ObjectModel, Scanning};
 use mmtk::vm::{ObjectTracer, RootsWorkFactory};
@@ -38,19 +38,36 @@ impl Scanning<SOMVM> for VMScanning {
                     let frame: &mut Frame = object.to_raw_address().as_mut_ref();
                     debug!("(frame method is: {})", &frame.current_method.to_obj().signature);
 
-                    debug_assert!(!frame.current_method.to_obj().signature.is_empty()); // rough way of checking with reasonable certainty that the cast to a frame succeeded
                     if !frame.prev_frame.is_empty() {
                         let prev_frame_slot_addr = Address::from_ref(&frame.prev_frame);
                         slot_visitor.visit_slot(SOMSlot::from_address(prev_frame_slot_addr));
                     }
 
                     let method_slot_addr = Address::from_ref(&frame.current_method);
-                    slot_visitor.visit_slot(SOMSlot::from_address(method_slot_addr))
+                    slot_visitor.visit_slot(SOMSlot::from_address(method_slot_addr));
+
+                    for i in 0..frame.nbr_locals {
+                        let val: &Value = frame.lookup_local(i);
+                        visit_value(&val, slot_visitor)
+                    }
+
+                    for i in 0..frame.nbr_args {
+                        let val: &Value = frame.lookup_argument(i);
+                        visit_value(&val, slot_visitor)
+                    }
+
+                    // this should all really be done in the frame as a custom method. return an iter or something
+                    let frame_stack_start_addr: Address = object.to_raw_address().add(size_of::<Frame>());
+                    let mut stack_ptr = frame.stack_ptr;
+                    while !std::ptr::eq(stack_ptr, frame_stack_start_addr.to_ptr()) {
+                        stack_ptr = stack_ptr.sub(1);
+                        let stack_val = *stack_ptr;
+                        visit_value(&stack_val, slot_visitor)
+                    }
                 }
                 GCMagicId::Method => {
                     let method: &mut Method = object.to_raw_address().as_mut_ref();
 
-                    // kind doesn't contain GCRefs, nothing to do.
                     match &method.kind {
                         MethodKind::Defined(method_env) => {
                             for x in &method_env.literals {
@@ -82,9 +99,9 @@ impl Scanning<SOMVM> for VMScanning {
                         slot_visitor.visit_slot(SOMSlot::from_address(Address::from_ref(method_ref)))
                     }
 
-                    // for (_, field_ref) in class.locals.iter() {
-                    //     slot_visitor.visit_slot(SOMSlot::from_address(Address::from_ref(field_ref)))
-                    // }
+                    for (_, field_ref) in class.locals.iter() {
+                        visit_value(field_ref, slot_visitor)
+                    }
                 }
                 GCMagicId::Block => {
                     let block: &mut Block = object.to_raw_address().as_mut_ref();
@@ -93,6 +110,13 @@ impl Scanning<SOMVM> for VMScanning {
                 GCMagicId::Instance => {
                     let instance: &mut Instance = object.to_raw_address().as_mut_ref();
                     slot_visitor.visit_slot(SOMSlot::from_address(Address::from_ref(&instance.class)));
+
+                    // not the cleanest, to be frank
+                    let gcref_instance: GCRef<Instance> = GCRef::from_u64(object.to_raw_address().as_usize() as u64);
+                    for i in 0..instance.nbr_fields {
+                        let val: Value = gcref_instance.lookup_local(i);
+                        visit_value(&val, slot_visitor)
+                    }
                 }
                 GCMagicId::ArrayVal => {
                     let arr: &mut Vec<Value> = object.to_raw_address().as_mut_ref();
@@ -134,63 +158,8 @@ impl Scanning<SOMVM> for VMScanning {
 }
 
 fn visit_value<SV: SlotVisitor<SOMSlot>>(val: &Value, slot_visitor: &mut SV) {
-    match value_to_slot(val) {
-        Some(slot) => slot_visitor.visit_slot(slot),
-        None => {}
+    match val.is_ptr_type() {
+        true => slot_visitor.visit_slot(SOMSlot::from_value(*val)),
+        false => {}
     }
-}
-
-// not sure that one's functional? it -should- be, on paper.
-pub fn value_to_slot(val: &Value) -> Option<SOMSlot> {
-    let addr_to_slot_fn = | address: Address | addr_to_slot(address);
-    // let addr_to_slot_fn = | address: Address | SOMSlot::from_address(address);
-    
-    if let Some(gcref) = val.as_block() {
-        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
-    } else if let Some(gcref) = val.as_class() {
-        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
-    } else if let Some(gcref) = val.as_invokable() {
-        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
-    } else if let Some(gcref) = val.as_instance() {
-        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
-    } else if let Some(gcref) = val.as_big_integer() {
-        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
-    } else if let Some(gcref) = val.as_string() {
-        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
-    } else if let Some(gcref) = val.as_array() {
-        Some(addr_to_slot_fn(Address::from_ref(&gcref)))
-    } else {
-        None
-    }
-}
-
-#[allow(dead_code)]
-// #[inline(always)]
-/// Turns an address into a slot - and most importantly, optionally verify its validity. Inspired from the Julia MMTk code.
-pub fn addr_to_slot(addr: Address) -> SOMSlot {
-    let slot = SOMSlot::from_address(addr);
-
-    // #[cfg(debug_assertions)]
-    {
-        // println!("\tprocess slot = {:?} - {:?}\n", slot, slot.load());
-
-        if let Some(objref) = slot.load() {
-            debug_assert!(
-                mmtk::memory_manager::is_in_mmtk_spaces(objref),
-                "Object {:?} in slot {:?} is not mapped address",
-                objref,
-                slot
-            );
-
-            let raw_addr_usize = objref.to_raw_address().as_usize();
-            debug_assert!(
-                raw_addr_usize % 16 == 0 || raw_addr_usize % 8 == 0,
-                "Object {:?} in slot {:?} is not aligned to 8 or 16",
-                objref,
-                slot
-            );
-        }
-    }
-
-    slot
 }

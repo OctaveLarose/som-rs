@@ -662,7 +662,9 @@ impl From<NaNBoxedVal> for ValueEnum {
         } else if let Some(value) = value.as_string() {
             Self::String(value)
         } else if let Some(_value) = value.as_array() {
-            unimplemented!("no impl for arr. would need mutator to be passed as an argument to create a new GCRef. not hard, but we'd ditch the From trait")
+            // to work, would need mutator to be passed as an argument to create a new GCRef. not hard, but we'd ditch the From trait
+            eprintln!("no From<NanBoxedVal> impl for arr. returning Nil.");
+            Self::NIL
         } else if let Some(value) = value.as_block() {
             Self::Block(value)
         } else if let Some(value) = value.as_instance() {

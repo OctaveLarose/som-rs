@@ -10,9 +10,9 @@ use crate::value::Value;
 use crate::{INTERPRETER_RAW_PTR, UNIVERSE_RAW_PTR};
 use core::mem::size_of;
 use log::debug;
-use mmtk::util::alloc::{Allocator, BumpAllocator};
+use mmtk::util::alloc::BumpAllocator;
 use mmtk::util::constants::MIN_OBJECT_SIZE;
-use mmtk::util::{Address, ObjectReference, OpaquePointer, VMMutatorThread, VMThread};
+use mmtk::util::{Address, OpaquePointer, VMMutatorThread, VMThread};
 use mmtk::vm::RootsWorkFactory;
 use mmtk::{memory_manager, AllocationSemantics, MMTKBuilder, Mutator};
 use num_bigint::BigInt;
@@ -28,7 +28,7 @@ pub static IS_WORLD_STOPPED: AtomicBool = AtomicBool::new(false);
 pub struct GCInterface {
     mutator: Box<Mutator<SOMVM>>,
     mutator_thread: VMMutatorThread,
-    default_allocator: *mut BumpAllocator<SOMVM>,
+    _default_allocator: *mut BumpAllocator<SOMVM>,
     start_the_world_count: usize
 }
 
@@ -45,7 +45,7 @@ impl GCInterface {
         Self {
             mutator_thread,
             mutator,
-            default_allocator,
+            _default_allocator: default_allocator,
             start_the_world_count: 0
         }
     }
@@ -156,54 +156,21 @@ impl GCInterface {
         debug!("calling scan_roots_in_mutator_thread");
 
         unsafe {
-            // using a set to not have duplicate entries, but seems a tad slow and perhaps unnecessary?
-            // let mut to_process: HashSet<SOMSlot> = HashSet::new();
-
             let mut to_process: Vec<SOMSlot> = vec![];
 
             // walk the frame list.
             let current_frame_addr = &(*INTERPRETER_RAW_PTR).current_frame;
             debug!("scanning root: current_frame (method: {})", current_frame_addr.to_obj().current_method.to_obj().signature);
-            let slot = SOMSlot::from_address(Address::from_ref(current_frame_addr));
-            to_process.push(slot);
-
-            // walk the globals. since they're stored in a vec, we can't trivially give a slot/reference to them since creating one would be a value on the stack
-            // so we pin them at the moment. issue is that this prevents us from using semispace. so TODO a custom slot sounds like a better option
+            to_process.push(SOMSlot::from_address(Address::from_ref(current_frame_addr)));
+            
+            // walk globals (includes core classes)
             debug!("scanning roots: globals");
-            let mut pinned_globals = vec![];
             for (_name, val) in (*UNIVERSE_RAW_PTR).globals.iter() {
-                // dbg!(&val);
-
                 if val.is_ptr_type() {
-                    let gcref_to_something: GCRef<()> = val.extract_gc_cell();
-                    pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref_to_something.ptr));
+                    to_process.push(SOMSlot::from_value(*val));
                 }
-                // else {
-                //     dbg!("skipping {:?}", val);
-                // }
-                
-                // if let Some(gcref) = val.as_class() {
-                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
-                // } else if let Some(gcref) = val.as_block() {
-                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
-                // } else if let Some(gcref) = val.as_invokable() {
-                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
-                // } else if let Some(gcref) = val.as_instance() {
-                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
-                // } else if let Some(gcref) = val.as_big_integer() {
-                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
-                // } else if let Some(gcref) = val.as_string() {
-                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
-                // } else if let Some(gcref) = val.as_array() {
-                //     pinned_globals.push(ObjectReference::from_raw_address_unchecked(gcref.ptr));
-                // } else {
-                //     // dbg!("skipping {:?}", val);
-                // }
             }
-            // dbg!(&pinned_globals);
-            factory.create_process_pinning_roots_work(pinned_globals);
-
-            // let to_process_vec: Vec<SOMSlot> = to_process.drain().collect();
+            
             factory.create_process_roots_work(to_process);
             debug!("scanning roots: finished");
         }
@@ -347,44 +314,44 @@ impl<T: HasTypeInfoForGC> GCRef<T> {
     fn alloc_with_size_cached_allocator(obj: T, gc_interface: &mut GCInterface, size: usize) -> GCRef<T> {
         todo!("should not be ran before being adapted to match the cached version");
         
-        debug_assert!(size >= MIN_OBJECT_SIZE);
-        let allocator = unsafe {&mut (*gc_interface.default_allocator)};
-        
-        // not sure that's correct? adding VM header size (type info) to amount we allocate.
-        let size = size + OBJECT_REF_OFFSET;
-        
-        let addr = allocator.alloc(size, GC_ALIGN, GC_OFFSET);
-        debug_assert!(!addr.is_zero());
-        let obj_addr = SOMVM::object_start_to_ref(addr);
-
-
-        // let obj = SOMVM::object_start_to_ref(addr);
+        // debug_assert!(size >= MIN_OBJECT_SIZE);
+        // let allocator = unsafe {&mut (*gc_interface.default_allocator)};
+        // 
+        // // not sure that's correct? adding VM header size (type info) to amount we allocate.
+        // let size = size + OBJECT_REF_OFFSET;
+        // 
+        // let addr = allocator.alloc(size, GC_ALIGN, GC_OFFSET);
+        // debug_assert!(!addr.is_zero());
+        // let obj_addr = SOMVM::object_start_to_ref(addr);
+        // 
+        // 
+        // // let obj = SOMVM::object_start_to_ref(addr);
+        // // let space = allocator.get_space();
+        // // debug_assert!(!obj.to_raw_address().is_zero());
+        // // space.initialize_object_metadata(obj, true);
+        // 
         // let space = allocator.get_space();
-        // debug_assert!(!obj.to_raw_address().is_zero());
-        // space.initialize_object_metadata(obj, true);
-        
-        let space = allocator.get_space();
-        dbg!(space.name());
-        space.initialize_object_metadata(obj_addr, true);
-
-        dbg!("wa");
-        unsafe {
-            // *addr.as_mut_ref() = obj;
-
-            // dbg!(addr);
-            // dbg!(obj_addr);
-            // dbg!();
-            let header_ref: *mut usize = addr.as_mut_ref();
-            *header_ref = 4774451407313061000; // 4242424242424242
-            
-            *(obj_addr.to_raw_address().as_mut_ref()) = obj;
-            // obj_addr.to_header()
-        }
-
-        GCRef {
-            ptr: obj_addr.to_raw_address(),
-            _phantom: PhantomData,
-        }
+        // dbg!(space.name());
+        // space.initialize_object_metadata(obj_addr, true);
+        // 
+        // dbg!("wa");
+        // unsafe {
+        //     // *addr.as_mut_ref() = obj;
+        // 
+        //     // dbg!(addr);
+        //     // dbg!(obj_addr);
+        //     // dbg!();
+        //     let header_ref: *mut usize = addr.as_mut_ref();
+        //     *header_ref = 4774451407313061000; // 4242424242424242
+        //     
+        //     *(obj_addr.to_raw_address().as_mut_ref()) = obj;
+        //     // obj_addr.to_header()
+        // }
+        // 
+        // GCRef {
+        //     ptr: obj_addr.to_raw_address(),
+        //     _phantom: PhantomData,
+        // }
     }
 }
 
