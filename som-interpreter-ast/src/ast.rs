@@ -43,17 +43,17 @@ pub enum AstExpression {
     FieldRead(u8),
     IncLocal(u8),
     DecLocal(u8),
-    LocalVarWrite(u8, Box<AstExpression>),
-    NonLocalVarWrite(u8, u8, Box<AstExpression>),
-    ArgWrite(u8, u8, Box<AstExpression>),
-    FieldWrite(u8, Box<AstExpression>),
+    LocalVarWrite(u8, Gc<AstExpression>),
+    NonLocalVarWrite(u8, u8, Gc<AstExpression>),
+    ArgWrite(u8, u8, Gc<AstExpression>),
+    FieldWrite(u8, Gc<AstExpression>),
     UnaryDispatch(Box<AstUnaryDispatch>),
     BinaryDispatch(Box<AstBinaryDispatch>),
     TernaryDispatch(Box<AstTernaryDispatch>),
     NAryDispatch(Box<AstNAryDispatch>),
     SuperMessage(Box<AstSuperMessage>),
-    LocalExit(Box<AstExpression>),
-    NonLocalExit(Box<AstExpression>, u8),
+    LocalExit(Gc<AstExpression>),
+    NonLocalExit(Gc<AstExpression>, u8),
     Literal(AstLiteral),
     Block(Gc<AstBlock>),
     /// Call to an inlined method node (no dispatching like a message would)
@@ -183,19 +183,19 @@ impl Display for AstExpression {
             AstExpression::FieldRead(index) => writeln!(f, "FieldRead({})", index),
             AstExpression::LocalVarWrite(index, expr) => {
                 writeln!(f, "LocalVarWrite({}):", index)?;
-                write!(indented(f), "{}", expr)
+                write!(indented(f), "{}", **expr)
             }
             AstExpression::NonLocalVarWrite(level, index, expr) => {
                 writeln!(f, "NonLocalVarWrite({}, {}):", level, index)?;
-                write!(indented(f), "{}", expr)
+                write!(indented(f), "{}", **expr)
             }
             AstExpression::ArgWrite(level, index, expr) => {
                 writeln!(f, "ArgWrite({}, {}):", level, index)?;
-                write!(indented(f), "{}", expr)
+                write!(indented(f), "{}", **expr)
             }
             AstExpression::FieldWrite(index, expr) => {
                 writeln!(f, "FieldWrite({}):", index)?;
-                write!(indented(f), "{}", expr)
+                write!(indented(f), "{}", **expr)
             }
             AstExpression::UnaryDispatch(op) => {
                 writeln!(f, "UnaryDispatch \"{:?}\":", op.dispatch_node.signature)?;
@@ -239,11 +239,11 @@ impl Display for AstExpression {
             }
             AstExpression::LocalExit(expr) => {
                 writeln!(f, "LocalExit")?;
-                writeln!(indented(f), "{}", expr)
+                writeln!(indented(f), "{}", **expr)
             }
             AstExpression::NonLocalExit(expr, index) => {
                 writeln!(f, "NonLocalExit({})", index)?;
-                writeln!(indented(f), "{}", expr)
+                writeln!(indented(f), "{}", **expr)
             }
             AstExpression::Literal(literal) => writeln!(f, "Literal({:?})", literal),
             AstExpression::Block(block) => {

@@ -32,6 +32,7 @@ pub enum AstObjMagicId {
     VecAstLiteral = ASTLITERAL_SLICE_ID as isize,
     Class = 106,
     Instance = 107,
+    AstExpression = 108,
 }
 
 // we have to wrap it in our own type to be able to implement traits on it
@@ -103,6 +104,12 @@ impl HasTypeInfoForGC for Instance {
 impl HasTypeInfoForGC for Method {
     fn get_magic_gc_id() -> u8 {
         AstObjMagicId::Method as u8
+    }
+}
+
+impl HasTypeInfoForGC for AstExpression {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::AstExpression as u8
     }
 }
 
@@ -240,6 +247,10 @@ pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotV
                     visit_value(val, slot_visitor)
                 }
             }
+            AstObjMagicId::AstExpression => {
+                let expr: &AstExpression = object.to_raw_address().as_ref();
+                visit_expr(expr, slot_visitor);
+            }
             AstObjMagicId::String | AstObjMagicId::BigInt => {} // leaf nodes
         }
     }
@@ -357,7 +368,10 @@ fn visit_expr(expr: &AstExpression, slot_visitor: &mut dyn SlotVisitor<SOMSlot>)
         | AstExpression::LocalVarWrite(_, expr)
         | AstExpression::ArgWrite(_, _, expr)
         | AstExpression::FieldWrite(_, expr)
-        | AstExpression::NonLocalVarWrite(_, _, expr) => visit_expr(expr, slot_visitor),
+        | AstExpression::NonLocalVarWrite(_, _, expr) => {
+            slot_visitor.visit_slot(SOMSlot::from(expr));
+            visit_expr(expr, slot_visitor)
+        }
         AstExpression::UnaryDispatch(dispatch) => {
             visit_dispatch_node(&dispatch.dispatch_node, slot_visitor);
         }
@@ -433,6 +447,7 @@ fn get_object_size(object: ObjectReference) -> usize {
         AstObjMagicId::Method => size_of::<Method>(),
         AstObjMagicId::Block => size_of::<Block>(),
         AstObjMagicId::Class => size_of::<Class>(),
+        AstObjMagicId::AstExpression => size_of::<AstExpression>(),
     }
 }
 
