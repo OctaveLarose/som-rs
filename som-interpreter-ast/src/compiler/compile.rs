@@ -95,7 +95,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     return None;
                 }
 
-                match expr.as_ref() {
+                match &**expr {
                     AstExpression::Literal(lit) => {
                         Some(MethodKind::TrivialLiteral(TrivialLiteralMethod { literal: lit.clone() }))
                         // todo avoid clone by moving code to previous function tbh
@@ -110,7 +110,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     return None;
                 }
 
-                match expr.as_ref() {
+                match **expr {
                     AstExpression::ArgRead(0, 1) => Some(MethodKind::TrivialSetter(TrivialSetterMethod { field_idx: *idx })),
                     _ => None,
                 }
@@ -159,19 +159,30 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             Expression::NonLocalVarRead(scope, idx) => AstExpression::NonLocalVarRead(scope as u8, idx as u8),
             Expression::ArgRead(scope, idx) => AstExpression::ArgRead(scope as u8, idx as u8),
             Expression::LocalVarWrite(a, b) => {
-                let local_write_expr = AstExpression::LocalVarWrite(a as u8, Box::new(self.parse_expression(b.as_ref())));
+                let b_parsed = self.parse_expression(b.as_ref());
+                let local_write_expr = AstExpression::LocalVarWrite(a as u8, self.gc_interface.alloc(b_parsed));
                 match self.maybe_make_inc_or_dec(&local_write_expr) {
                     Some(inc_or_dec) => inc_or_dec,
                     None => local_write_expr,
                 }
             }
-            Expression::NonLocalVarWrite(a, b, c) => AstExpression::NonLocalVarWrite(a as u8, b as u8, Box::new(self.parse_expression(c.as_ref()))),
-            Expression::ArgWrite(a, b, c) => AstExpression::ArgWrite(a as u8, b as u8, Box::new(self.parse_expression(c.as_ref()))),
+            Expression::NonLocalVarWrite(a, b, c) => {
+                let parsed = self.parse_expression(c.as_ref());
+                AstExpression::NonLocalVarWrite(a as u8, b as u8, self.gc_interface.alloc(parsed))
+            }
+            Expression::ArgWrite(a, b, c) => {
+                let parsed = self.parse_expression(c.as_ref());
+                AstExpression::ArgWrite(a as u8, b as u8, self.gc_interface.alloc(parsed))
+            }
             Expression::Message(msg) => self.parse_message(msg.as_ref()),
-            Expression::Exit(a, b) => match b {
-                0 => AstExpression::LocalExit(Box::new(self.parse_expression(a.as_ref()))),
-                _ => AstExpression::NonLocalExit(Box::new(self.parse_expression(a.as_ref())), b as u8),
-            },
+            Expression::Exit(a, b) => {
+                let parsed = self.parse_expression(a.as_ref());
+                let alloc_parsed = self.gc_interface.alloc(parsed);
+                match b {
+                    0 => AstExpression::LocalExit(alloc_parsed),
+                    _ => AstExpression::NonLocalExit(alloc_parsed, b as u8),
+                }
+            }
             Expression::Literal(a) => {
                 match &a {
                     // this is to handle a weird corner case where "-2147483648" is considered to be a bigint by the lexer and then parser, when it's in fact just barely in i32 range
@@ -334,8 +345,11 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             );
         }
 
-        match self.class.as_ref().unwrap().get_field_offset_by_name(name) {
-            Some(offset) => AstExpression::FieldWrite(offset as u8, Box::new(self.parse_expression(expr))),
+        match self.class.clone().unwrap().get_field_offset_by_name(name) {
+            Some(offset) => {
+                let subexpr = self.parse_expression(expr);
+                AstExpression::FieldWrite(offset as u8, self.gc_interface.alloc(subexpr))
+            }
             _ => panic!(
                 "can't turn the GlobalWrite `{}` into a FieldWrite, and GlobalWrite shouldn't exist at runtime",
                 name
