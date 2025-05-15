@@ -36,7 +36,7 @@ pub struct AstBody {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstExpression {
-    GlobalRead(Box<GlobalNode>),
+    GlobalRead(Gc<GlobalNode>),
     LocalVarRead(u8),
     NonLocalVarRead(u8, u8),
     ArgRead(u8, u8),
@@ -57,7 +57,7 @@ pub enum AstExpression {
     Literal(AstLiteral),
     Block(Gc<AstBlock>),
     /// Call to an inlined method node (no dispatching like a message would)
-    InlinedCall(Box<InlinedNode>),
+    InlinedCall(Gc<InlinedNode>),
     // TODO: we might want a SEQUENCENODE of some kind. instead of relying on AstBody at all, actually.
 }
 
@@ -250,7 +250,7 @@ impl Display for AstExpression {
                 writeln!(f, "Block:")?;
                 writeln!(indented(f), "{}", **block)
             }
-            AstExpression::InlinedCall(inlined_node) => match inlined_node.as_ref() {
+            AstExpression::InlinedCall(inlined_node) => match &**inlined_node {
                 InlinedNode::IfInlined(node) => writeln!(f, "{}", node),
                 InlinedNode::IfTrueIfFalseInlined(node) => writeln!(f, "{}", node),
                 InlinedNode::IfNilInlined(node) => writeln!(f, "{}", node),

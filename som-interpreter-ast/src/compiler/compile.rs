@@ -265,7 +265,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         {
             let maybe_inlined = self.inline_if_possible(msg);
             if let Some(inlined_node) = maybe_inlined {
-                return AstExpression::InlinedCall(Box::new(inlined_node));
+                return AstExpression::InlinedCall(self.gc_interface.alloc(inlined_node));
             }
         }
 
@@ -328,12 +328,16 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         }
 
         if self.class.is_none() {
-            return AstExpression::GlobalRead(Box::new(GlobalNode::from(self.interner.intern(name.as_str()))));
+            let global_node = GlobalNode::from(self.interner.intern(name.as_str()));
+            return AstExpression::GlobalRead(self.gc_interface.alloc(global_node));
         }
 
         match self.class.as_ref().unwrap().get_field_offset_by_name(&name) {
             Some(offset) => AstExpression::FieldRead(offset as u8),
-            _ => AstExpression::GlobalRead(Box::new(GlobalNode::from(self.interner.intern(name.as_str())))),
+            _ => {
+                let global_node = GlobalNode::from(self.interner.intern(name.as_str()));
+                AstExpression::GlobalRead(self.gc_interface.alloc(global_node))
+            }
         }
     }
 

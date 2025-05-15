@@ -136,7 +136,7 @@ impl Evaluate for AstExpression {
             Self::TernaryDispatch(ter_op) => ter_op.evaluate(universe, value_stack),
             Self::NAryDispatch(msg) => msg.evaluate(universe, value_stack),
             Self::SuperMessage(msg) => msg.evaluate(universe, value_stack),
-            Self::InlinedCall(inlined_node) => match inlined_node.as_mut() {
+            Self::InlinedCall(inlined_node) => match &mut **inlined_node {
                 InlinedNode::IfInlined(if_inlined) => if_inlined.evaluate(universe, value_stack),
                 InlinedNode::IfTrueIfFalseInlined(if_true_if_false_inlined) => if_true_if_false_inlined.evaluate(universe, value_stack),
                 InlinedNode::WhileInlined(while_inlined) => while_inlined.evaluate(universe, value_stack),

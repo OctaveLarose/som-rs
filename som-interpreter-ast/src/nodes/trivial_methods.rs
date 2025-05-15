@@ -1,9 +1,12 @@
+use som_gc::gcref::Gc;
+
 use crate::ast::AstLiteral;
 use crate::evaluate::Evaluate;
 use crate::invokable::{Invoke, Return};
-use crate::nodes::global_read::GlobalNode;
 use crate::universe::{GlobalValueStack, Universe};
 use crate::value::Value;
+
+use super::global_read::GlobalNode;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrivialLiteralMethod {
@@ -12,7 +15,7 @@ pub struct TrivialLiteralMethod {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrivialGlobalMethod {
-    pub(crate) global_name: Box<GlobalNode>,
+    pub(crate) global_name: Gc<GlobalNode>,
 }
 
 impl Evaluate for TrivialGlobalMethod {
