@@ -1,5 +1,4 @@
 use crate::gc::VecValue;
-use crate::value::nanboxed::{ARRAY_TAG, BLOCK_TAG, CLASS_TAG, INSTANCE_TAG, INVOKABLE_TAG};
 use crate::value::Value;
 use crate::vm_objects::block::Block;
 use crate::vm_objects::class::Class;
@@ -22,30 +21,30 @@ impl<T> From<TypedPtrValue<T, Gc<T>>> for Value {
 
 impl HasPointerTag for VecValue {
     fn get_tag() -> u64 {
-        ARRAY_TAG
+        unreachable!("we shouldn't need to access any tag for this type anymore")
     }
 }
 
 impl HasPointerTag for Block {
     fn get_tag() -> u64 {
-        BLOCK_TAG
+        unreachable!("we shouldn't need to access any tag for this type anymore")
     }
 }
 
 impl HasPointerTag for Class {
     fn get_tag() -> u64 {
-        CLASS_TAG
+        unreachable!("we shouldn't need to access any tag for this type anymore")
     }
 }
 
 impl HasPointerTag for Method {
     fn get_tag() -> u64 {
-        INVOKABLE_TAG
+        unreachable!("we shouldn't need to access any tag for this type anymore")
     }
 }
 
 impl HasPointerTag for Instance {
     fn get_tag() -> u64 {
-        INSTANCE_TAG
+        unreachable!("we shouldn't need to access any tag for this type anymore")
     }
 }

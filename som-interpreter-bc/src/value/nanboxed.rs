@@ -1,5 +1,5 @@
 use super::Value;
-use crate::gc::VecValue;
+use crate::gc::{BCObjMagicId, VecValue};
 use crate::universe::Universe;
 use crate::value::value_enum::ValueEnum;
 use crate::vm_objects::block::Block;
@@ -9,25 +9,15 @@ use crate::vm_objects::method::Method;
 use num_bigint::BigInt;
 use som_gc::debug_assert_valid_semispace_ptr_value;
 use som_gc::gcref::Gc;
-use som_gc::gcslice::GcSlice;
 use som_value::delegate_to_base_value;
 use som_value::interned::Interned;
 use som_value::value::*;
-use som_value::value_ptr::{HasPointerTag, TypedPtrValue};
+use som_value::value_ptr::HasPointerTag;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 
-/// Tag bits for the `Array` type.
-pub(crate) const ARRAY_TAG: u64 = 0b010 | CELL_BASE_TAG;
-/// Tag bits for the `Block` type.
-pub(crate) const BLOCK_TAG: u64 = 0b100 | CELL_BASE_TAG;
-/// Tag bits for the `Class` type.
-pub(crate) const CLASS_TAG: u64 = 0b101 | CELL_BASE_TAG;
-/// Tag bits for the `Instance` type.
-pub(crate) const INSTANCE_TAG: u64 = 0b110 | CELL_BASE_TAG;
-/// Tag bits for the `Invokable` type.
-pub(crate) const INVOKABLE_TAG: u64 = 0b111 | CELL_BASE_TAG;
+pub(crate) const PTR_TAG: u64 = 0b100 | CELL_BASE_TAG;
 
 impl Deref for Value {
     type Target = BaseValue;
@@ -76,42 +66,96 @@ impl Value {
 
     #[inline(always)]
     pub fn is_value_ptr<T: HasPointerTag>(&self) -> bool {
-        self.0.is_ptr::<T, Gc<T>>()
+        // TODO: invalid at the moment: will not properly check which type we're dealing with,
+        // since all pointers have the same tag. easy fix but see next function comment, we need to
+        // adjust the interface in the first place
+        //self.0.is_ptr::<T, Gc<T>>()
+        self.is_ptr_type()
     }
 
     #[inline(always)]
     pub fn as_value_ptr<T: HasPointerTag>(&self) -> Option<Gc<T>> {
-        self.0.as_ptr::<T, Gc<T>>()
+        // TODO: removed all checks! need to adapt the typedptr interface instead to work with
+        // arbitrary pointer tags better
+        Some(self.extract_pointer_bits().into())
+        //self.0.as_ptr::<T, Gc<T>>()
     }
 
     /// Returns this value as an array, if such is its type.
     #[inline(always)]
     pub fn as_array(self) -> Option<VecValue> {
-        match self.tag() == ARRAY_TAG {
-            true => Some(VecValue(GcSlice::from(self.extract_pointer_bits()))),
-            false => None,
+        if !self.is_ptr_type() {
+            return None;
+        }
+        let ptr = self.extract_pointer_bits();
+        unsafe {
+            let header: &BCObjMagicId = &*((ptr - 8) as *const BCObjMagicId);
+            match header {
+                BCObjMagicId::ArrayVal => Some(VecValue(ptr.into())),
+                _ => None,
+            }
         }
     }
-    /// Returns this value as a block, if such is its type.
+
     #[inline(always)]
     pub fn as_block(self) -> Option<Gc<Block>> {
-        self.as_value_ptr::<Block>()
+        if !self.is_ptr_type() {
+            return None;
+        }
+        let ptr = self.extract_pointer_bits();
+        unsafe {
+            let header: &BCObjMagicId = &*((ptr - 8) as *const BCObjMagicId);
+            match header {
+                BCObjMagicId::Block => Some(ptr.into()),
+                _ => None,
+            }
+        }
     }
 
     /// Returns this value as a class, if such is its type.
     #[inline(always)]
     pub fn as_class(self) -> Option<Gc<Class>> {
-        self.as_value_ptr::<Class>()
+        if !self.is_ptr_type() {
+            return None;
+        }
+        let ptr = self.extract_pointer_bits();
+        unsafe {
+            let header: &BCObjMagicId = &*((ptr - 8) as *const BCObjMagicId);
+            match header {
+                BCObjMagicId::Class => Some(ptr.into()),
+                _ => None,
+            }
+        }
     }
     /// Returns this value as an instance, if such is its type.
     #[inline(always)]
     pub fn as_instance(self) -> Option<Gc<Instance>> {
-        self.as_value_ptr::<Instance>()
+        if !self.is_ptr_type() {
+            return None;
+        }
+        let ptr = self.extract_pointer_bits();
+        unsafe {
+            let header: &BCObjMagicId = &*((ptr - 8) as *const BCObjMagicId);
+            match header {
+                BCObjMagicId::Instance => Some(ptr.into()),
+                _ => None,
+            }
+        }
     }
     /// Returns this value as an invokable, if such is its type.
     #[inline(always)]
     pub fn as_invokable(self) -> Option<Gc<Method>> {
-        self.as_value_ptr::<Method>()
+        if !self.is_ptr_type() {
+            return None;
+        }
+        let ptr = self.extract_pointer_bits();
+        unsafe {
+            let header: &BCObjMagicId = &*((ptr - 8) as *const BCObjMagicId);
+            match header {
+                BCObjMagicId::Method => Some(ptr.into()),
+                _ => None,
+            }
+        }
     }
 
     /// Get the class of the current value.
@@ -131,12 +175,20 @@ impl Value {
             SYMBOL_TAG => universe.core.symbol_class(),
             STRING_TAG => universe.core.string_class(),
             CHAR_TAG => universe.core.string_class(),
-            ARRAY_TAG => universe.core.array_class(),
-            BLOCK_TAG => self.as_block().unwrap().class(universe),
-            INSTANCE_TAG => self.as_instance().unwrap().class(),
-            CLASS_TAG => self.as_class().unwrap().class(),
-            INVOKABLE_TAG => self.as_invokable().unwrap().class(universe),
             _ => {
+                if self.is_ptr_type() {
+                    if let Some(blk) = self.as_block() {
+                        return blk.class(universe);
+                    } else if let Some(cls) = self.as_class() {
+                        return cls.class();
+                    } else if let Some(instance) = self.as_instance() {
+                        return instance.class();
+                    } else if let Some(invokable) = self.as_invokable() {
+                        return invokable.class(universe);
+                    } else if self.as_array().is_some() {
+                        return universe.core.array_class();
+                    }
+                }
                 if self.is_double() {
                     universe.core.double_class()
                 } else {
@@ -168,26 +220,22 @@ impl Value {
                 }
             }
             STRING_TAG => self.as_string::<Gc<String>>().unwrap().to_string(),
-            ARRAY_TAG => {
-                // TODO: I think we can do better here (less allocations).
-                let strings: Vec<String> = self.as_array().unwrap().0.iter().map(|value| value.to_string(universe)).collect();
-                format!("#({})", strings.join(" "))
-            }
-            BLOCK_TAG => {
-                let block = self.as_block().unwrap();
-                format!("instance of Block{}", block.nb_parameters() + 1)
-            }
-            INSTANCE_TAG => {
-                let instance = self.as_instance().unwrap();
-                format!("instance of {} class", instance.class().name(),)
-            }
-            CLASS_TAG => self.as_class().unwrap().name().to_string(),
-            INVOKABLE_TAG => {
-                let invokable = self.as_invokable().unwrap();
-                format!("{}>>#{}", invokable.holder().name(), invokable.signature(),)
-            }
             _ => {
-                panic!("unknown tag")
+                if let Some(block) = self.as_block() {
+                    format!("instance of Block{}", block.nb_parameters() + 1)
+                } else if let Some(class) = self.as_class() {
+                    class.name().to_string()
+                } else if let Some(instance) = self.as_instance() {
+                    format!("instance of {} class", instance.class().name(),)
+                } else if let Some(invokable) = self.as_invokable() {
+                    format!("{}>>#{}", invokable.holder().name(), invokable.signature(),)
+                } else if let Some(arr) = self.as_array() {
+                    // TODO: I think we can do better here (less allocations).
+                    let strings: Vec<String> = arr.iter().map(|value| value.to_string(universe)).collect();
+                    format!("#({})", strings.join(" "))
+                } else {
+                    panic!("unknown tag")
+                }
             }
         }
     }
@@ -199,27 +247,26 @@ impl Value {
     #[inline(always)]
     pub fn Array(value: VecValue) -> Self {
         // TODO use TypedPtrValue somehow instead
-        Value(BaseValue::new(ARRAY_TAG, value.0.into()))
+        Value(BaseValue::new(PTR_TAG, value.0.into()))
     }
 
     #[inline(always)]
     pub fn Block(value: Gc<Block>) -> Self {
-        TypedPtrValue::new(value).into()
+        Value(BaseValue::new(PTR_TAG, value.into()))
     }
 
     #[inline(always)]
     pub fn Class(value: Gc<Class>) -> Self {
-        TypedPtrValue::new(value).into()
+        Value(BaseValue::new(PTR_TAG, value.into()))
     }
-
     #[inline(always)]
     pub fn Instance(value: Gc<Instance>) -> Self {
-        TypedPtrValue::new(value).into()
+        Value(BaseValue::new(PTR_TAG, value.into()))
     }
 
     #[inline(always)]
     pub fn Invokable(value: Gc<Method>) -> Self {
-        TypedPtrValue::new(value).into()
+        Value(BaseValue::new(PTR_TAG, value.into()))
     }
 }
 
