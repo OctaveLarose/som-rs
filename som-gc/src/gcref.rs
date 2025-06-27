@@ -12,7 +12,7 @@ macro_rules! debug_assert_valid_semispace_ptr {
     ($self:expr) => {
         // #[cfg(all(feature = "semispace", debug_assertions))]
         #[cfg(debug_assertions)]
-        assert!($self.is_pointer_to_valid_space(), "Pointer to invalid space.");
+        assert!($self.is_pointer_to_valid_space(), "Pointer to invalid space: {}.", $self.ptr as usize);
     };
 }
 

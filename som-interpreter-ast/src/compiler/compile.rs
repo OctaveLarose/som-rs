@@ -89,7 +89,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
 
         let args_nbr = method_def.signature.chars().filter(|e| *e == ':').count();
 
-        match method_def.body.exprs.first()? {
+        match method_def.body.exprs.get_checked(0)? {
             AstExpression::LocalExit(expr) => {
                 if args_nbr != 0 {
                     return None;
@@ -229,7 +229,10 @@ impl<'a> AstMethodCompilerCtxt<'a> {
 
     pub fn parse_body(&mut self, body: &ast::Body) -> AstBody {
         AstBody {
-            exprs: body.exprs.iter().map(|expr| self.parse_expression(expr)).collect(),
+            exprs: {
+                let exprs: Vec<AstExpression> = body.exprs.iter().map(|expr| self.parse_expression(expr)).collect();
+                self.gc_interface.alloc_slice(exprs.as_slice())
+            },
         }
     }
 

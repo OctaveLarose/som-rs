@@ -322,7 +322,8 @@ impl Evaluate for AstSuperMessage {
 impl Evaluate for AstBody {
     fn evaluate(&mut self, universe: &mut Universe, value_stack: &mut GlobalValueStack) -> Return {
         let mut last_value = Value::NIL;
-        for expr in &mut self.exprs {
+        for i in 0..self.exprs.len() {
+            let expr = self.exprs.get_mut(i);
             last_value = propagate!(expr.evaluate(universe, value_stack));
         }
         Return::Local(last_value)

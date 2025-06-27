@@ -378,16 +378,12 @@ impl SOMAllocator for GCInterface {
     }
 
     fn write_slice_to_addr<T: SupportedSliceType + std::fmt::Debug>(&mut self, slice_header_addr: Address, obj: &[T]) -> GcSlice<T> {
-        let len_addr = SOMVM::object_start_to_ref(slice_header_addr);
-        let obj_addr = len_addr.to_raw_address().add(size_of::<usize>());
+        let slice_addr = SOMVM::object_start_to_ref(slice_header_addr);
 
         unsafe {
             *slice_header_addr.as_mut_ref() = T::get_magic_gc_slice_id();
-            *len_addr.to_raw_address().as_mut_ref() = obj.len();
-            std::ptr::copy_nonoverlapping(obj.as_ptr(), obj_addr.as_mut_ref(), obj.len());
+            GcSlice::new(slice_addr.to_raw_address(), obj)
         }
-
-        GcSlice::new(len_addr.to_raw_address())
     }
 
     #[cfg(feature = "marksweep")]

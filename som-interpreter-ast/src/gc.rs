@@ -68,6 +68,13 @@ impl SupportedSliceType for AstLiteral {
     }
 }
 
+const ASTEXPRESSION_SLICE_ID: u8 = 106;
+impl SupportedSliceType for AstExpression {
+    fn get_magic_gc_slice_id() -> u8 {
+        ASTEXPRESSION_SLICE_ID
+    }
+}
+
 impl HasTypeInfoForGC for VecValue {
     fn get_magic_gc_id() -> u8 {
         AstObjMagicId::ArrayVal as u8
@@ -217,7 +224,7 @@ pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotV
 
                 match &method.kind {
                     MethodKind::Defined(method_def) => {
-                        for expr in &method_def.body.exprs {
+                        for expr in method_def.body.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
                     }
@@ -244,7 +251,7 @@ pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotV
             }
             AstObjMagicId::AstBlock => {
                 let ast_block: &AstBlock = object.to_raw_address().as_ref();
-                for expr in &ast_block.body.exprs {
+                for expr in ast_block.body.exprs.iter() {
                     visit_expr(expr, slot_visitor)
                 }
             }
@@ -275,58 +282,58 @@ pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotV
                 match inlined_node {
                     InlinedNode::IfInlined(if_inlined) => {
                         visit_expr(&if_inlined.cond_expr, slot_visitor);
-                        for expr in &if_inlined.body_instrs.exprs {
+                        for expr in if_inlined.body_instrs.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
                     }
                     InlinedNode::IfNilInlined(if_nil_inlined) => {
                         visit_expr(&if_nil_inlined.cond_expr, slot_visitor);
-                        for expr in &if_nil_inlined.body_instrs.exprs {
+                        for expr in if_nil_inlined.body_instrs.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
                     }
                     InlinedNode::IfTrueIfFalseInlined(if_true_if_false_inlined) => {
                         visit_expr(&if_true_if_false_inlined.cond_expr, slot_visitor);
-                        for expr in &if_true_if_false_inlined.body_1_instrs.exprs {
+                        for expr in if_true_if_false_inlined.body_1_instrs.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
-                        for expr in &if_true_if_false_inlined.body_2_instrs.exprs {
+                        for expr in if_true_if_false_inlined.body_2_instrs.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
                     }
                     InlinedNode::IfNilIfNotNilInlined(if_nil_if_not_nil_inlined) => {
                         visit_expr(&if_nil_if_not_nil_inlined.cond_expr, slot_visitor);
-                        for expr in &if_nil_if_not_nil_inlined.body_1_instrs.exprs {
+                        for expr in if_nil_if_not_nil_inlined.body_1_instrs.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
-                        for expr in &if_nil_if_not_nil_inlined.body_2_instrs.exprs {
+                        for expr in if_nil_if_not_nil_inlined.body_2_instrs.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
                     }
                     InlinedNode::WhileInlined(while_inlined) => {
-                        for expr in &while_inlined.cond_instrs.exprs {
+                        for expr in while_inlined.cond_instrs.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
-                        for expr in &while_inlined.body_instrs.exprs {
+                        for expr in while_inlined.body_instrs.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
                     }
                     InlinedNode::OrInlined(or_inlined) => {
                         visit_expr(&or_inlined.first, slot_visitor);
-                        for expr in &or_inlined.second.exprs {
+                        for expr in or_inlined.second.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
                     }
                     InlinedNode::AndInlined(and_inlined) => {
                         visit_expr(&and_inlined.first, slot_visitor);
-                        for expr in &and_inlined.second.exprs {
+                        for expr in and_inlined.second.exprs.iter() {
                             visit_expr(expr, slot_visitor)
                         }
                     }
                     InlinedNode::ToDoInlined(to_do_inlined) => {
                         visit_expr(&to_do_inlined.start, slot_visitor);
                         visit_expr(&to_do_inlined.end, slot_visitor);
-                        for expr in &to_do_inlined.body.exprs {
+                        for expr in to_do_inlined.body.exprs.iter() {
                             visit_expr(expr, slot_visitor);
                         }
                     }

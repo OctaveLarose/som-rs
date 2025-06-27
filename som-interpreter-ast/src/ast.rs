@@ -31,7 +31,7 @@ pub enum InlinedNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstBody {
-    pub exprs: Vec<AstExpression>,
+    pub exprs: GcSlice<AstExpression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -153,7 +153,7 @@ impl Display for AstMethodDef {
 impl Display for AstBody {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "AstBody:")?;
-        for expr in &self.exprs {
+        for expr in self.exprs.iter() {
             write!(indented(f), "{}", expr)?;
         }
         Ok(())
@@ -163,7 +163,7 @@ impl Display for AstBody {
 impl Display for AstBlock {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "AstBlock({} params, {} locals):", self.nbr_params, self.nbr_locals)?;
-        for expr in &self.body.exprs {
+        for expr in self.body.exprs.iter() {
             write!(indented(f), "{}", expr)?;
         }
         Ok(())

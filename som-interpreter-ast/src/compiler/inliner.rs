@@ -125,7 +125,10 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, true));
 
         let inlined_block = AstBody {
-            exprs: blk.body.exprs.iter().map(|e| self.parse_expression_with_inlining(e)).collect(),
+            exprs: {
+                let exprs: Vec<AstExpression> = blk.body.exprs.iter().map(|e| self.parse_expression_with_inlining(e)).collect();
+                self.gc_interface.alloc_slice(exprs.as_slice())
+            },
         };
 
         let (nbr_locals_post_inlining, _blk_nbr_args) = {
@@ -154,7 +157,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         let adapted_inner_block = AstBlock {
             nbr_params,
             nbr_locals,
-            body: AstBody { exprs },
+            body: AstBody { exprs: self.gc_interface.alloc_slice(exprs.as_slice())},
         };
 
         self.scopes.pop();
