@@ -18,6 +18,7 @@ use std::fmt::Write;
 use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub enum InlinedNode {
     IfInlined(IfInlinedNode),
     IfTrueIfFalseInlined(IfTrueIfFalseInlinedNode),
@@ -30,11 +31,13 @@ pub enum InlinedNode {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub struct AstBody {
     pub exprs: GcSlice<AstExpression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub enum AstExpression {
     GlobalRead(Gc<GlobalNode>),
     LocalVarRead(u8),
@@ -47,11 +50,11 @@ pub enum AstExpression {
     NonLocalVarWrite(u8, u8, Gc<AstExpression>),
     ArgWrite(u8, u8, Gc<AstExpression>),
     FieldWrite(u8, Gc<AstExpression>),
-    UnaryDispatch(Box<AstUnaryDispatch>),
-    BinaryDispatch(Box<AstBinaryDispatch>),
-    TernaryDispatch(Box<AstTernaryDispatch>),
-    NAryDispatch(Box<AstNAryDispatch>),
-    SuperMessage(Box<AstSuperMessage>),
+    UnaryDispatch(Gc<AstUnaryDispatch>),
+    BinaryDispatch(Gc<AstBinaryDispatch>),
+    TernaryDispatch(Gc<AstTernaryDispatch>),
+    NAryDispatch(Gc<AstNAryDispatch>),
+    SuperMessage(Gc<AstSuperMessage>),
     LocalExit(Gc<AstExpression>),
     NonLocalExit(Gc<AstExpression>, u8),
     Literal(AstLiteral),
@@ -62,6 +65,7 @@ pub enum AstExpression {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub enum AstLiteral {
     /// Represents a symbol literal (eg. `#foo`).
     Symbol(Interned),
@@ -78,11 +82,13 @@ pub enum AstLiteral {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub struct AstTerm {
     pub body: AstBody,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub struct AstBlock {
     pub nbr_params: u8,
     pub nbr_locals: u8,
@@ -92,6 +98,7 @@ pub struct AstBlock {
 pub type CacheEntry = (Gc<Class>, Gc<Method>);
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub struct AstDispatchNode {
     pub signature: Interned,
     pub receiver: AstExpression,
@@ -100,17 +107,20 @@ pub struct AstDispatchNode {
 
 // TODO: not positive it's better to have them all own a dispatch node, as opposed to making one "Dispatch" enum encapsulating them all. checking would be nice.
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub struct AstUnaryDispatch {
     pub dispatch_node: AstDispatchNode,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub struct AstBinaryDispatch {
     pub dispatch_node: AstDispatchNode,
     pub arg: AstExpression,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub struct AstTernaryDispatch {
     pub dispatch_node: AstDispatchNode,
     pub arg1: AstExpression,
@@ -118,12 +128,14 @@ pub struct AstTernaryDispatch {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub struct AstNAryDispatch {
     pub dispatch_node: AstDispatchNode,
     pub values: Vec<AstExpression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
 pub struct AstSuperMessage {
     pub super_class: Gc<Class>,
     pub signature: Interned,
@@ -131,6 +143,7 @@ pub struct AstSuperMessage {
     // NB: no inline cache. I don't think it's super worth it since super calls are uncommon. Easy to implement though
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstMethodDef {
     /// The method's signature (eg. `println`, `at:put:` or `==`).

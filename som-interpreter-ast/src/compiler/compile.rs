@@ -275,7 +275,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         let interned_signature = self.interner.intern(msg.signature.as_str());
 
         if msg.receiver == Expression::GlobalRead(String::from("super")) {
-            return AstExpression::SuperMessage(Box::new(AstSuperMessage {
+            let super_msg = AstSuperMessage {
                 super_class: self
                     .class
                     .as_ref()
@@ -285,43 +285,57 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     .unwrap_or_else(|| panic!("no super class set, even though the method has a super call?")),
                 signature: interned_signature,
                 values: msg.values.iter().map(|e| expr_parsing_func(self, e)).collect(),
-            }));
+            };
+            let super_msg_ptr: Gc<AstSuperMessage> = self.gc_interface.alloc(super_msg);
+            return AstExpression::SuperMessage(super_msg_ptr);
         }
 
         let receiver = expr_parsing_func(self, &msg.receiver);
         match msg.values.len() {
-            0 => AstExpression::UnaryDispatch(Box::new(AstUnaryDispatch {
-                dispatch_node: AstDispatchNode {
-                    receiver,
-                    signature: interned_signature,
-                    inline_cache: None,
-                },
-            })),
-            1 => AstExpression::BinaryDispatch(Box::new(AstBinaryDispatch {
-                dispatch_node: AstDispatchNode {
-                    receiver,
-                    signature: interned_signature,
-                    inline_cache: None,
-                },
-                arg: expr_parsing_func(self, msg.values.first().unwrap()),
-            })),
-            2 => AstExpression::TernaryDispatch(Box::new(AstTernaryDispatch {
-                dispatch_node: AstDispatchNode {
-                    receiver,
-                    signature: interned_signature,
-                    inline_cache: None,
-                },
-                arg1: expr_parsing_func(self, msg.values.first().unwrap()),
-                arg2: expr_parsing_func(self, msg.values.get(1).unwrap()),
-            })),
-            _ => AstExpression::NAryDispatch(Box::new(AstNAryDispatch {
-                dispatch_node: AstDispatchNode {
-                    receiver,
-                    signature: interned_signature,
-                    inline_cache: None,
-                },
-                values: msg.values.iter().map(|e| expr_parsing_func(self, e)).collect(),
-            })),
+            0 => {
+                let unary_dispatch = AstUnaryDispatch {
+                    dispatch_node: AstDispatchNode {
+                        receiver,
+                        signature: interned_signature,
+                        inline_cache: None,
+                    },
+                };
+                AstExpression::UnaryDispatch(self.gc_interface.alloc(unary_dispatch))
+            }
+            1 => {
+                let bin_dispatch = AstBinaryDispatch {
+                    dispatch_node: AstDispatchNode {
+                        receiver,
+                        signature: interned_signature,
+                        inline_cache: None,
+                    },
+                    arg: expr_parsing_func(self, msg.values.first().unwrap()),
+                };
+                AstExpression::BinaryDispatch(self.gc_interface.alloc(bin_dispatch))
+            }
+            2 => {
+                let tern_dispatch = AstTernaryDispatch {
+                    dispatch_node: AstDispatchNode {
+                        receiver,
+                        signature: interned_signature,
+                        inline_cache: None,
+                    },
+                    arg1: expr_parsing_func(self, msg.values.first().unwrap()),
+                    arg2: expr_parsing_func(self, msg.values.get(1).unwrap()),
+                };
+                AstExpression::TernaryDispatch(self.gc_interface.alloc(tern_dispatch))
+            }
+            _ => {
+                let n_ary_dispatch = AstNAryDispatch {
+                    dispatch_node: AstDispatchNode {
+                        receiver,
+                        signature: interned_signature,
+                        inline_cache: None,
+                    },
+                    values: msg.values.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                };
+                AstExpression::NAryDispatch(self.gc_interface.alloc(n_ary_dispatch))
+            }
         }
     }
 

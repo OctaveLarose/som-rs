@@ -74,7 +74,7 @@ pub fn interactive(universe: &mut Universe, verbose: bool) -> Result<(), Error> 
                 Return::Local(v) => v,
                 Return::NonLocal(v, _) => v,
                 #[cfg(feature = "inlining-disabled")]
-                Return::Restart => panic!("restart invoked from shell?")
+                Return::Restart => panic!("restart invoked from shell?"),
             }
         };
 

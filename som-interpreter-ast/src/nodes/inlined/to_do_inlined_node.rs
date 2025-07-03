@@ -1,3 +1,6 @@
+use indenter::indented;
+use std::fmt::Write;
+
 use crate::ast::{AstBody, AstExpression};
 use crate::evaluate::Evaluate;
 use crate::invokable::Return;
@@ -15,8 +18,15 @@ pub struct ToDoInlinedNode {
 }
 
 impl Display for ToDoInlinedNode {
-    fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "TodoInlinedNode:",)?;
+        writeln!(indented(f), "start:")?;
+        write!(indented(&mut indented(f)), "{}", self.start)?;
+        writeln!(indented(f), "end:")?;
+        write!(indented(&mut indented(f)), "{}", self.end)?;
+        writeln!(indented(f), "body block:")?;
+        write!(indented(&mut indented(f)), "{}", self.body)?;
+        writeln!(indented(f), "acc. idx: {}", self.accumulator_idx)
     }
 }
 

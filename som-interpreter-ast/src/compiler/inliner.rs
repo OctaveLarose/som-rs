@@ -157,7 +157,9 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         let adapted_inner_block = AstBlock {
             nbr_params,
             nbr_locals,
-            body: AstBody { exprs: self.gc_interface.alloc_slice(exprs.as_slice())},
+            body: AstBody {
+                exprs: self.gc_interface.alloc_slice(exprs.as_slice()),
+            },
         };
 
         self.scopes.pop();

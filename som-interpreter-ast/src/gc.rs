@@ -1,4 +1,7 @@
-use crate::ast::{AstBlock, AstDispatchNode, AstExpression, AstLiteral, InlinedNode};
+use crate::ast::{
+    AstBinaryDispatch, AstBlock, AstDispatchNode, AstExpression, AstLiteral, AstNAryDispatch, AstSuperMessage, AstTernaryDispatch, AstUnaryDispatch,
+    InlinedNode,
+};
 use crate::nodes::global_read::GlobalNode;
 use crate::value::Value;
 use crate::vm_objects::block::Block;
@@ -36,6 +39,11 @@ pub enum AstObjMagicId {
     AstExpression = 108,
     GlobalNode = 109,
     InlinedNode = 110,
+    AstUnaryDispatch = 111,
+    AstBinaryDispatch = 112,
+    AstTernaryDispatch = 113,
+    AstNaryDispatch = 114,
+    AstSuperMsg = 115,
 }
 
 // we have to wrap it in our own type to be able to implement traits on it
@@ -135,6 +143,36 @@ impl HasTypeInfoForGC for InlinedNode {
     }
 }
 
+impl HasTypeInfoForGC for AstUnaryDispatch {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::AstUnaryDispatch as u8
+    }
+}
+
+impl HasTypeInfoForGC for AstBinaryDispatch {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::AstBinaryDispatch as u8
+    }
+}
+
+impl HasTypeInfoForGC for AstTernaryDispatch {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::AstTernaryDispatch as u8
+    }
+}
+
+impl HasTypeInfoForGC for AstNAryDispatch {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::AstNaryDispatch as u8
+    }
+}
+
+impl HasTypeInfoForGC for AstSuperMessage {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::AstSuperMsg as u8
+    }
+}
+
 // --- Scanning
 
 fn get_roots_in_mutator_thread(_mutator: &mut Mutator<SOMVM>) -> Vec<SOMSlot> {
@@ -174,6 +212,14 @@ fn get_roots_in_mutator_thread(_mutator: &mut Mutator<SOMVM>) -> Vec<SOMSlot> {
 }
 
 pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotVisitor<SOMSlot> + 'a)) {
+    fn visit_dispatch_node(dispatch_node: &AstDispatchNode, slot_visitor: &mut dyn SlotVisitor<SOMSlot>) {
+        visit_expr(&dispatch_node.receiver, slot_visitor);
+        if let Some(cache) = &dispatch_node.inline_cache {
+            slot_visitor.visit_slot(SOMSlot::from(&cache.0));
+            slot_visitor.visit_slot(SOMSlot::from(&cache.1));
+        }
+    }
+
     unsafe {
         let gc_id: &AstObjMagicId = VMObjectModel::ref_to_header(object).as_ref();
 
@@ -270,6 +316,35 @@ pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotV
             AstObjMagicId::AstExpression => {
                 let expr: &AstExpression = object.to_raw_address().as_ref();
                 visit_expr(expr, slot_visitor);
+            }
+            AstObjMagicId::AstUnaryDispatch => {
+                let expr: &AstUnaryDispatch = object.to_raw_address().as_ref();
+                visit_dispatch_node(&expr.dispatch_node, slot_visitor);
+            }
+            AstObjMagicId::AstBinaryDispatch => {
+                let expr: &AstBinaryDispatch = object.to_raw_address().as_ref();
+                visit_dispatch_node(&expr.dispatch_node, slot_visitor);
+                visit_expr(&expr.arg, slot_visitor);
+            }
+            AstObjMagicId::AstTernaryDispatch => {
+                let expr: &AstTernaryDispatch = object.to_raw_address().as_ref();
+                visit_dispatch_node(&expr.dispatch_node, slot_visitor);
+                visit_expr(&expr.arg1, slot_visitor);
+                visit_expr(&expr.arg2, slot_visitor);
+            }
+            AstObjMagicId::AstNaryDispatch => {
+                let expr: &AstNAryDispatch = object.to_raw_address().as_ref();
+                visit_dispatch_node(&expr.dispatch_node, slot_visitor);
+                for expr in &expr.values {
+                    visit_expr(expr, slot_visitor)
+                }
+            }
+            AstObjMagicId::AstSuperMsg => {
+                let expr: &AstSuperMessage = object.to_raw_address().as_ref();
+                slot_visitor.visit_slot(SOMSlot::from(&expr.super_class));
+                for arg in &expr.values {
+                    visit_expr(arg, slot_visitor);
+                }
             }
             AstObjMagicId::GlobalNode => {
                 let global_node: &GlobalNode = object.to_raw_address().as_ref();
@@ -381,14 +456,6 @@ unsafe fn visit_value_maybe_process(val: &Value, to_process: &mut Vec<SOMSlot>) 
 }
 
 fn visit_expr(expr: &AstExpression, slot_visitor: &mut dyn SlotVisitor<SOMSlot>) {
-    fn visit_dispatch_node(dispatch_node: &AstDispatchNode, slot_visitor: &mut dyn SlotVisitor<SOMSlot>) {
-        visit_expr(&dispatch_node.receiver, slot_visitor);
-        if let Some(cache) = &dispatch_node.inline_cache {
-            slot_visitor.visit_slot(SOMSlot::from(&cache.0));
-            slot_visitor.visit_slot(SOMSlot::from(&cache.1));
-        }
-    }
-
     match expr {
         AstExpression::Block(blk) => slot_visitor.visit_slot(SOMSlot::from(blk)),
         AstExpression::Literal(lit) => visit_literal(lit, slot_visitor),
@@ -403,28 +470,19 @@ fn visit_expr(expr: &AstExpression, slot_visitor: &mut dyn SlotVisitor<SOMSlot>)
             visit_expr(expr, slot_visitor)
         }
         AstExpression::UnaryDispatch(dispatch) => {
-            visit_dispatch_node(&dispatch.dispatch_node, slot_visitor);
+            slot_visitor.visit_slot(SOMSlot::from(dispatch));
         }
         AstExpression::BinaryDispatch(dispatch) => {
-            visit_dispatch_node(&dispatch.dispatch_node, slot_visitor);
-            visit_expr(&dispatch.arg, slot_visitor)
+            slot_visitor.visit_slot(SOMSlot::from(dispatch));
         }
         AstExpression::TernaryDispatch(dispatch) => {
-            visit_dispatch_node(&dispatch.dispatch_node, slot_visitor);
-            visit_expr(&dispatch.arg1, slot_visitor);
-            visit_expr(&dispatch.arg2, slot_visitor);
+            slot_visitor.visit_slot(SOMSlot::from(dispatch));
         }
         AstExpression::NAryDispatch(dispatch) => {
-            visit_dispatch_node(&dispatch.dispatch_node, slot_visitor);
-            for arg in &dispatch.values {
-                visit_expr(arg, slot_visitor);
-            }
+            slot_visitor.visit_slot(SOMSlot::from(dispatch));
         }
         AstExpression::SuperMessage(super_message) => {
-            slot_visitor.visit_slot(SOMSlot::from(&super_message.super_class));
-            for arg in &super_message.values {
-                visit_expr(arg, slot_visitor);
-            }
+            slot_visitor.visit_slot(SOMSlot::from(super_message));
         }
         AstExpression::GlobalRead(global_node) => {
             slot_visitor.visit_slot(SOMSlot::from(global_node));
@@ -478,6 +536,11 @@ fn get_object_size(object: ObjectReference) -> usize {
         AstObjMagicId::AstExpression => size_of::<AstExpression>(),
         AstObjMagicId::GlobalNode => size_of::<GlobalNode>(),
         AstObjMagicId::InlinedNode => size_of::<InlinedNode>(),
+        AstObjMagicId::AstUnaryDispatch => size_of::<AstUnaryDispatch>(),
+        AstObjMagicId::AstBinaryDispatch => size_of::<AstBinaryDispatch>(),
+        AstObjMagicId::AstTernaryDispatch => size_of::<AstTernaryDispatch>(),
+        AstObjMagicId::AstNaryDispatch => size_of::<AstNAryDispatch>(),
+        AstObjMagicId::AstSuperMsg => size_of::<AstSuperMessage>(),
     }
 }
 
