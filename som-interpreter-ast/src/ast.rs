@@ -131,7 +131,7 @@ pub struct AstTernaryDispatch {
 #[repr(C)]
 pub struct AstNAryDispatch {
     pub dispatch_node: AstDispatchNode,
-    pub values: Vec<AstExpression>,
+    pub values: GcSlice<AstExpression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -139,7 +139,7 @@ pub struct AstNAryDispatch {
 pub struct AstSuperMessage {
     pub super_class: Gc<Class>,
     pub signature: Interned,
-    pub values: Vec<AstExpression>,
+    pub values: GcSlice<AstExpression>,
     // NB: no inline cache. I don't think it's super worth it since super calls are uncommon. Easy to implement though
 }
 
@@ -236,7 +236,7 @@ impl Display for AstExpression {
                 writeln!(indented(f), "Receiver:")?;
                 write!(indented(&mut indented(f)), "{}", msg.dispatch_node.receiver)?;
                 writeln!(indented(f), "Values: {}", if msg.values.is_empty() { "(none)" } else { "" })?;
-                for value in &msg.values {
+                for value in msg.values.iter() {
                     write!(indented(&mut indented(f)), "{}", value)?;
                 }
                 Ok(())
@@ -245,7 +245,7 @@ impl Display for AstExpression {
                 writeln!(f, "SuperMessage \"{:?}\":", msg.signature)?;
                 writeln!(indented(f), "Receiver: {}", msg.super_class.name)?;
                 writeln!(indented(f), "Values: {}", if msg.values.is_empty() { "(none)" } else { "" })?;
-                for value in &msg.values {
+                for value in msg.values.iter() {
                     write!(indented(&mut indented(f)), "{}", value)?;
                 }
                 Ok(())

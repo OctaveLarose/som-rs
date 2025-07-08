@@ -276,7 +276,8 @@ impl Evaluate for AstNAryDispatch {
 
         value_stack.push(receiver);
 
-        for expr in &mut self.values {
+        for i in 0..self.values.len() {
+            let expr = self.values.get_mut(i);
             let value = propagate!(expr.evaluate(universe, value_stack));
             value_stack.push(value);
         }
@@ -296,7 +297,8 @@ impl Evaluate for AstSuperMessage {
         let receiver = universe.current_frame.get_self();
         value_stack.push(receiver);
 
-        for expr in &mut self.values {
+        for i in 0..self.values.len() {
+            let expr = self.values.get_mut(i);
             let value = propagate!(expr.evaluate(universe, value_stack));
             value_stack.push(value);
         }
@@ -323,9 +325,8 @@ impl Evaluate for AstBody {
     fn evaluate(&mut self, universe: &mut Universe, value_stack: &mut GlobalValueStack) -> Return {
         let mut last_value = Value::NIL;
 
-        //println!("{}", &self);
-        ////dbg!(&self);
-        //std::process::exit(1);
+        std::hint::black_box(&self.exprs);
+        
         for i in 0..self.exprs.len() {
             let expr = self.exprs.get_mut(i);
             last_value = propagate!(expr.evaluate(universe, value_stack));
@@ -340,7 +341,8 @@ impl Evaluate for AstMethodDef {
         // We can't copy/clone the pointer, because we want to have a reference to that pointer in case moving GC moves it.
         // And we can't hold onto an immutable ref to universe while passing a mutable ref universe to `self.body.evaluate` lower down. Hence this hack.
         // Not sure how to better solve that one, to be honest.
-        let current_frame = unsafe { &*(&universe.current_frame as *const Gc<Frame>) };
+        let current_frame: &Gc<Frame> = unsafe { &*(&universe.current_frame as *const Gc<Frame>) };
+        std::hint::black_box(&current_frame);
 
         #[cfg(not(feature = "inlining-disabled"))]
         match self.body.evaluate(universe, value_stack) {

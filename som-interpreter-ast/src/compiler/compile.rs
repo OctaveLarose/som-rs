@@ -284,7 +284,10 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     .clone()
                     .unwrap_or_else(|| panic!("no super class set, even though the method has a super call?")),
                 signature: interned_signature,
-                values: msg.values.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                values: {
+                    let values: Vec<AstExpression> = msg.values.iter().map(|e| expr_parsing_func(self, e)).collect();
+                    self.gc_interface.alloc_slice(&values)
+                },
             };
             let super_msg_ptr: Gc<AstSuperMessage> = self.gc_interface.alloc(super_msg);
             return AstExpression::SuperMessage(super_msg_ptr);
@@ -332,7 +335,10 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                         signature: interned_signature,
                         inline_cache: None,
                     },
-                    values: msg.values.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                    values: {
+                        let values: Vec<AstExpression> = msg.values.iter().map(|e| expr_parsing_func(self, e)).collect();
+                        self.gc_interface.alloc_slice(&values)
+                    },
                 };
                 AstExpression::NAryDispatch(self.gc_interface.alloc(n_ary_dispatch))
             }
