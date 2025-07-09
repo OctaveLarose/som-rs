@@ -15,7 +15,6 @@ use som_gc::gc_interface::SOMAllocator;
 use som_gc::gcref::Gc;
 use som_gc::gcslice::GcSlice;
 use som_value::interned::Interned;
-use std::marker::PhantomData;
 
 pub static INSTANCE_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| {
     Box::new({
@@ -45,10 +44,7 @@ fn new(interp: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
     let size = size_of::<Instance>() + (nbr_fields * size_of::<Value>());
 
     let mut instance_ptr: Gc<Instance> = universe.gc_interface.request_memory_for_type(size, AllocSiteMarker::Instance);
-    *instance_ptr = Instance {
-        class: interp.get_current_frame().stack_last().as_class().unwrap(),
-        fields_marker: PhantomData,
-    };
+    *instance_ptr = Instance::from_class(interp.get_current_frame().stack_last().as_class().unwrap());
 
     for idx in 0..nbr_fields {
         Instance::assign_field(&instance_ptr, idx, Value::NIL)

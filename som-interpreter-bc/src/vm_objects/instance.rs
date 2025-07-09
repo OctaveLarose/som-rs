@@ -15,6 +15,14 @@ pub struct Instance {
 }
 
 impl Instance {
+    /// Construct an instance for a given class.
+    pub fn from_class(class: Gc<Class>) -> Self {
+        Self {
+            class,
+            fields_marker: PhantomData,
+        }
+    }
+
     /// Get the class of which this is an instance from.
     pub fn class(&self) -> Gc<Class> {
         self.class.clone()
