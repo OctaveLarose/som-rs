@@ -9,7 +9,7 @@ use crate::vm_objects::instance::Instance;
 use anyhow::{anyhow, Error};
 use som_core::core_classes::CoreClasses;
 use som_core::interner::Interner;
-use som_gc::gc_interface::{GCInterface, SOMAllocator};
+use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_gc::{debug_assert_valid_semispace_ptr, debug_assert_valid_semispace_ptr_value};
 use som_value::interned::Interned;
@@ -111,7 +111,7 @@ impl Universe {
         globals.insert(interner.intern("false"), Value::Boolean(false));
         globals.insert(interner.intern("nil"), Value::NIL);
 
-        let system_instance = Value::Instance(gc_interface.alloc(Instance::from_class(core.system_class())));
+        let system_instance = Value::Instance(gc_interface.alloc(Instance::from_class(core.system_class()), AllocSiteMarker::Instance));
         globals.insert(interner.intern("system"), system_instance);
 
         Ok(Self {
@@ -359,7 +359,7 @@ impl Universe {
         let method_name = self.intern_symbol("doesNotUnderstand:arguments:");
         let mut initialize = value.lookup_method(self, method_name)?;
         let sym = Value::Symbol(interned_sym);
-        let args = Value::Array(VecValue(self.gc_interface.alloc_slice(&args)));
+        let args = Value::Array(VecValue(self.gc_interface.alloc_slice(&args, AllocSiteMarker::VecValue)));
 
         //eprintln!("Couldn't invoke {}; exiting.", self.interner.lookup(interned_sym));
         //std::process::exit(1);
@@ -392,7 +392,7 @@ impl Universe {
     pub fn initialize(&mut self, args: Vec<Value>, value_stack: &mut GlobalValueStack) -> Option<Return> {
         let method_name = self.interner.intern("initialize:");
         let mut initialize = self.core.system_class().lookup_method(method_name)?;
-        let args = Value::Array(VecValue(self.gc_interface.alloc_slice(&args)));
+        let args = Value::Array(VecValue(self.gc_interface.alloc_slice(&args, AllocSiteMarker::VecValue)));
 
         let system_value = self.lookup_global(self.interner.reverse_lookup("system")?)?;
         value_stack.push(system_value);

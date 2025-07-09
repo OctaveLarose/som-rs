@@ -7,7 +7,7 @@ use crate::value::convert::{Primitive, StringLike};
 use crate::value::Value;
 use anyhow::Error;
 use once_cell::sync::Lazy;
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_value::value::BaseValue;
 use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
@@ -109,7 +109,9 @@ fn concatenate(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<
         StringLike::Symbol(sym) => universe.lookup_symbol(sym),
     };
 
-    Ok(Value::String(universe.gc_interface.alloc(format!("{}{}", s1, s2))))
+    Ok(Value::String(
+        universe.gc_interface.alloc(format!("{}{}", s1, s2), AllocSiteMarker::String),
+    ))
 }
 
 fn as_symbol(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value, Error> {
@@ -154,7 +156,7 @@ fn prim_substring_from_to(universe: &mut Universe, stack: &mut GlobalValueStack)
         StringLike::Symbol(sym) => universe.lookup_symbol(sym),
     };
 
-    let s = universe.gc_interface.alloc(string.chars().skip(from).take(to - from).collect());
+    let s = universe.gc_interface.alloc(string.chars().skip(from).take(to - from).collect(), AllocSiteMarker::String);
 
     Ok(Value::String(s))
 }

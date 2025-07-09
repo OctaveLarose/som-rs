@@ -68,7 +68,7 @@ fn new(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value, E
 
     match usize::try_from(count) {
         Ok(length) => Ok(Value::Array(VecValue(
-            universe.gc_interface.alloc_slice_with_marker(&vec![Value::NIL; length], Some(AllocSiteMarker::Array)),
+            universe.gc_interface.alloc_slice(&vec![Value::NIL; length], AllocSiteMarker::VecValue),
         ))),
         Err(err) => bail!(format!("'{}': {}", SIGNATURE, err)),
     }
@@ -78,7 +78,7 @@ fn copy(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<VecValu
     get_args_from_stack! {stack, arr => VecValue};
 
     let copied_arr: Vec<Value> = arr.iter().copied().collect();
-    let allocated: GcSlice<Value> = universe.gc_interface.alloc_slice(&copied_arr);
+    let allocated: GcSlice<Value> = universe.gc_interface.alloc_slice(&copied_arr, AllocSiteMarker::VecValue);
     Ok(VecValue(allocated))
 }
 

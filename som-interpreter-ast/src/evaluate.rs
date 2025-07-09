@@ -9,7 +9,7 @@ use crate::value::Value;
 use crate::vm_objects::block::Block;
 use crate::vm_objects::frame::{Frame, FrameAccess};
 use num_bigint::BigInt;
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_gc::{debug_assert_valid_semispace_ptr, debug_assert_valid_semispace_ptr_value};
 
@@ -160,7 +160,9 @@ impl Evaluate for AstLiteral {
                     let value = propagate!(literal.clone().evaluate(universe, _value_stack));
                     output.push(value);
                 }
-                Return::Local(Value::Array(VecValue(universe.gc_interface.alloc_slice(&output))))
+                Return::Local(Value::Array(VecValue(
+                    universe.gc_interface.alloc_slice(&output, AllocSiteMarker::VecValue),
+                )))
             }
             Self::Integer(int) => Return::Local(Value::Integer(*int)),
             Self::BigInteger(bigint) => Return::Local(Value::BigInteger(bigint.clone())),
@@ -180,7 +182,7 @@ impl Evaluate for AstTerm {
 impl Evaluate for Gc<AstBlock> {
     fn evaluate(&mut self, universe: &mut Universe, _value_stack: &mut GlobalValueStack) -> Return {
         debug_assert_valid_semispace_ptr!(self);
-        let mut block_ptr = universe.gc_interface.request_memory_for_type(size_of::<Block>(), Some(som_gc::gc_interface::AllocSiteMarker::Block));
+        let mut block_ptr = universe.gc_interface.request_memory_for_type(size_of::<Block>(), som_gc::gc_interface::AllocSiteMarker::Block);
         *block_ptr = Block {
             block: self.clone(),
             frame: universe.current_frame.clone(),
@@ -326,7 +328,7 @@ impl Evaluate for AstBody {
         let mut last_value = Value::NIL;
 
         std::hint::black_box(&self.exprs);
-        
+
         for i in 0..self.exprs.len() {
             let expr = self.exprs.get_mut(i);
             last_value = propagate!(expr.evaluate(universe, value_stack));

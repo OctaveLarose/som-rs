@@ -12,7 +12,7 @@ use som_core::cli_parser::CLIOptions;
 
 mod shell;
 
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 #[cfg(feature = "inlining-disabled")]
 use som_interpreter_ast::invokable::Return;
 
@@ -55,7 +55,7 @@ fn main() -> anyhow::Result<()> {
 
             let args = std::iter::once(String::from(file_stem))
                 .chain(opts.args.iter().cloned())
-                .map(|str| Value::String(universe.gc_interface.alloc(str)))
+                .map(|str| Value::String(universe.gc_interface.alloc(str, AllocSiteMarker::String)))
                 .collect();
 
             let output = universe.initialize(args, &mut value_stack).unwrap_or_else(|| panic!("could not find 'System>>#initialize:'"));

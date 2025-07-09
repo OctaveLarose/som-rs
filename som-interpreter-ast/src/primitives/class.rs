@@ -10,7 +10,7 @@ use crate::vm_objects::class::Class;
 use crate::vm_objects::instance::Instance;
 use anyhow::Error;
 use once_cell::sync::Lazy;
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_gc::gcref::Gc;
 
 pub static INSTANCE_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| {
@@ -32,9 +32,7 @@ fn superclass(receiver: Gc<Class>) -> Result<Value, Error> {
 }
 
 fn new(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value, Error> {
-    let mut instance_ptr = universe
-        .gc_interface
-        .request_memory_for_type(size_of::<Instance>(), Some(som_gc::gc_interface::AllocSiteMarker::Instance));
+    let mut instance_ptr = universe.gc_interface.request_memory_for_type(size_of::<Instance>(), AllocSiteMarker::Instance);
     get_args_from_stack!(stack, receiver => Gc<Class>);
     *instance_ptr = Instance::from_class(receiver);
     Ok(Value::Instance(instance_ptr))
@@ -50,7 +48,9 @@ fn methods(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Valu
     get_args_from_stack!(stack, receiver => Gc<Class>);
     let methods: Vec<Value> = receiver.methods.values().map(|invokable| Value::Invokable(invokable.clone())).collect();
 
-    Ok(Value::Array(VecValue(universe.gc_interface.alloc_slice(&methods))))
+    Ok(Value::Array(VecValue(
+        universe.gc_interface.alloc_slice(&methods, AllocSiteMarker::VecValue),
+    )))
 }
 
 fn fields(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value, Error> {
@@ -58,10 +58,12 @@ fn fields(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value
     let fields: Vec<Value> = receiver
         .get_all_field_names()
         .iter()
-        .map(|field_name| Value::String(universe.gc_interface.alloc(field_name.clone())))
+        .map(|field_name| Value::String(universe.gc_interface.alloc(field_name.clone(), AllocSiteMarker::String)))
         .collect();
 
-    Ok(Value::Array(VecValue(universe.gc_interface.alloc_slice(&fields))))
+    Ok(Value::Array(VecValue(
+        universe.gc_interface.alloc_slice(&fields, AllocSiteMarker::VecValue),
+    )))
 }
 
 /// Search for an instance primitive matching the given signature.

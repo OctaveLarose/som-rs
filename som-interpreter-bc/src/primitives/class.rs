@@ -44,7 +44,7 @@ fn new(interp: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
     let nbr_fields = interp.get_current_frame().stack_last().as_class().unwrap().get_nbr_fields();
     let size = size_of::<Instance>() + (nbr_fields * size_of::<Value>());
 
-    let mut instance_ptr: Gc<Instance> = universe.gc_interface.request_memory_for_type(size, Some(AllocSiteMarker::Instance));
+    let mut instance_ptr: Gc<Instance> = universe.gc_interface.request_memory_for_type(size, AllocSiteMarker::Instance);
     *instance_ptr = Instance {
         class: interp.get_current_frame().stack_last().as_class().unwrap(),
         fields_marker: PhantomData,
@@ -69,7 +69,7 @@ fn methods(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValue
     let cls: Gc<Class> = interp.get_current_frame().stack_last().as_class().unwrap();
     std::hint::black_box(&cls); // paranoia, in case the compiler gets ideas about reusing that variable
     let slice_size = cls.methods.len() * size_of::<Value>();
-    let slice_addr = universe.gc_interface.request_bytes_for_slice(slice_size, None);
+    let slice_addr = universe.gc_interface.request_bytes_for_slice(slice_size, AllocSiteMarker::VecValue);
 
     pop_args_from_stack!(interp, receiver => Gc<Class>);
     let methods: Vec<Value> = receiver.methods.values().cloned().map(Value::Invokable).collect();
@@ -81,7 +81,7 @@ fn methods(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValue
 fn fields(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValue, Error> {
     pop_args_from_stack!(interp, receiver => Gc<Class>);
     let fields: Vec<Value> = receiver.field_names.iter().copied().map(Value::Symbol).collect();
-    Ok(VecValue(universe.gc_interface.alloc_slice(&fields)))
+    Ok(VecValue(universe.gc_interface.alloc_slice(&fields, AllocSiteMarker::VecValue)))
 }
 
 /// Search for an instance primitive matching the given signature.

@@ -11,7 +11,7 @@ use crate::vm_objects::method::MethodKind;
 use som_core::ast;
 use som_core::ast::{Expression, Literal, MethodBody};
 use som_core::interner::Interner;
-use som_gc::gc_interface::{GCInterface, SOMAllocator};
+use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 use som_gc::gcref::Gc;
 
 pub struct AstMethodCompilerCtxt<'a> {
@@ -160,7 +160,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             Expression::ArgRead(scope, idx) => AstExpression::ArgRead(scope as u8, idx as u8),
             Expression::LocalVarWrite(a, b) => {
                 let b_parsed = self.parse_expression(b.as_ref());
-                let local_write_expr = AstExpression::LocalVarWrite(a as u8, self.gc_interface.alloc(b_parsed));
+                let local_write_expr = AstExpression::LocalVarWrite(a as u8, self.gc_interface.alloc(b_parsed, AllocSiteMarker::AstExpression));
                 match self.maybe_make_inc_or_dec(&local_write_expr) {
                     Some(inc_or_dec) => inc_or_dec,
                     None => local_write_expr,
@@ -168,16 +168,16 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             }
             Expression::NonLocalVarWrite(a, b, c) => {
                 let parsed = self.parse_expression(c.as_ref());
-                AstExpression::NonLocalVarWrite(a as u8, b as u8, self.gc_interface.alloc(parsed))
+                AstExpression::NonLocalVarWrite(a as u8, b as u8, self.gc_interface.alloc(parsed, AllocSiteMarker::AstExpression))
             }
             Expression::ArgWrite(a, b, c) => {
                 let parsed = self.parse_expression(c.as_ref());
-                AstExpression::ArgWrite(a as u8, b as u8, self.gc_interface.alloc(parsed))
+                AstExpression::ArgWrite(a as u8, b as u8, self.gc_interface.alloc(parsed, AllocSiteMarker::AstExpression))
             }
             Expression::Message(msg) => self.parse_message(msg.as_ref()),
             Expression::Exit(a, b) => {
                 let parsed = self.parse_expression(a.as_ref());
-                let alloc_parsed = self.gc_interface.alloc(parsed);
+                let alloc_parsed = self.gc_interface.alloc(parsed, AllocSiteMarker::AstExpression);
                 match b {
                     0 => AstExpression::LocalExit(alloc_parsed),
                     _ => AstExpression::NonLocalExit(alloc_parsed, b as u8),
@@ -195,7 +195,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             }
             Expression::Block(a) => {
                 let ast_block = self.parse_block(&a);
-                AstExpression::Block(self.gc_interface.alloc(ast_block))
+                AstExpression::Block(self.gc_interface.alloc(ast_block, AllocSiteMarker::Block))
             }
         }
     }
@@ -231,7 +231,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         AstBody {
             exprs: {
                 let exprs: Vec<AstExpression> = body.exprs.iter().map(|expr| self.parse_expression(expr)).collect();
-                self.gc_interface.alloc_slice(exprs.as_slice())
+                self.gc_interface.alloc_slice(exprs.as_slice(), AllocSiteMarker::SliceAstExpression)
             },
         }
     }
@@ -268,7 +268,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         {
             let maybe_inlined = self.inline_if_possible(msg);
             if let Some(inlined_node) = maybe_inlined {
-                return AstExpression::InlinedCall(self.gc_interface.alloc(inlined_node));
+                return AstExpression::InlinedCall(self.gc_interface.alloc(inlined_node, AllocSiteMarker::AstInlinedNode));
             }
         }
 
@@ -286,10 +286,10 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                 signature: interned_signature,
                 values: {
                     let values: Vec<AstExpression> = msg.values.iter().map(|e| expr_parsing_func(self, e)).collect();
-                    self.gc_interface.alloc_slice(&values)
+                    self.gc_interface.alloc_slice(&values, AllocSiteMarker::SliceAstExpression)
                 },
             };
-            let super_msg_ptr: Gc<AstSuperMessage> = self.gc_interface.alloc(super_msg);
+            let super_msg_ptr: Gc<AstSuperMessage> = self.gc_interface.alloc(super_msg, AllocSiteMarker::AstSuperMsg);
             return AstExpression::SuperMessage(super_msg_ptr);
         }
 
@@ -303,7 +303,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                         inline_cache: None,
                     },
                 };
-                AstExpression::UnaryDispatch(self.gc_interface.alloc(unary_dispatch))
+                AstExpression::UnaryDispatch(self.gc_interface.alloc(unary_dispatch, AllocSiteMarker::AstDispatchNode))
             }
             1 => {
                 let bin_dispatch = AstBinaryDispatch {
@@ -314,7 +314,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     },
                     arg: expr_parsing_func(self, msg.values.first().unwrap()),
                 };
-                AstExpression::BinaryDispatch(self.gc_interface.alloc(bin_dispatch))
+                AstExpression::BinaryDispatch(self.gc_interface.alloc(bin_dispatch, AllocSiteMarker::AstDispatchNode))
             }
             2 => {
                 let tern_dispatch = AstTernaryDispatch {
@@ -326,7 +326,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     arg1: expr_parsing_func(self, msg.values.first().unwrap()),
                     arg2: expr_parsing_func(self, msg.values.get(1).unwrap()),
                 };
-                AstExpression::TernaryDispatch(self.gc_interface.alloc(tern_dispatch))
+                AstExpression::TernaryDispatch(self.gc_interface.alloc(tern_dispatch, AllocSiteMarker::AstDispatchNode))
             }
             _ => {
                 let n_ary_dispatch = AstNAryDispatch {
@@ -337,10 +337,10 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     },
                     values: {
                         let values: Vec<AstExpression> = msg.values.iter().map(|e| expr_parsing_func(self, e)).collect();
-                        self.gc_interface.alloc_slice(&values)
+                        self.gc_interface.alloc_slice(&values, AllocSiteMarker::SliceAstExpression)
                     },
                 };
-                AstExpression::NAryDispatch(self.gc_interface.alloc(n_ary_dispatch))
+                AstExpression::NAryDispatch(self.gc_interface.alloc(n_ary_dispatch, AllocSiteMarker::AstDispatchNode))
             }
         }
     }
@@ -352,14 +352,14 @@ impl<'a> AstMethodCompilerCtxt<'a> {
 
         if self.class.is_none() {
             let global_node = GlobalNode::from(self.interner.intern(name.as_str()));
-            return AstExpression::GlobalRead(self.gc_interface.alloc(global_node));
+            return AstExpression::GlobalRead(self.gc_interface.alloc(global_node, AllocSiteMarker::AstGlobalNode));
         }
 
         match self.class.as_ref().unwrap().get_field_offset_by_name(&name) {
             Some(offset) => AstExpression::FieldRead(offset as u8),
             _ => {
                 let global_node = GlobalNode::from(self.interner.intern(name.as_str()));
-                AstExpression::GlobalRead(self.gc_interface.alloc(global_node))
+                AstExpression::GlobalRead(self.gc_interface.alloc(global_node, AllocSiteMarker::AstGlobalNode))
             }
         }
     }
@@ -375,7 +375,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         match self.class.clone().unwrap().get_field_offset_by_name(name) {
             Some(offset) => {
                 let subexpr = self.parse_expression(expr);
-                AstExpression::FieldWrite(offset as u8, self.gc_interface.alloc(subexpr))
+                AstExpression::FieldWrite(offset as u8, self.gc_interface.alloc(subexpr, AllocSiteMarker::AstExpression))
             }
             _ => panic!(
                 "can't turn the GlobalWrite `{}` into a FieldWrite, and GlobalWrite shouldn't exist at runtime",
@@ -387,7 +387,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
     pub(crate) fn parse_literal(&mut self, lit: &ast::Literal) -> AstLiteral {
         match lit {
             Literal::String(str) => {
-                let str_ptr = self.gc_interface.alloc(str.clone());
+                let str_ptr = self.gc_interface.alloc(str.clone(), AllocSiteMarker::String);
                 AstLiteral::String(str_ptr)
             }
             Literal::Symbol(str) => {
@@ -397,13 +397,13 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             Literal::Double(double) => AstLiteral::Double(*double),
             Literal::Integer(int) => AstLiteral::Integer(*int),
             Literal::BigInteger(bigint_str) => {
-                let bigint_ptr = self.gc_interface.alloc(bigint_str.parse().unwrap());
+                let bigint_ptr = self.gc_interface.alloc(bigint_str.parse().unwrap(), AllocSiteMarker::BigInt);
                 AstLiteral::BigInteger(bigint_ptr)
             }
             Literal::Array(arr) => {
                 let arr_ptr = {
                     let arr: Vec<AstLiteral> = arr.iter().map(|lit| self.parse_literal(lit)).collect();
-                    self.gc_interface.alloc_slice(arr.as_slice())
+                    self.gc_interface.alloc_slice(arr.as_slice(), AllocSiteMarker::SliceAstExpression)
                 };
                 AstLiteral::Array(arr_ptr)
             }

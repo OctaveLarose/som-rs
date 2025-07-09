@@ -60,7 +60,7 @@ fn new(interp: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
     let count = usize::try_from(interp.get_current_frame().stack_pop().as_integer().unwrap())?;
     interp.get_current_frame().stack_pop(); // receiver is just an unneeded Array class
 
-    let arr_ptr: VecValue = VecValue(universe.gc_interface.alloc_slice_with_marker(&vec![Value::NIL; count], Some(AllocSiteMarker::Array)));
+    let arr_ptr: VecValue = VecValue(universe.gc_interface.alloc_slice(&vec![Value::NIL; count], AllocSiteMarker::VecValue));
 
     interp.get_current_frame().stack_push(arr_ptr.into_value());
     Ok(())
@@ -70,7 +70,7 @@ fn copy(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValue, E
     let arr: VecValue = interp.get_current_frame().stack_last().as_array().unwrap();
     std::hint::black_box(&arr); // paranoia, in case the compiler gets ideas about reusing that variable
     let slice_size = arr.0.get_true_size();
-    let slice_addr = universe.gc_interface.request_bytes_for_slice(slice_size, None);
+    let slice_addr = universe.gc_interface.request_bytes_for_slice(slice_size, AllocSiteMarker::VecValue);
 
     pop_args_from_stack!(interp, arr2 => VecValue);
     std::hint::black_box(&arr2);

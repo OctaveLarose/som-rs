@@ -10,7 +10,7 @@ use crate::nodes::inlined::to_do_inlined_node::ToDoInlinedNode;
 use crate::nodes::inlined::while_inlined_node::WhileInlinedNode;
 use som_core::ast;
 use som_core::ast::{Block, Expression, Literal};
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 
 /// Helper enum for some variable-related logic when inlining.
 pub enum VarType<'a> {
@@ -62,7 +62,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         let expr = match expression {
             Expression::Block(blk) => {
                 let new_blk = self.adapt_block_after_outer_inlined(blk);
-                let new_blk_ptr = self.gc_interface.alloc(new_blk); // could we just adapt the old block instead of allocating?
+                let new_blk_ptr = self.gc_interface.alloc(new_blk, AllocSiteMarker::Block); // could we just adapt the old block instead of allocating?
                 AstExpression::Block(new_blk_ptr)
             }
             Expression::LocalVarRead(idx)
@@ -91,8 +91,8 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
                 let adjust_scope_by = self.scopes.iter().rev().take(*scope).filter(|e| e.is_getting_inlined).count();
                 let new_scope = scope - adjust_scope_by;
                 match new_scope {
-                    0 => AstExpression::LocalExit(self.gc_interface.alloc(inline_expr)),
-                    _ => AstExpression::NonLocalExit(self.gc_interface.alloc(inline_expr), new_scope as u8),
+                    0 => AstExpression::LocalExit(self.gc_interface.alloc(inline_expr, AllocSiteMarker::AstExpression)),
+                    _ => AstExpression::NonLocalExit(self.gc_interface.alloc(inline_expr, AllocSiteMarker::AstExpression), new_scope as u8),
                 }
             }
             Expression::GlobalRead(a) => self.global_or_field_read_from_superclass(a.clone()),
@@ -106,7 +106,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
                 match self.class.clone().unwrap().get_field_offset_by_name(name) {
                     Some(offset) => {
                         let expr_with_inlining = self.parse_expression_with_inlining(expr);
-                        AstExpression::FieldWrite(offset as u8, self.gc_interface.alloc(expr_with_inlining))
+                        AstExpression::FieldWrite(offset as u8, self.gc_interface.alloc(expr_with_inlining, AllocSiteMarker::AstExpression))
                     }
                     _ => panic!(
                         "can't turn the GlobalWrite `{}` into a FieldWrite, and GlobalWrite shouldn't exist at runtime",
@@ -127,7 +127,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         let inlined_block = AstBody {
             exprs: {
                 let exprs: Vec<AstExpression> = blk.body.exprs.iter().map(|e| self.parse_expression_with_inlining(e)).collect();
-                self.gc_interface.alloc_slice(exprs.as_slice())
+                self.gc_interface.alloc_slice(exprs.as_slice(), AllocSiteMarker::SliceAstExpression)
             },
         };
 
@@ -158,7 +158,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
             nbr_params,
             nbr_locals,
             body: AstBody {
-                exprs: self.gc_interface.alloc_slice(exprs.as_slice()),
+                exprs: self.gc_interface.alloc_slice(exprs.as_slice(), AllocSiteMarker::SliceAstExpression),
             },
         };
 
@@ -259,7 +259,11 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
                 Expression::ArgRead(..) => AstExpression::ArgRead(new_up_idx, idx as u8),
                 Expression::ArgWrite(_, _, arg_write_expr) => {
                     let expr_with_inlining = self.parse_expression_with_inlining(arg_write_expr);
-                    AstExpression::ArgWrite(new_up_idx, idx as u8, self.gc_interface.alloc(expr_with_inlining))
+                    AstExpression::ArgWrite(
+                        new_up_idx,
+                        idx as u8,
+                        self.gc_interface.alloc(expr_with_inlining, AllocSiteMarker::AstExpression),
+                    )
                 }
                 _ => unreachable!(),
             },
@@ -456,7 +460,7 @@ impl AstMethodCompilerCtxt<'_> {
             (0, VarType::Read) => AstExpression::LocalVarRead(idx),
             (0, VarType::Write(expr)) => {
                 let expr_with_inlining = self.parse_expression_with_inlining(expr);
-                let local_write_expr = AstExpression::LocalVarWrite(idx, self.gc_interface.alloc(expr_with_inlining));
+                let local_write_expr = AstExpression::LocalVarWrite(idx, self.gc_interface.alloc(expr_with_inlining, AllocSiteMarker::AstExpression));
                 match self.maybe_make_inc_or_dec(&local_write_expr) {
                     Some(inc_or_dec) => inc_or_dec,
                     None => local_write_expr,
@@ -465,7 +469,7 @@ impl AstMethodCompilerCtxt<'_> {
             (_, VarType::Read) => AstExpression::NonLocalVarRead(up_idx, idx),
             (_, VarType::Write(expr)) => {
                 let expr_with_inlining = self.parse_expression_with_inlining(expr);
-                AstExpression::NonLocalVarWrite(up_idx, idx, self.gc_interface.alloc(expr_with_inlining))
+                AstExpression::NonLocalVarWrite(up_idx, idx, self.gc_interface.alloc(expr_with_inlining, AllocSiteMarker::AstExpression))
             }
         }
     }

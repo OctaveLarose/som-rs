@@ -5,7 +5,7 @@ use crate::vm_objects::frame::{Frame, FrameStackIter};
 use crate::vm_objects::method::Method;
 use crate::UNIVERSE_RAW_PTR_CONST;
 use rstest::{fixture, rstest};
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_lexer::{Lexer, Token};
 use som_parser::lang;
@@ -73,7 +73,7 @@ fn frame_basic_local_access(universe: &mut Universe) {
     frame.assign_local(0, Value::Double(400.004));
     frame.assign_local(1, Value::NIL);
 
-    let str_ptr = universe.gc_interface.alloc(String::from("abcd"));
+    let str_ptr = universe.gc_interface.alloc(String::from("abcd"), AllocSiteMarker::String);
     frame.assign_local(2, Value::String(str_ptr.clone()));
 
     assert_eq!(frame.lookup_local(0).as_double(), Some(400.004));
