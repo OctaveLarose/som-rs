@@ -8,7 +8,7 @@ use crate::value::Value;
 use anyhow::{bail, Error};
 use num_traits::ToPrimitive;
 use once_cell::sync::Lazy;
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 
 pub static INSTANCE_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| {
     Box::new([
@@ -85,7 +85,7 @@ fn as_string(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Va
 
     let value = promote!(SIGNATURE, receiver);
 
-    Ok(Value::String(universe.gc_interface.alloc(value.to_string())))
+    Ok(Value::String(universe.gc_interface.alloc(value.to_string(), AllocSiteMarker::String)))
 }
 
 fn as_integer(receiver: f64) -> Result<Value, Error> {

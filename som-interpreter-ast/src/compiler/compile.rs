@@ -11,7 +11,7 @@ use crate::vm_objects::method::MethodKind;
 use som_core::ast;
 use som_core::ast::{Expression, Literal, MethodBody};
 use som_core::interner::Interner;
-use som_gc::gc_interface::{GCInterface, SOMAllocator};
+use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 use som_gc::gcref::Gc;
 
 pub struct AstMethodCompilerCtxt<'a> {
@@ -184,7 +184,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             }
             Expression::Block(a) => {
                 let ast_block = self.parse_block(&a);
-                AstExpression::Block(self.gc_interface.alloc(ast_block))
+                AstExpression::Block(self.gc_interface.alloc(ast_block, AllocSiteMarker::Block))
             }
         }
     }
@@ -346,7 +346,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
     pub(crate) fn parse_literal(&mut self, lit: &ast::Literal) -> AstLiteral {
         match lit {
             Literal::String(str) => {
-                let str_ptr = self.gc_interface.alloc(str.clone());
+                let str_ptr = self.gc_interface.alloc(str.clone(), AllocSiteMarker::String);
                 AstLiteral::String(str_ptr)
             }
             Literal::Symbol(str) => {
@@ -356,13 +356,13 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             Literal::Double(double) => AstLiteral::Double(*double),
             Literal::Integer(int) => AstLiteral::Integer(*int),
             Literal::BigInteger(bigint_str) => {
-                let bigint_ptr = self.gc_interface.alloc(bigint_str.parse().unwrap());
+                let bigint_ptr = self.gc_interface.alloc(bigint_str.parse().unwrap(), AllocSiteMarker::BigInt);
                 AstLiteral::BigInteger(bigint_ptr)
             }
             Literal::Array(arr) => {
                 let arr_ptr = {
                     let arr: Vec<AstLiteral> = arr.iter().map(|lit| self.parse_literal(lit)).collect();
-                    self.gc_interface.alloc_slice(arr.as_slice())
+                    self.gc_interface.alloc_slice(arr.as_slice(), AllocSiteMarker::SliceAstExpression)
                 };
                 AstLiteral::Array(arr_ptr)
             }

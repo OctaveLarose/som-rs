@@ -9,7 +9,7 @@ use crate::vm_objects::instance::Instance;
 use anyhow::{anyhow, Error};
 use som_core::core_classes::CoreClasses;
 use som_core::interner::Interner;
-use som_gc::gc_interface::{GCInterface, SOMAllocator};
+use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_value::interned::Interned;
 use std::fs;
@@ -85,10 +85,13 @@ impl Universe {
         globals.push((interner.intern("false"), Value::Boolean(false)));
         globals.push((interner.intern("nil"), Value::NIL));
 
-        let system_instance = Value::Instance(gc_interface.alloc(Instance {
-            class: core.system_class(),
-            fields_marker: PhantomData,
-        }));
+        let system_instance = Value::Instance(gc_interface.alloc(
+            Instance {
+                class: core.system_class(),
+                fields_marker: PhantomData,
+            },
+            AllocSiteMarker::Instance,
+        ));
         globals.push((interner.intern("system"), system_instance));
 
         Ok(Self {
@@ -241,7 +244,11 @@ impl Universe {
 
         interpreter.push_method_frame_with_args(
             method,
-            vec![value, Value::Symbol(symbol), Value::Array(VecValue(self.gc_interface.alloc_slice(&args)))],
+            vec![
+                value,
+                Value::Symbol(symbol),
+                Value::Array(VecValue(self.gc_interface.alloc_slice(&args, AllocSiteMarker::VecValue))),
+            ],
             self.gc_interface,
         );
 
@@ -265,7 +272,7 @@ impl Universe {
         let initialize = self.core.system_class().lookup_method(method_name)?;
         let system_value = self.lookup_global(self.interner.reverse_lookup("system")?)?;
 
-        let args_vec = VecValue(self.gc_interface.alloc_slice(&args));
+        let args_vec = VecValue(self.gc_interface.alloc_slice(&args, AllocSiteMarker::VecValue));
         let frame_ptr = Frame::alloc_initial_method(initialize, &[system_value, Value::Array(args_vec)], self.gc_interface);
         let interpreter = Interpreter::new(frame_ptr);
 

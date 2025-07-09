@@ -12,7 +12,7 @@ use som_core::cli_parser::CLIOptions;
 
 mod shell;
 
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_interpreter_bc::debug::disassembler::disassemble_method_body;
 #[cfg(feature = "profiler")]
@@ -68,7 +68,7 @@ fn run() -> anyhow::Result<()> {
 
     let args = std::iter::once(String::from(file_stem))
         .chain(opts.args.iter().cloned())
-        .map(|arg| Value::String(universe.gc_interface.alloc(arg)))
+        .map(|arg| Value::String(universe.gc_interface.alloc(arg, AllocSiteMarker::String)))
         .collect();
 
     let mut interpreter = universe.initialize(args).expect("issue running program");

@@ -14,7 +14,7 @@ use crate::vm_objects::class::Class;
 use anyhow::{Context, Error};
 use num_bigint::BigInt;
 use once_cell::sync::Lazy;
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_value::interned::Interned;
 
@@ -47,7 +47,7 @@ fn load_file(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<O
         return Ok(None);
     };
 
-    Ok(Some(universe.gc_interface.alloc(value)))
+    Ok(Some(universe.gc_interface.alloc(value, AllocSiteMarker::String)))
 }
 
 fn print_string(interp: &mut Interpreter, universe: &mut Universe) -> Result<Value, Error> {
@@ -178,14 +178,17 @@ fn gc_stats(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValu
     let gc_interface = &mut universe.gc_interface;
 
     let total_gc = gc_interface.get_nbr_collections();
-    let total_gc_time = gc_interface.alloc(BigInt::from(gc_interface.get_total_gc_time()));
-    let total_bytes_bigint = gc_interface.alloc(BigInt::from(gc_interface.get_used_bytes()));
+    let total_gc_time = gc_interface.alloc(BigInt::from(gc_interface.get_total_gc_time()), AllocSiteMarker::BigInt);
+    let total_bytes_bigint = gc_interface.alloc(BigInt::from(gc_interface.get_used_bytes()), AllocSiteMarker::BigInt);
 
-    Ok(VecValue(universe.gc_interface.alloc_slice(&[
-        Value::Integer(total_gc as i32),
-        Value::BigInteger(total_gc_time),
-        Value::BigInteger(total_bytes_bigint),
-    ])))
+    Ok(VecValue(universe.gc_interface.alloc_slice(
+        &[
+            Value::Integer(total_gc as i32),
+            Value::BigInteger(total_gc_time),
+            Value::BigInteger(total_bytes_bigint),
+        ],
+        AllocSiteMarker::VecValue,
+    )))
 }
 
 /// Search for an instance primitive matching the given signature.

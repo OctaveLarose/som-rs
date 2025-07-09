@@ -10,7 +10,7 @@ use num_bigint::{BigInt, BigUint, Sign, ToBigInt};
 use num_traits::{Signed, ToPrimitive};
 use once_cell::sync::Lazy;
 use rand::Rng;
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_gc::gcslice::GcSlice;
 
@@ -56,7 +56,7 @@ macro_rules! demote {
         let value = $expr;
         match value.to_i32() {
             Some(value) => Ok(Value::Integer(value)),
-            None => Ok(Value::BigInteger($gc_interface.alloc(value))),
+            None => Ok(Value::BigInteger($gc_interface.alloc(value, AllocSiteMarker::BigInt))),
         }
     }};
 }
@@ -72,7 +72,7 @@ fn from_string(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<
     match value.parse::<i32>() {
         Ok(a) => Ok(Value::Integer(a)),
         Err(_) => match value.parse::<BigInt>() {
-            Ok(b) => Ok(Value::BigInteger(universe.gc_interface.alloc(b))),
+            Ok(b) => Ok(Value::BigInteger(universe.gc_interface.alloc(b, AllocSiteMarker::BigInt))),
             _ => panic!("couldn't turn an int/bigint into a string"),
         },
     }
@@ -85,7 +85,7 @@ fn as_string(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Va
         IntegerLike::BigInteger(value) => value.to_string(),
     };
 
-    Ok(Value::String(universe.gc_interface.alloc(value)))
+    Ok(Value::String(universe.gc_interface.alloc(value, AllocSiteMarker::String)))
 }
 
 fn as_double(receiver: IntegerLike) -> Result<Value, Error> {
@@ -139,7 +139,7 @@ fn as_32bit_unsigned_value(universe: &mut Universe, stack: &mut GlobalValueStack
 
     let value = match value.try_into() {
         Ok(value) => IntegerLike::Integer(value),
-        Err(_) => IntegerLike::BigInteger(universe.gc_interface.alloc(BigInt::from(value))),
+        Err(_) => IntegerLike::BigInteger(universe.gc_interface.alloc(BigInt::from(value), AllocSiteMarker::BigInt)),
     };
 
     Ok(value)
@@ -330,7 +330,7 @@ fn abs(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value, E
         },
         DoubleLike::Integer(i) => Ok(i.into_value()),
         DoubleLike::BigInteger(v) => {
-            let bigint: Gc<BigInt> = universe.gc_interface.alloc(v.abs());
+            let bigint: Gc<BigInt> = universe.gc_interface.alloc(v.abs(), AllocSiteMarker::BigInt);
             Ok(bigint.into_value())
         }
     }
@@ -440,7 +440,9 @@ fn shift_left(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<V
         IntegerLike::Integer(a) => match (a as u64).checked_shl(b as u32) {
             Some(value) => match value.try_into() {
                 Ok(value) => Ok(Value::Integer(value)),
-                Err(_) => Ok(Value::BigInteger(universe.gc_interface.alloc(BigInt::from(value as i64)))),
+                Err(_) => Ok(Value::BigInteger(
+                    universe.gc_interface.alloc(BigInt::from(value as i64), AllocSiteMarker::BigInt),
+                )),
             },
             None => demote!(heap, BigInt::from(a) << (b as u32)),
         },
@@ -465,7 +467,7 @@ fn shift_right(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<
         IntegerLike::Integer(a) => match (a as u64).checked_shr(b as u32) {
             Some(value) => match value.try_into() {
                 Ok(value) => Ok(Value::Integer(value)),
-                Err(_) => Ok(Value::BigInteger(gc_interface.alloc(BigInt::from(value)))),
+                Err(_) => Ok(Value::BigInteger(gc_interface.alloc(BigInt::from(value), AllocSiteMarker::BigInt))),
             },
             None => {
                 let uint = BigUint::from_bytes_le(&a.to_bigint().unwrap().to_signed_bytes_le());
@@ -484,7 +486,7 @@ fn shift_right(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<
 fn to(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value, Error> {
     get_args_from_stack!(stack, a => i32, b => i32);
     let vec: Vec<Value> = (a..=b).map(Value::Integer).collect();
-    let alloc_vec: GcSlice<Value> = universe.gc_interface.alloc_slice(&vec);
+    let alloc_vec: GcSlice<Value> = universe.gc_interface.alloc_slice(&vec, AllocSiteMarker::VecValue);
     Ok(Value::Array(VecValue(alloc_vec)))
 }
 
