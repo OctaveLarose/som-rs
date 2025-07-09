@@ -213,7 +213,9 @@ pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotV
 
                 slot_visitor.visit_slot(SOMSlot::from(&instance.class));
 
-                for val in &instance.fields {
+                let instance_as_gc: Gc<Instance> = object.to_raw_address().into();
+                for i in 0..instance.class().get_nbr_fields() {
+                    let val: &Value = Instance::lookup_field(&instance_as_gc, i as u8);
                     visit_value(val, slot_visitor)
                 }
             }
@@ -418,7 +420,10 @@ fn get_object_size(object: ObjectReference) -> usize {
             let frame: &Frame = object.to_raw_address().as_ref();
             Frame::get_true_size(frame.nbr_args, frame.nbr_locals)
         },
-        AstObjMagicId::Instance => size_of::<Instance>(),
+        AstObjMagicId::Instance => unsafe {
+            let instance: &Instance = object.to_raw_address().as_ref();
+            size_of::<Instance>() + instance.get_nbr_fields() * size_of::<Value>()
+        },
         AstObjMagicId::String => size_of::<String>(),
         AstObjMagicId::BigInt => size_of::<BigInt>(),
         AstObjMagicId::AstBlock => size_of::<AstBlock>(),

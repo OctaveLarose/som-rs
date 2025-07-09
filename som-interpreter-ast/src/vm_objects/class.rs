@@ -237,16 +237,16 @@ impl Class {
         self.field_names
             .iter()
             .position(|field_name| field_name == name)
-            .map(|pos| pos + self.super_class().map(|scls| scls.get_total_field_nbr()).unwrap_or(0))
+            .map(|pos| pos + self.super_class().map(|scls| scls.get_nbr_fields()).unwrap_or(0))
             .or_else(|| match self.super_class() {
                 Some(super_class) => super_class.get_field_offset_by_name(name),
                 _ => None,
             })
     }
 
-    pub fn get_total_field_nbr(&self) -> usize {
+    pub fn get_nbr_fields(&self) -> usize {
         let scls_nbr_fields = match self.super_class() {
-            Some(scls) => scls.get_total_field_nbr(),
+            Some(scls) => scls.get_nbr_fields(),
             None => 0,
         };
         self.field_names.len() + scls_nbr_fields

@@ -45,7 +45,7 @@ impl Hash for Value {
             hasher.write(b"#inst#");
             instance.class.hash(hasher);
             for i in 0..instance.class.fields.len() {
-                instance.lookup_field(i as u8).hash(hasher)
+                Instance::lookup_field(&instance, i as u8).hash(hasher)
             }
         } else if let Some(value) = self.as_invokable() {
             hasher.write(b"#mthd#");
@@ -64,9 +64,8 @@ impl Hash for Class {
 }
 
 impl Hash for Instance {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.class.hash(hasher);
-        self.fields.iter().for_each(|val| val.hash(hasher))
+    fn hash<H: Hasher>(&self, _hasher: &mut H) {
+        todo!()
     }
 }
 

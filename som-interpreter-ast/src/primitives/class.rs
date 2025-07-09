@@ -32,9 +32,18 @@ fn superclass(receiver: Gc<Class>) -> Result<Value, Error> {
 }
 
 fn new(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value, Error> {
-    let mut instance_ptr = universe.gc_interface.request_memory_for_type(size_of::<Instance>(), AllocSiteMarker::Instance);
+    let nbr_fields = stack.last().as_class().unwrap().get_nbr_fields();
+    let size = size_of::<Instance>() + (nbr_fields * size_of::<Value>());
+
+    let mut instance_ptr: Gc<Instance> = universe.gc_interface.request_memory_for_type(size, AllocSiteMarker::Instance);
+
     get_args_from_stack!(stack, receiver => Gc<Class>);
+
     *instance_ptr = Instance::from_class(receiver);
+    for idx in 0..instance_ptr.class.get_nbr_fields() {
+        Instance::assign_field(&instance_ptr, idx as u8, Value::NIL)
+    }
+    
     Ok(Value::Instance(instance_ptr))
 }
 

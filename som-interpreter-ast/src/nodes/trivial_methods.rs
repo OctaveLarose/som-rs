@@ -4,6 +4,7 @@ use crate::invokable::{Invoke, Return};
 use crate::nodes::global_read::GlobalNode;
 use crate::universe::{GlobalValueStack, Universe};
 use crate::value::Value;
+use crate::vm_objects::instance::Instance;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrivialLiteralMethod {
@@ -34,7 +35,7 @@ impl Invoke for TrivialGetterMethod {
         if let Some(cls) = arg.as_class() {
             Return::Local(cls.class().lookup_field(self.field_idx))
         } else if let Some(instance) = arg.as_instance() {
-            Return::Local(*instance.lookup_field(self.field_idx))
+            Return::Local(*Instance::lookup_field(&instance, self.field_idx))
         } else {
             panic!("trivial getter not called on a class/instance?")
         }
@@ -55,8 +56,8 @@ impl Invoke for TrivialSetterMethod {
         if let Some(cls) = rcvr.as_class() {
             cls.class().assign_field(self.field_idx, val);
             Return::Local(Value::Class(cls))
-        } else if let Some(mut instance) = rcvr.as_instance() {
-            instance.assign_field(self.field_idx, val);
+        } else if let Some(instance) = rcvr.as_instance() {
+            Instance::assign_field(&instance, self.field_idx, val);
             Return::Local(Value::Instance(instance))
         } else {
             panic!("trivial getter not called on a class/instance?")

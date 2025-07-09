@@ -14,7 +14,6 @@ use som_gc::gcref::Gc;
 use som_value::interned::Interned;
 use std::fs;
 use std::io;
-use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 /// GC default heap size
@@ -85,13 +84,10 @@ impl Universe {
         globals.push((interner.intern("false"), Value::Boolean(false)));
         globals.push((interner.intern("nil"), Value::NIL));
 
-        let system_instance = Value::Instance(gc_interface.alloc(
-            Instance {
-                class: core.system_class(),
-                fields_marker: PhantomData,
-            },
-            AllocSiteMarker::Instance,
-        ));
+        // NB: allocating Instances usually requires making space for the fields. But System has none so it's ok.
+        // TODO make that clearer by making instances only creatable from a method of theirs that always initializes the fields
+        let system_instance = Value::Instance(gc_interface.alloc(Instance::from_class(core.system_class()), AllocSiteMarker::Instance));
+
         globals.push((interner.intern("system"), system_instance));
 
         Ok(Self {
