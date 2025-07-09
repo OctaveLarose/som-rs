@@ -21,8 +21,8 @@ log = "0.4.21"
 num-bigint = "0.4.6"
 
 [features]
-default = ["semispace"]
-# default = ["marksweep"]
+# default = ["semispace"]
+default = ["marksweep"]
 
 #default = ["mmtk/extreme_assertions"]
 

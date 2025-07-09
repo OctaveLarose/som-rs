@@ -12,7 +12,8 @@ build-and-test-interpreters:
   tags: [yuria2]
   script:
     - cargo clean
-    - cargo build --release --features=som-gc/semispace
+    # - cargo build --release --features=som-gc/semispace
+    - cargo build --release 
     - cargo clippy
 
     # - RUST_TEST_THREADS=1 cargo test --features som-gc/semispace
