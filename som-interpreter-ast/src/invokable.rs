@@ -29,7 +29,7 @@ impl Invoke for Gc<Method> {
     fn invoke(&mut self, universe: &mut Universe, value_stack: &mut GlobalValueStack, nbr_args: usize) -> Return {
         debug_assert_valid_semispace_ptr!(self);
 
-        //match &self.kind {
+        // match &self.kind {
         //   MethodKind::Defined(_method) => {
         //       println!("--- Invoking \"{:1}\" ({:2})", &self.signature, &self.holder.class().name);
         //   }
@@ -42,7 +42,7 @@ impl Invoke for Gc<Method> {
         //   _ => {
         //       println!("--- Invoking some trivial method (TODO)")
         //   }
-        //}
+        // }
 
         match &mut self.kind {
             MethodKind::Defined(method) => universe.eval_with_frame(value_stack, method.locals_nbr, nbr_args, method),

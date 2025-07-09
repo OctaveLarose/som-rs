@@ -8,6 +8,8 @@ use som_gc::gcref::Gc;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 
+use super::instance::Instance;
+
 macro_rules! frame_args_ptr {
     ($base_ptr:expr) => {
         ($base_ptr.as_ptr().byte_add(std::mem::size_of::<Frame>())) as *mut Value
@@ -198,7 +200,7 @@ impl FrameAccess for Gc<Frame> {
     fn lookup_field(&self, idx: u8) -> Value {
         let self_ = self.get_self();
         if let Some(instance) = self_.as_instance() {
-            *instance.lookup_field(idx)
+            *Instance::lookup_field(&instance, idx)
         } else if let Some(cls) = self_.as_class() {
             cls.class().lookup_field(idx)
         } else {
@@ -209,8 +211,8 @@ impl FrameAccess for Gc<Frame> {
     #[inline(always)]
     fn assign_field(&self, idx: u8, value: &Value) {
         let self_ = self.get_self();
-        if let Some(mut instance) = self_.as_instance() {
-            instance.assign_field(idx, *value)
+        if let Some(instance) = self_.as_instance() {
+            Instance::assign_field(&instance, idx, *value)
         } else if let Some(cls) = self_.as_class() {
             cls.class().assign_field(idx, *value)
         } else {

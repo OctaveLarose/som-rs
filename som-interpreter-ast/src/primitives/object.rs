@@ -8,6 +8,7 @@ use crate::value::convert::FromArgs;
 use crate::value::convert::Primitive;
 use crate::value::Value;
 use crate::vm_objects::class::Class;
+use crate::vm_objects::instance::Instance;
 use anyhow::{bail, Error};
 use once_cell::sync::Lazy;
 use som_gc::gcref::Gc;
@@ -188,7 +189,7 @@ fn perform_with_arguments_in_super_class(universe: &mut Universe, stack: &mut Gl
     }
 }
 
-fn inst_var_at(object: Value, index: i32) -> Result<Value, Error> {
+fn inst_var_at(object: Value, index: i32) -> Result<Option<Value>, Error> {
     const SIGNATURE: &str = "Object>>#instVarAt:";
 
     let index = match usize::try_from(index - 1) {
@@ -196,17 +197,19 @@ fn inst_var_at(object: Value, index: i32) -> Result<Value, Error> {
         Err(err) => bail!(format!("'{}': {}", SIGNATURE, err)),
     };
 
-    let local = {
-        if let Some(instance) = object.as_instance() {
-            instance.fields.get(index).cloned().unwrap_or(Value::NIL)
-        } else if let Some(cls) = object.as_class() {
-            cls.fields.get(index).cloned().unwrap_or(Value::NIL)
-        } else {
-            unreachable!("instVarAt called not on an instance or a class")
+    if let Some(instance) = object.as_instance() {
+        match index < instance.get_nbr_fields() {
+            true => Ok(Some(*Instance::lookup_field(&instance, index as u8))),
+            false => Ok(None),
         }
-    };
-
-    Ok(local)
+    } else if let Some(cls) = object.as_class() {
+        match index < cls.get_nbr_fields() {
+            true => Ok(Some(cls.lookup_field(index as u8))),
+            false => Ok(None),
+        }
+    } else {
+        unreachable!("instVarAt called not on an instance or a class")
+    }
 }
 
 fn inst_var_at_put(object: Value, index: i32, value: Value) -> Result<Value, Error> {
@@ -217,9 +220,10 @@ fn inst_var_at_put(object: Value, index: i32, value: Value) -> Result<Value, Err
         Err(err) => bail!(format!("'{}': {}", SIGNATURE, err)),
     };
 
-    if let Some(mut instance) = object.as_instance() {
-        if instance.fields.len() as u8 > index {
-            instance.assign_field(index, value)
+    // TODO: doesn't look quite correct, should return an option type same as instVarAt I assume
+    if let Some(instance) = object.as_instance() {
+        if instance.get_nbr_fields() > index as usize {
+            Instance::assign_field(&instance, index as u8, value)
         }
     } else if let Some(mut cls) = object.as_class() {
         if cls.fields.len() as u8 > index {

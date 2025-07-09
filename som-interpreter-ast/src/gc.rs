@@ -288,7 +288,9 @@ pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotV
 
                 slot_visitor.visit_slot(SOMSlot::from(&instance.class));
 
-                for val in &instance.fields {
+                let instance_as_gc: Gc<Instance> = object.to_raw_address().into();
+                for i in 0..instance.class().get_nbr_fields() {
+                    let val: &Value = Instance::lookup_field(&instance_as_gc, i as u8);
                     visit_value(val, slot_visitor)
                 }
             }
