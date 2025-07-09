@@ -1,5 +1,5 @@
 use rstest::{fixture, rstest};
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_interpreter_ast::compiler::compile::AstMethodCompilerCtxt;
 use som_interpreter_ast::invokable::Return;
@@ -155,7 +155,10 @@ fn basic_interpreter_tests(universe: &mut Universe, stack: &mut GlobalValueStack
 /// Runs the TestHarness, which handles many basic tests written in SOM
 #[rstest]
 fn test_harness(universe: &mut Universe, stack: &mut GlobalValueStack) {
-    let args = ["TestHarness"].iter().map(|str| Value::String(universe.gc_interface.alloc(String::from(*str)))).collect();
+    let args = ["TestHarness"]
+        .iter()
+        .map(|str| Value::String(universe.gc_interface.alloc(String::from(*str), AllocSiteMarker::String)))
+        .collect();
 
     let output = universe.initialize(args, stack).unwrap();
 
@@ -182,7 +185,7 @@ fn test_harness(universe: &mut Universe, stack: &mut GlobalValueStack) {
 fn basic_benchmark_runner(universe: &mut Universe, stack: &mut GlobalValueStack, #[case] benchmark_name: &str) {
     let args = ["BenchmarkHarness", benchmark_name, "1", "1"]
         .iter()
-        .map(|str| Value::String(universe.gc_interface.alloc(String::from(*str))))
+        .map(|str| Value::String(universe.gc_interface.alloc(String::from(*str), AllocSiteMarker::String)))
         .collect();
 
     let output = universe.initialize(args, stack).unwrap();

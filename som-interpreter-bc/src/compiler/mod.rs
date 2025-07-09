@@ -6,6 +6,7 @@ use crate::gc::VecValue;
 use crate::value::Value;
 use crate::vm_objects::block::Block;
 use num_bigint::BigInt;
+use som_gc::gc_interface::AllocSiteMarker;
 use som_gc::{
     gc_interface::{GCInterface, SOMAllocator},
     gcref::Gc,
@@ -94,7 +95,7 @@ pub fn value_from_literal(literal: &Literal, gc_interface: &mut GCInterface) -> 
         Literal::BigInteger(val) => Value::BigInteger(val.clone()),
         Literal::Array(val) => {
             let arr = &val.iter().map(|lit| value_from_literal(lit, gc_interface)).collect::<Vec<_>>();
-            Value::Array(VecValue(gc_interface.alloc_slice(arr)))
+            Value::Array(VecValue(gc_interface.alloc_slice(arr, AllocSiteMarker::VecValue)))
         }
         Literal::Block(val) => Value::Block(val.clone()),
     }

@@ -7,7 +7,7 @@ use crate::vm_objects::method::{Method, MethodKind};
 use indexmap::IndexMap;
 use som_core::ast::ClassDef;
 use som_core::interner::Interner;
-use som_gc::gc_interface::{GCInterface, SOMAllocator};
+use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_value::interned::Interned;
 
@@ -92,7 +92,7 @@ impl Class {
             is_static: true,
         };
 
-        let mut static_class_gc_ptr = gc_interface.alloc(static_class);
+        let mut static_class_gc_ptr = gc_interface.alloc(static_class, AllocSiteMarker::Class);
 
         let instance_class = Self {
             name: defn.name.clone(),
@@ -104,7 +104,7 @@ impl Class {
             is_static: false,
         };
 
-        let mut instance_class_gc_ptr = gc_interface.alloc(instance_class);
+        let mut instance_class_gc_ptr = gc_interface.alloc(instance_class, AllocSiteMarker::Class);
 
         let mut static_methods: IndexMap<Interned, Gc<Method>> = defn
             .static_methods
@@ -117,7 +117,7 @@ impl Class {
                     signature: signature.clone(),
                     holder: static_class_gc_ptr.clone(),
                 };
-                (interner.intern(signature.as_str()), gc_interface.alloc(method))
+                (interner.intern(signature.as_str()), gc_interface.alloc(method, AllocSiteMarker::Method))
             })
             .collect();
 
@@ -134,7 +134,7 @@ impl Class {
                     signature: signature.to_string(),
                     holder: static_class_gc_ptr.clone(),
                 };
-                static_methods.insert(interned_signature, gc_interface.alloc(method));
+                static_methods.insert(interned_signature, gc_interface.alloc(method, AllocSiteMarker::Method));
             }
         }
 
@@ -149,7 +149,7 @@ impl Class {
                     signature: method.signature.clone(),
                     holder: instance_class_gc_ptr.clone(),
                 };
-                (interned_signature, gc_interface.alloc(method))
+                (interned_signature, gc_interface.alloc(method, AllocSiteMarker::Method))
             })
             .collect();
 
@@ -166,7 +166,7 @@ impl Class {
                     signature: signature.to_string(),
                     holder: instance_class_gc_ptr.clone(),
                 };
-                instance_methods.insert(interned_signature, gc_interface.alloc(method));
+                instance_methods.insert(interned_signature, gc_interface.alloc(method, AllocSiteMarker::Method));
             }
         }
 

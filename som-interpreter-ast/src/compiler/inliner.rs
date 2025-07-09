@@ -10,7 +10,7 @@ use crate::nodes::inlined::to_do_inlined_node::ToDoInlinedNode;
 use crate::nodes::inlined::while_inlined_node::WhileInlinedNode;
 use som_core::ast;
 use som_core::ast::{Block, Expression, Literal};
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 
 /// Helper enum for some variable-related logic when inlining.
 pub enum VarType<'a> {
@@ -62,7 +62,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         let expr = match expression {
             Expression::Block(blk) => {
                 let new_blk = self.adapt_block_after_outer_inlined(blk);
-                let new_blk_ptr = self.gc_interface.alloc(new_blk); // could we just adapt the old block instead of allocating?
+                let new_blk_ptr = self.gc_interface.alloc(new_blk, AllocSiteMarker::Block); // could we just adapt the old block instead of allocating?
                 AstExpression::Block(new_blk_ptr)
             }
             Expression::LocalVarRead(idx)

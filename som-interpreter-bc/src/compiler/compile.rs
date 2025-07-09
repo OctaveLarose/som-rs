@@ -543,7 +543,7 @@ impl MethodCodegen for ast::Expression {
                             loop {
                                 let lit = ctxt.get_literal(i);
                                 match lit {
-                                    None => break Literal::String(gc_interface.alloc(val.clone())), // reached end of literals and no duplicate, we alloc
+                                    None => break Literal::String(gc_interface.alloc(val.clone(), AllocSiteMarker::String)), // reached end of literals and no duplicate, we alloc
                                     Some(str_lit @ Literal::String(str_ptr)) if **str_ptr == *val => break str_lit.clone(),
                                     _ => {}
                                 }
@@ -556,13 +556,13 @@ impl MethodCodegen for ast::Expression {
                             // this is to handle a weird corner case where "-2147483648" is considered to be a bigint by the lexer and then parser, when it's in fact just barely in i32 range
                             match big_int_str.parse::<i32>() {
                                 Ok(x) => Literal::Integer(x),
-                                _ => Literal::BigInteger(gc_interface.alloc(BigInt::from_str(big_int_str).unwrap())),
+                                _ => Literal::BigInteger(gc_interface.alloc(BigInt::from_str(big_int_str).unwrap(), AllocSiteMarker::BigInt)),
                             }
                         }
                         ast::Literal::Array(val) => {
                             let literals: GcSlice<Literal> = {
                                 let literals_vec: Vec<Literal> = val.iter().map(|val| convert_literal(ctxt, val, gc_interface)).collect();
-                                gc_interface.alloc_slice(literals_vec.as_slice())
+                                gc_interface.alloc_slice(literals_vec.as_slice(), AllocSiteMarker::VecBCLiteral)
                             };
                             Literal::Array(literals)
                         }
@@ -584,7 +584,7 @@ impl MethodCodegen for ast::Expression {
             }
             ast::Expression::Block(val) => {
                 let block = compile_block(ctxt.as_gen_ctxt(), val, mutator)?;
-                let block = Literal::Block(mutator.alloc(block));
+                let block = Literal::Block(mutator.alloc(block, AllocSiteMarker::Block));
                 let idx = ctxt.push_literal(block);
                 ctxt.push_instr(Bytecode::PushBlock(idx as u8));
                 Some(())
@@ -849,17 +849,20 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
 
     let block = Block {
         frame,
-        blk_info: gc_interface.alloc(Method::Defined(MethodInfo {
-            base_method_info: BasicMethodInfo::new(signature, Gc::default()),
-            nbr_locals,
-            literals,
-            body,
-            nbr_params,
-            inline_cache,
-            max_stack_size,
-            #[cfg(feature = "frame-debug-info")]
-            block_debug_info: ctxt.debug_info,
-        })),
+        blk_info: gc_interface.alloc(
+            Method::Defined(MethodInfo {
+                base_method_info: BasicMethodInfo::new(signature, Gc::default()),
+                nbr_locals,
+                literals,
+                body,
+                nbr_params,
+                inline_cache,
+                max_stack_size,
+                #[cfg(feature = "frame-debug-info")]
+                block_debug_info: ctxt.debug_info,
+            }),
+            AllocSiteMarker::Method,
+        ),
     };
 
     // println!("(system) compiled block !");
@@ -905,13 +908,13 @@ pub fn compile_class(
         is_static: true,
     };
 
-    let static_class_gc_ptr = gc_interface.alloc_with_marker(static_class, Some(AllocSiteMarker::Class));
+    let static_class_gc_ptr = gc_interface.alloc(static_class, AllocSiteMarker::Class);
 
     for method in &defn.static_methods {
         let signature = static_class_ctxt.interner.intern(method.signature.as_str());
         let mut method = compile_method(&mut static_class_ctxt, method, gc_interface)?;
         method.set_holder(&static_class_gc_ptr);
-        static_class_ctxt.methods.insert(signature, gc_interface.alloc_with_marker(method, Some(AllocSiteMarker::Method)));
+        static_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Method));
     }
 
     if let Some(primitives) = primitives::get_class_primitives(&defn.name) {
@@ -924,7 +927,7 @@ pub fn compile_class(
             let method = Method::Primitive(primitive, BasicMethodInfo::new(String::from(signature), static_class_gc_ptr.clone()));
 
             let signature = static_class_ctxt.interner.intern(signature);
-            static_class_ctxt.methods.insert(signature, gc_interface.alloc_with_marker(method, Some(AllocSiteMarker::Class)));
+            static_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Class));
         }
     }
 
@@ -970,13 +973,13 @@ pub fn compile_class(
         is_static: false,
     };
 
-    let instance_class_gc_ptr = gc_interface.alloc_with_marker(instance_class, Some(AllocSiteMarker::Class));
+    let instance_class_gc_ptr = gc_interface.alloc(instance_class, AllocSiteMarker::Class);
 
     for method in &defn.instance_methods {
         let signature = instance_class_ctxt.interner.intern(method.signature.as_str());
         let mut method = compile_method(&mut instance_class_ctxt, method, gc_interface)?;
         method.set_holder(&instance_class_gc_ptr);
-        instance_class_ctxt.methods.insert(signature, gc_interface.alloc_with_marker(method, Some(AllocSiteMarker::Method)));
+        instance_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Method));
     }
 
     if let Some(primitives) = primitives::get_instance_primitives(&defn.name) {
@@ -988,7 +991,7 @@ pub fn compile_class(
 
             let method = Method::Primitive(primitive, BasicMethodInfo::new(String::from(signature), instance_class_gc_ptr.clone()));
             let signature = instance_class_ctxt.interner.intern(signature);
-            instance_class_ctxt.methods.insert(signature, gc_interface.alloc_with_marker(method, Some(AllocSiteMarker::Method)));
+            instance_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Method));
         }
     }
 

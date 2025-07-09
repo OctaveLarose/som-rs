@@ -1,5 +1,5 @@
 use rstest::{fixture, rstest};
-use som_gc::gc_interface::SOMAllocator;
+use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_interpreter_bc::compiler::compile::compile_class;
 use som_interpreter_bc::interpreter::Interpreter;
 use som_interpreter_bc::universe::Universe;
@@ -161,7 +161,10 @@ fn basic_interpreter_tests(universe: &mut Universe) {
 /// Runs the TestHarness, which handles many basic tests written in SOM
 #[rstest]
 fn test_harness(universe: &mut Universe) {
-    let args = ["TestHarness"].iter().map(|str| Value::String(universe.gc_interface.alloc(String::from(*str)))).collect();
+    let args = ["TestHarness"]
+        .iter()
+        .map(|str| Value::String(universe.gc_interface.alloc(String::from(*str), AllocSiteMarker::String)))
+        .collect();
 
     let mut interpreter = universe.initialize(args).unwrap();
 
@@ -188,7 +191,7 @@ fn test_harness(universe: &mut Universe) {
 fn basic_benchmark_runner(universe: &mut Universe, #[case] benchmark_name: &str) {
     let args = ["BenchmarkHarness", benchmark_name, "1", "1"]
         .iter()
-        .map(|str| Value::String(universe.gc_interface.alloc(String::from(*str))))
+        .map(|str| Value::String(universe.gc_interface.alloc(String::from(*str), AllocSiteMarker::String)))
         .collect();
 
     let mut interpreter = universe.initialize(args).unwrap();
