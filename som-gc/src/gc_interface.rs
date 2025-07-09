@@ -48,6 +48,7 @@ pub struct GCInterface {
     is_collecting: bool,
     start_the_world_count: usize,
     total_gc_time: Duration,
+    total_program_repr_size: u128,
 }
 
 impl Drop for GCInterface {
@@ -87,6 +88,7 @@ impl GCInterface {
             alloc_bump_ptr: BumpPointer::default(),
             start_the_world_count: 0,
             total_gc_time: Duration::new(0, 0),
+            total_program_repr_size: 0,
         });
 
         let gc_interface_ptr = Box::leak(self_);
@@ -188,6 +190,10 @@ impl GCInterface {
         self.total_gc_time.as_micros() as usize
     }
 
+    pub fn get_total_program_repr_size(&self) -> u128 {
+        self.total_program_repr_size
+    }
+
     /// Whether or not we're currently performing GC.
     /// Might be redundant with `is_world_stopped`, to be honest.
     pub fn is_currently_collecting(&self) -> bool {
@@ -252,14 +258,17 @@ impl GCInterface {
 
 /// Explicitly mentions what an allocation was requested for.
 /// The intent is to help debugging: we can track where GC was triggered, and what triggered it. This is all to find GC bugs, and also track memory usage for experiments.
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum AllocSiteMarker {
+    VecValue,
+    String,
+    BigInt,
     AstFrame,
     MethodFrame,
     MethodFrameWithArgs,
     InitMethodFrame,
-    Block,
     BlockFrame,
+    Block,
     Instance,
     Method,
     Class,
@@ -268,10 +277,7 @@ pub enum AllocSiteMarker {
     AstDispatchNode,
     AstGlobalNode,
     AstSuperMsg,
-    String,
-    BigInt,
     SliceAstExpression,
-    VecValue,
     VecBCLiteral,
 }
 
@@ -369,6 +375,24 @@ impl SOMAllocator for GCInterface {
     /// Importantly, this MAY TRIGGER A COLLECTION. Which means any function that relies on it must be mindful of this,
     /// such as by making sure no arguments are dangling on the Rust stack away from the GC's reach.
     fn request_bytes(&mut self, size: usize, _alloc_origin_marker: AllocSiteMarker) -> Address {
+        use AllocSiteMarker::*;
+
+        if [
+            Instance,
+            Method,
+            Class,
+            AstExpression,
+            AstInlinedNode,
+            AstDispatchNode,
+            AstGlobalNode,
+            AstSuperMsg,
+            SliceAstExpression,
+            VecBCLiteral,
+        ]
+        .contains(&_alloc_origin_marker)
+        {
+            self.total_program_repr_size += size as u128
+        }
         unsafe { &mut (*self.default_allocator) }.alloc(size, GC_ALIGN, GC_OFFSET)
         // slow path, for debugging
         // crate::api::mmtk_alloc(&mut self.mutator, size, GC_ALIGN, GC_OFFSET, AllocationSemantics::Default)
