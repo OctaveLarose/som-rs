@@ -166,7 +166,7 @@ impl FrameEnv for MethodInfo {
     }
 
     fn resolve_literal(&self, idx: u8) -> Option<&Literal> {
-        self.literals.get(usize::from(idx))
+        self.literals.get_checked(usize::from(idx))
     }
 
     #[cfg(feature = "frame-debug-info")]
@@ -201,7 +201,7 @@ impl FrameEnv for Block {
     }
 
     fn resolve_literal(&self, idx: u8) -> Option<&Literal> {
-        self.blk_info.get_env().literals.get(usize::from(idx))
+        self.blk_info.get_env().literals.get_checked(usize::from(idx))
     }
 
     #[cfg(feature = "frame-debug-info")]

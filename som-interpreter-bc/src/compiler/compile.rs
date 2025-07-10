@@ -785,7 +785,7 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                         body,
                         nbr_locals,
                         nbr_params,
-                        literals,
+                        literals: gc_interface.alloc_slice(&literals, AllocSiteMarker::VecBCLiteral),
                         inline_cache,
                         max_stack_size,
                         #[cfg(feature = "frame-debug-info")]
@@ -840,6 +840,7 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
     //     .collect()
     // };
     let literals: Vec<Literal> = ctxt.literals.clone().into_iter().collect();
+    let literals_slice = gc_interface.alloc_slice(&literals, AllocSiteMarker::VecBCLiteral);
     let signature = String::from("--block--");
     let body = ctxt.body.clone().unwrap_or_default();
     let nbr_locals = ctxt.locals_nbr;
@@ -853,7 +854,7 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
             Method::Defined(MethodInfo {
                 base_method_info: BasicMethodInfo::new(signature, Gc::default()),
                 nbr_locals,
-                literals,
+                literals: literals_slice,
                 body,
                 nbr_params,
                 inline_cache,
@@ -942,6 +943,8 @@ pub fn compile_class(
     static_class_mut.fields = vec![Value::NIL; static_class_ctxt.fields.len()];
     static_class_mut.field_names = static_class_ctxt.fields.into_iter().collect();
     static_class_mut.methods = static_class_ctxt.methods;
+
+    gc_interface.total_program_repr_size += (static_class_mut.fields.len() * size_of::<Value>()) as u128;
     // drop(static_class_mut);
 
     // for method in static_class.borrow().methods.values() {
@@ -1012,6 +1015,8 @@ pub fn compile_class(
     instance_class_mut.fields = vec![Value::NIL; instance_class_ctxt.fields.len()];
     instance_class_mut.field_names = instance_class_ctxt.fields.into_iter().collect();
     instance_class_mut.methods = instance_class_ctxt.methods;
+
+    gc_interface.total_program_repr_size += (instance_class_mut.fields.len() * size_of::<Value>()) as u128;
     // drop(instance_class_mut);
 
     // for method in instance_class.borrow().methods.values() {

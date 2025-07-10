@@ -1,4 +1,5 @@
 use som_core::bytecode::Bytecode;
+use som_gc::gcslice::GcSlice;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 
@@ -33,7 +34,7 @@ impl BasicMethodInfo {
 #[derive(Clone)]
 pub struct MethodInfo {
     pub base_method_info: BasicMethodInfo,
-    pub literals: Vec<Literal>,
+    pub literals: GcSlice<Literal>,
     pub body: Vec<Bytecode>,
     pub inline_cache: BodyInlineCache,
     pub nbr_locals: usize,
@@ -88,7 +89,8 @@ impl Method {
         match self {
             Method::Defined(env) => {
                 env.base_method_info.holder = holder_ptr.clone();
-                for lit in &mut env.literals {
+                for i in 0..env.literals.len() {
+                    let lit = env.literals.get_mut(i);
                     if let Literal::Block(blk) = lit {
                         blk.blk_info.set_holder(holder_ptr);
                     }
@@ -217,7 +219,7 @@ impl fmt::Display for Method {
                         }
                         Bytecode::PushConstant(idx) => {
                             write!(f, "index: {}, ", idx)?;
-                            let constant = &env.literals[*idx as usize];
+                            let constant = &env.literals.get(*idx as usize);
                             match constant {
                                 Literal::Symbol(_) => write!(f, "value: (#Symbol)"),
                                 Literal::String(value) => write!(f, "value: (#String) {:?}", value),

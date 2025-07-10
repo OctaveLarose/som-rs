@@ -198,9 +198,7 @@ pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotV
                             }
                         }
 
-                        for lit in &method.literals {
-                            visit_literal(lit, slot_visitor)
-                        }
+                        slot_visitor.visit_slot(SOMSlot::from(&method.literals));
                     }
                     Method::Primitive(_, met_info)
                     | Method::TrivialGlobal(_, met_info)

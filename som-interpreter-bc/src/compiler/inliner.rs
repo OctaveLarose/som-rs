@@ -154,7 +154,7 @@ impl PrimMessageInliner for ast::Message {
                         _ => unreachable!(),
                     },
                     Bytecode::PushBlock(block_idx) => {
-                        match block.literals.get(*block_idx as usize)? {
+                        match block.literals.get_checked(*block_idx as usize)? {
                             Literal::Block(inner_block) => {
                                 self.adapt_block_after_outer_inlined(inner_block.clone(), 1, ctxt.get_interner());
                                 let idx = ctxt.push_literal(Literal::Block(inner_block.clone()));
@@ -164,7 +164,7 @@ impl PrimMessageInliner for ast::Message {
                         };
                     }
                     Bytecode::PushGlobal(global_idx) => {
-                        let lit = block.literals.get(*global_idx as usize)?;
+                        let lit = block.literals.get_checked(*global_idx as usize)?;
                         let lit_idx = ctxt.push_literal(lit.clone());
                         ctxt.push_instr(Bytecode::PushGlobal(lit_idx as u8));
                     }
@@ -174,7 +174,7 @@ impl PrimMessageInliner for ast::Message {
                             _ => unreachable!(),
                         };
 
-                        let lit = block.literals.get(constant_idx as usize)?;
+                        let lit = block.literals.get_checked(constant_idx as usize)?;
                         let lit_idx = ctxt.push_literal(lit.clone());
                         ctxt.push_instr(Bytecode::PushConstant(lit_idx as u8))
                     }
@@ -263,7 +263,7 @@ impl PrimMessageInliner for ast::Message {
                         .blk_info
                         .get_env()
                         .literals
-                        .get(*block_idx as usize)
+                        .get_checked(*block_idx as usize)
                         .unwrap_or_else(|| panic!("PushBlock is associated with no literal whatsoever?"));
                     let inner_block = match inner_lit {
                         Literal::Block(inner_blk) => inner_blk.clone(),
