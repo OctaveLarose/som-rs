@@ -92,13 +92,14 @@ impl Class {
 
     /// Get the total number of fields, counting the superclasses.
     pub fn get_nbr_fields(&self) -> usize {
-        let nbr_locals = self.fields.len();
+        //let nbr_locals = self.fields.len();
 
         // TODO: the AST compounds fields like this, but the BC doesn't. TODO unify logic
         // if let Some(super_class) = self.super_class() {
         //     nbr_locals += super_class.get_nbr_fields()
         // }
-        nbr_locals
+
+        self.fields.len()
     }
 }
 

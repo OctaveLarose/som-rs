@@ -761,7 +761,7 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
             ast::MethodBody::Primitive => Method::Primitive(&*UNIMPLEM_PRIMITIVE, BasicMethodInfo::new(String::from(""), Gc::default())),
             ast::MethodBody::Body { .. } => {
                 // let locals = std::mem::take(&mut ctxt.inner.locals);
-                let nbr_locals = ctxt.inner.locals_nbr;
+                let nbr_locals = ctxt.inner.locals_nbr as u8;
                 let body = ctxt.inner.body.clone().unwrap_or_default();
                 let literals: Vec<Literal> = ctxt.inner.literals.clone().into_iter().collect();
                 let signature = ctxt.signature.clone();
@@ -769,11 +769,11 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                 let nbr_params = {
                     match ctxt.signature.chars().next() {
                         Some(ch) if !ch.is_alphabetic() => 1,
-                        _ => ctxt.signature.chars().filter(|ch| *ch == ':').count(),
+                        _ => ctxt.signature.chars().filter(|ch| *ch == ':').count() as u8,
                     }
                 };
 
-                if let Some(trivial_method) = make_trivial_method_if_possible(&body, &literals, &signature, nbr_params) {
+                if let Some(trivial_method) = make_trivial_method_if_possible(&body, &literals, &signature, nbr_params as usize) {
                     trivial_method
                 } else {
                     let inline_cache = vec![None; body.len()];
@@ -842,8 +842,8 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
     let literals: Vec<Literal> = ctxt.literals.clone().into_iter().collect();
     let signature = String::from("--block--");
     let body = ctxt.body.clone().unwrap_or_default();
-    let nbr_locals = ctxt.locals_nbr;
-    let nbr_params = ctxt.args_nbr;
+    let nbr_locals = ctxt.locals_nbr as u8;
+    let nbr_params = ctxt.args_nbr as u8;
     let inline_cache = vec![None; body.len()];
     let max_stack_size = get_max_stack_size(&body, ctxt.get_interner());
 

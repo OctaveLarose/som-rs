@@ -112,9 +112,9 @@ impl Universe {
         globals.insert(interner.intern("nil"), Value::NIL);
 
         let instance = gc_interface.alloc(Instance::from_class(core.system_class()), AllocSiteMarker::Instance);
-         for idx in 0..instance.class.get_nbr_fields() {
-        Instance::assign_field(&instance, idx as u8, Value::NIL)
-    }
+        for idx in 0..instance.class.get_nbr_fields() {
+            Instance::assign_field(&instance, idx as u8, Value::NIL)
+        }
         let system_instance = Value::Instance(instance);
         globals.insert(interner.intern("system"), system_instance);
 

@@ -103,7 +103,7 @@ impl Interpreter {
             _ => unreachable!("if we're allocating a method frame, it has to be defined."),
         };
 
-        let size = Frame::get_true_size(max_stack_size, nbr_args, nbr_locals);
+        let size = Frame::get_true_size(max_stack_size, nbr_args as u8, nbr_locals);
         let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::MethodFrame);
 
         *frame_ptr = Frame::from_method(self.frame_method_root.clone());
@@ -130,7 +130,7 @@ impl Interpreter {
             _ => unreachable!("if we're allocating a method frame, it has to be defined."),
         };
 
-        let size = Frame::get_true_size(max_stack_size, args.len(), nbr_locals);
+        let size = Frame::get_true_size(max_stack_size, args.len() as u8, nbr_locals);
 
         self.frame_args_root = Some(args);
 

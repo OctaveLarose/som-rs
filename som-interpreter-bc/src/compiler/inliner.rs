@@ -100,9 +100,9 @@ impl PrimMessageInliner for ast::Message {
     fn inline_compiled_block(&self, ctxt: &mut dyn InnerGenCtxt, block: &Method, gc_interface: &mut GCInterface) -> Option<()> {
         let nbr_locals_pre_inlining = ctxt.get_nbr_locals() as u8;
         let block = block.get_env();
-        let nbr_args_pre_inlining = block.nbr_params as u8;
+        let nbr_args_pre_inlining = block.nbr_params;
 
-        ctxt.set_nbr_locals(nbr_locals_pre_inlining as usize + block.nbr_locals + block.nbr_params);
+        ctxt.set_nbr_locals(nbr_locals_pre_inlining as usize + block.nbr_locals as usize + block.nbr_params as usize);
 
         // all params in the block become local variables. not the prettiest way of going about it? works though
         let block = &{

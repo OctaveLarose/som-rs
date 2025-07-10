@@ -43,7 +43,7 @@ fn new(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value, E
     for idx in 0..instance_ptr.class.get_nbr_fields() {
         Instance::assign_field(&instance_ptr, idx as u8, Value::NIL)
     }
-    
+
     Ok(Value::Instance(instance_ptr))
 }
 
