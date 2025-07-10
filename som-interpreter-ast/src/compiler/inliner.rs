@@ -62,7 +62,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         let expr = match expression {
             Expression::Block(blk) => {
                 let new_blk = self.adapt_block_after_outer_inlined(blk);
-                let new_blk_ptr = self.gc_interface.alloc(new_blk, AllocSiteMarker::Block); // could we just adapt the old block instead of allocating?
+                let new_blk_ptr = self.gc_interface.alloc(new_blk, AllocSiteMarker::AstBlock); // could we just adapt the old block instead of allocating?
                 AstExpression::Block(new_blk_ptr)
             }
             Expression::LocalVarRead(idx)

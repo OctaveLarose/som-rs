@@ -91,6 +91,10 @@ impl PrimMessageInliner for ast::Message {
         };
         ctxt.remove_literal(block_idx as usize);
 
+        // because we just inlined that block, i don't want it counted towards the total program representation amount
+        gc_interface.total_program_repr_size -= (size_of::<Block>() + 8) as u128;
+        //gc_interface.total_program_repr_size -= 1;
+
         match self.inline_compiled_block(ctxt, &(cond_block_ref.blk_info), gc_interface) {
             None => panic!("Inlining a compiled block failed!"),
             _ => Some(()),

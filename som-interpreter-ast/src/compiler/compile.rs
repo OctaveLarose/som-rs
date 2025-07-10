@@ -195,7 +195,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             }
             Expression::Block(a) => {
                 let ast_block = self.parse_block(&a);
-                AstExpression::Block(self.gc_interface.alloc(ast_block, AllocSiteMarker::Block))
+                AstExpression::Block(self.gc_interface.alloc(ast_block, AllocSiteMarker::AstBlock))
             }
         }
     }

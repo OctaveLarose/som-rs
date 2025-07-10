@@ -48,7 +48,7 @@ pub struct GCInterface {
     is_collecting: bool,
     start_the_world_count: usize,
     total_gc_time: Duration,
-    total_program_repr_size: u128,
+    pub total_program_repr_size: u128, // public as a hack
 }
 
 impl Drop for GCInterface {
@@ -263,14 +263,16 @@ pub enum AllocSiteMarker {
     VecValue,
     String,
     BigInt,
+    RuntimeBlock,
     AstFrame,
     MethodFrame,
     MethodFrameWithArgs,
     InitMethodFrame,
     BlockFrame,
-    Block,
     Instance,
     Method,
+    BlockMethod,
+    AstBlock,
     Class,
     AstExpression,
     AstInlinedNode,
@@ -380,7 +382,9 @@ impl SOMAllocator for GCInterface {
         if [
             Instance,
             Method,
-            Class,
+            AstBlock,
+            BlockMethod,
+            Class, // same amount of all these above for both AST and BC!
             AstExpression,
             AstInlinedNode,
             AstDispatchNode,
@@ -388,9 +392,11 @@ impl SOMAllocator for GCInterface {
             AstSuperMsg,
             SliceAstExpression,
             VecBCLiteral,
+            // //AstFrame, BlockFrame, MethodFrame, MethodFrameWithArgs, InitMethodFrame
         ]
         .contains(&_alloc_origin_marker)
         {
+            //self.total_program_repr_size += 1 as u128
             self.total_program_repr_size += size as u128
         }
         unsafe { &mut (*self.default_allocator) }.alloc(size, GC_ALIGN, GC_OFFSET)

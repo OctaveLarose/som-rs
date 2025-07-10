@@ -313,7 +313,7 @@ impl Interpreter {
                     let mut block = match literal {
                         Literal::Block(blk) => {
                             let mut new_blk =
-                                universe.gc_interface.request_memory_for_type::<Block>(std::mem::size_of::<Block>(), AllocSiteMarker::Block);
+                                universe.gc_interface.request_memory_for_type::<Block>(std::mem::size_of::<Block>(), AllocSiteMarker::RuntimeBlock);
                             *new_blk = (**blk).clone();
                             new_blk
                         }

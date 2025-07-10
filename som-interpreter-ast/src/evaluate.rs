@@ -182,7 +182,7 @@ impl Evaluate for AstTerm {
 impl Evaluate for Gc<AstBlock> {
     fn evaluate(&mut self, universe: &mut Universe, _value_stack: &mut GlobalValueStack) -> Return {
         debug_assert_valid_semispace_ptr!(self);
-        let mut block_ptr = universe.gc_interface.request_memory_for_type(size_of::<Block>(), som_gc::gc_interface::AllocSiteMarker::Block);
+        let mut block_ptr = universe.gc_interface.request_memory_for_type(size_of::<Block>(), som_gc::gc_interface::AllocSiteMarker::RuntimeBlock);
         *block_ptr = Block {
             block: self.clone(),
             frame: universe.current_frame.clone(),
