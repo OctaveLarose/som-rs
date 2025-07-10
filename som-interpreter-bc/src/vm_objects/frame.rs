@@ -13,6 +13,8 @@ use std::ops::DerefMut;
 
 pub(crate) const OFFSET_TO_STACK: usize = size_of::<Frame>();
 
+// TODO: fix hacky conversions from u8 to usize and vice-versa, settle on a more uniform scheme (i.e. only usizes..)
+
 /// Represents a stack frame.
 pub struct Frame {
     /// The previous frame. Frames are handled as a linked list
@@ -62,7 +64,7 @@ impl Frame {
             }
         };
 
-        let size = Frame::get_true_size(max_stack_size, nbr_locals, nbr_args);
+        let size = Frame::get_true_size(max_stack_size, nbr_args as u8, nbr_locals);
         let mut frame_ptr: Gc<Frame> = gc_interface.request_memory_for_type(size, AllocSiteMarker::BlockFrame);
 
         let block_value = prev_frame.stack_nth_back(nbr_args - 1);
@@ -84,7 +86,7 @@ impl Frame {
             _ => unreachable!("if we're allocating a method frame, it has to be defined."),
         };
 
-        let size = Frame::get_true_size(max_stack_size, args.len(), nbr_locals);
+        let size = Frame::get_true_size(max_stack_size, args.len() as u8, nbr_locals);
 
         let nbr_gc_runs = gc_interface.get_nbr_collections();
         let mut frame_ptr: Gc<Frame> = gc_interface.request_memory_for_type(size, AllocSiteMarker::InitMethodFrame);
@@ -115,7 +117,7 @@ impl Frame {
             // setting all locals to NIL.
             let locals_ptr = frame.as_ptr().byte_add(OFFSET_TO_STACK + (stack_size + args.len()) * size_of::<Value>()) as *mut Value;
             for idx in 0..frame.get_nbr_locals() {
-                *locals_ptr.add(idx) = Value::NIL;
+                *locals_ptr.add(idx as usize) = Value::NIL;
             }
 
             frame.prev_frame = prev_frame; // because GC can have moved the previous frame!
@@ -153,8 +155,8 @@ impl Frame {
     }
 
     /// Returns the true size of the `Frame`, counting the extra memory needed for its stack/locals/arguments.
-    pub fn get_true_size(max_stack_size: usize, nbr_args: usize, nbr_locals: usize) -> usize {
-        size_of::<Frame>() + ((max_stack_size + nbr_args + nbr_locals) * size_of::<Value>())
+    pub fn get_true_size(max_stack_size: usize, nbr_args: u8, nbr_locals: u8) -> usize {
+        size_of::<Frame>() + ((max_stack_size + nbr_args as usize + nbr_locals as usize) * size_of::<Value>())
     }
 
     #[inline(always)]
@@ -178,12 +180,12 @@ impl Frame {
     }
 
     #[inline(always)]
-    pub fn get_nbr_args(&self) -> usize {
+    pub fn get_nbr_args(&self) -> u8 {
         self.current_context.get_env().nbr_params + 1
     }
 
     #[inline(always)]
-    pub fn get_nbr_locals(&self) -> usize {
+    pub fn get_nbr_locals(&self) -> u8 {
         self.current_context.get_env().nbr_locals
     }
 
@@ -422,11 +424,11 @@ impl Debug for Frame {
             )
             .field("bc idx", &self.bytecode_idx)
             .field("args", {
-                let args: Vec<String> = (0..self.get_nbr_args()).map(|idx| format!("{:?}", self.lookup_argument(idx))).collect();
+                let args: Vec<String> = (0..self.get_nbr_args()).map(|idx| format!("{:?}", self.lookup_argument(idx as usize))).collect();
                 &format!("[{}]", args.join(", "))
             })
             .field("locals", {
-                let locals: Vec<String> = (0..self.get_nbr_locals()).map(|idx| format!("{:?}", self.lookup_local(idx))).collect();
+                let locals: Vec<String> = (0..self.get_nbr_locals()).map(|idx| format!("{:?}", self.lookup_local(idx as usize))).collect();
                 &format!("[{}]", locals.join(", "))
             })
             .field("stack", &stack_printer(self))
