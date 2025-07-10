@@ -36,7 +36,7 @@ impl Block {
     }
 
     /// Retrieve the number of parameters this block accepts.
-    pub fn nb_parameters(&self) -> usize {
+    pub fn nb_parameters(&self) -> u8 {
         debug_assert_valid_semispace_ptr!(self.blk_info);
         self.blk_info.get_env().nbr_params
     }

@@ -165,12 +165,12 @@ pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotV
                 slot_visitor.visit_slot(SOMSlot::from(&frame.current_context));
 
                 for i in 0..frame.get_nbr_locals() {
-                    let val: &Value = frame.lookup_local(i);
+                    let val: &Value = frame.lookup_local(i as usize);
                     visit_value(val, slot_visitor)
                 }
 
                 for i in 0..frame.get_nbr_args() {
-                    let val: &Value = frame.lookup_argument(i);
+                    let val: &Value = frame.lookup_argument(i as usize);
                     visit_value(val, slot_visitor)
                 }
 

@@ -37,8 +37,8 @@ pub struct MethodInfo {
     pub literals: GcSlice<Literal>,
     pub body: Vec<Bytecode>,
     pub inline_cache: BodyInlineCache,
-    pub nbr_locals: usize,
-    pub nbr_params: usize,
+    pub nbr_locals: u8,
+    pub nbr_params: u8,
     pub max_stack_size: u8,
     #[cfg(feature = "frame-debug-info")]
     pub block_debug_info: BlockDebugInfo,
