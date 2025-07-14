@@ -866,7 +866,7 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
         ),
     };
 
-    gc_interface.total_program_repr_size += (block.blk_info.get_env().body.len() * size_of::<Bytecode>()) as u128;
+    gc_interface.total_alloc_size += (block.blk_info.get_env().body.len() * size_of::<Bytecode>()) as u128;
 
     // println!("(system) compiled block !");
 
@@ -920,7 +920,7 @@ pub fn compile_class(
 
         // bit of a hack, bytecode should be on the heap really
         if let Method::Defined(method_info) = &method {
-            gc_interface.total_program_repr_size += (method_info.body.len() * size_of::<Bytecode>()) as u128;
+            gc_interface.total_alloc_size += (method_info.body.len() * size_of::<Bytecode>()) as u128;
         }
         static_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Method));
     }
@@ -944,7 +944,7 @@ pub fn compile_class(
     static_class_mut.field_names = static_class_ctxt.fields.into_iter().collect();
     static_class_mut.methods = static_class_ctxt.methods;
 
-    gc_interface.total_program_repr_size += (static_class_mut.fields.len() * size_of::<Value>()) as u128;
+    gc_interface.total_alloc_size += (static_class_mut.fields.len() * size_of::<Value>()) as u128;
     // drop(static_class_mut);
 
     // for method in static_class.borrow().methods.values() {
@@ -992,7 +992,7 @@ pub fn compile_class(
 
         // bit of a hack, bytecode should be on the heap really
         if let Method::Defined(method_info) = &method {
-            gc_interface.total_program_repr_size += (method_info.body.len() * size_of::<Bytecode>()) as u128;
+            gc_interface.total_alloc_size += (method_info.body.len() * size_of::<Bytecode>()) as u128;
         }
         instance_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Method));
     }
@@ -1016,7 +1016,7 @@ pub fn compile_class(
     instance_class_mut.field_names = instance_class_ctxt.fields.into_iter().collect();
     instance_class_mut.methods = instance_class_ctxt.methods;
 
-    gc_interface.total_program_repr_size += (instance_class_mut.fields.len() * size_of::<Value>()) as u128;
+    gc_interface.total_alloc_size += (instance_class_mut.fields.len() * size_of::<Value>()) as u128;
     // drop(instance_class_mut);
 
     // for method in instance_class.borrow().methods.values() {

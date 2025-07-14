@@ -48,7 +48,7 @@ pub struct GCInterface {
     is_collecting: bool,
     start_the_world_count: usize,
     total_gc_time: Duration,
-    pub total_program_repr_size: u128, // public as a hack
+    pub total_alloc_size: u128, // public as a hack
 }
 
 impl Drop for GCInterface {
@@ -88,7 +88,7 @@ impl GCInterface {
             alloc_bump_ptr: BumpPointer::default(),
             start_the_world_count: 0,
             total_gc_time: Duration::new(0, 0),
-            total_program_repr_size: 0,
+            total_alloc_size: 0,
         });
 
         let gc_interface_ptr = Box::leak(self_);
@@ -191,7 +191,7 @@ impl GCInterface {
     }
 
     pub fn get_total_program_repr_size(&self) -> u128 {
-        self.total_program_repr_size
+        self.total_alloc_size
     }
 
     /// Whether or not we're currently performing GC.
@@ -377,28 +377,7 @@ impl SOMAllocator for GCInterface {
     /// Importantly, this MAY TRIGGER A COLLECTION. Which means any function that relies on it must be mindful of this,
     /// such as by making sure no arguments are dangling on the Rust stack away from the GC's reach.
     fn request_bytes(&mut self, size: usize, _alloc_origin_marker: AllocSiteMarker) -> Address {
-        use AllocSiteMarker::*;
-
-        if [
-            Instance,
-            Method,
-            AstBlock,
-            BlockMethod,
-            Class, // same amount of all these above for both AST and BC!
-            AstExpression,
-            AstInlinedNode,
-            AstDispatchNode,
-            AstGlobalNode,
-            AstSuperMsg,
-            SliceAstExpression,
-            VecBCLiteral,
-            // //AstFrame, BlockFrame, MethodFrame, MethodFrameWithArgs, InitMethodFrame
-        ]
-        .contains(&_alloc_origin_marker)
-        {
-            //self.total_program_repr_size += 1 as u128
-            self.total_program_repr_size += size as u128
-        }
+        self.total_alloc_size += size as u128;
         unsafe { &mut (*self.default_allocator) }.alloc(size, GC_ALIGN, GC_OFFSET)
         // slow path, for debugging
         // crate::api::mmtk_alloc(&mut self.mutator, size, GC_ALIGN, GC_OFFSET, AllocationSemantics::Default)
@@ -451,6 +430,7 @@ impl SOMAllocator for GCInterface {
             size >= crate::mmtk().get_plan().constraints().max_non_los_default_alloc_bytes,
             "Requesting LOS for a non large object"
         );
+        self.total_alloc_size += size as u128;
         crate::api::mmtk_alloc(&mut self.mutator, size, GC_ALIGN, GC_OFFSET, AllocationSemantics::Los)
     }
 

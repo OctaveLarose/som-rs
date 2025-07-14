@@ -92,7 +92,7 @@ impl Class {
             is_static: true,
         };
 
-        gc_interface.total_program_repr_size += (static_class.fields.len() * size_of::<Value>()) as u128;
+        gc_interface.total_alloc_size += (static_class.fields.len() * size_of::<Value>()) as u128;
         let mut static_class_gc_ptr = gc_interface.alloc(static_class, AllocSiteMarker::Class);
 
         let instance_class = Self {
@@ -105,7 +105,7 @@ impl Class {
             is_static: false,
         };
 
-        gc_interface.total_program_repr_size += (instance_class.fields.len() * size_of::<Value>()) as u128;
+        gc_interface.total_alloc_size += (instance_class.fields.len() * size_of::<Value>()) as u128;
         let mut instance_class_gc_ptr = gc_interface.alloc(instance_class, AllocSiteMarker::Class);
 
         let mut static_methods: IndexMap<Interned, Gc<Method>> = defn
