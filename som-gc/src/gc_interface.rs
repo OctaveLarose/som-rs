@@ -184,8 +184,8 @@ impl GCInterface {
     }
 
     /// Returns the total time spent performing GC.
-    pub fn get_total_gc_time(&self) -> usize {
-        self.total_gc_time.as_micros() as usize
+    pub fn get_total_gc_time(&self) -> u128 {
+        self.total_gc_time.as_millis()
     }
 
     /// Whether or not we're currently performing GC.
