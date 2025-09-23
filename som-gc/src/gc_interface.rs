@@ -275,6 +275,7 @@ pub enum AllocSiteMarker {
     VecValue,
     VecBCLiteral,
     SliceAstLiteral,
+    RuntimeBlock,
 }
 
 /// To save on some space in the trait itself. Bit overkill, probably
@@ -389,10 +390,10 @@ impl SOMAllocator for GCInterface {
 
         use AllocSiteMarker::*;
         match _alloc_origin_marker {
-            AstFrame | MethodFrame | MethodFrameWithArgs | InitMethodFrame | BlockFrame | String | VecValue | BigInt | SliceAstLiteral => {
+            AstFrame | Instance | MethodFrame | MethodFrameWithArgs | InitMethodFrame | BlockFrame | String | VecValue | BigInt | SliceAstLiteral | RuntimeBlock => {
                 self.total_other_memory_size += size as u128
             }
-            Block | Instance | Method | Class | SliceAstExpression | VecBCLiteral | StringLiteral => self.total_program_repr_size += size as u128,
+            Block |  Method | Class | SliceAstExpression | VecBCLiteral | StringLiteral => self.total_program_repr_size += size as u128,
         }
 
         let _gc_watcher = self.start_the_world_count;
