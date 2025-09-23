@@ -48,6 +48,9 @@ pub struct GCInterface {
     is_collecting: bool,
     start_the_world_count: usize,
     total_gc_time: Duration,
+
+    pub total_program_repr_size: u128, // public as a hack
+    pub total_other_memory_size: u128, // this + program repr should account for all allocations
 }
 
 impl Drop for GCInterface {
@@ -87,6 +90,8 @@ impl GCInterface {
             alloc_bump_ptr: BumpPointer::default(),
             start_the_world_count: 0,
             total_gc_time: Duration::new(0, 0),
+            total_program_repr_size: 0,
+            total_other_memory_size: 0,
         });
 
         let gc_interface_ptr = Box::leak(self_);
@@ -263,16 +268,13 @@ pub enum AllocSiteMarker {
     Instance,
     Method,
     Class,
-    AstExpression,
-    AstInlinedNode,
-    AstDispatchNode,
-    AstGlobalNode,
-    AstSuperMsg,
     String,
+    StringLiteral,
     BigInt,
     SliceAstExpression,
     VecValue,
     VecBCLiteral,
+    SliceAstLiteral,
 }
 
 /// To save on some space in the trait itself. Bit overkill, probably
@@ -384,6 +386,14 @@ impl SOMAllocator for GCInterface {
     /// such as by making sure no arguments are dangling on the Rust stack away from the GC's reach.
     fn request_bytes(&mut self, size: usize, _alloc_origin_marker: AllocSiteMarker) -> Address {
         //unsafe { &mut (*self.default_allocator) }.alloc(size, GC_ALIGN, GC_OFFSET)
+
+        use AllocSiteMarker::*;
+        match _alloc_origin_marker {
+            AstFrame | MethodFrame | MethodFrameWithArgs | InitMethodFrame | BlockFrame | String | VecValue | BigInt | SliceAstLiteral => {
+                self.total_other_memory_size += size as u128
+            }
+            Block | Instance | Method | Class | SliceAstExpression | VecBCLiteral | StringLiteral => self.total_program_repr_size += size as u128,
+        }
 
         let _gc_watcher = self.start_the_world_count;
 

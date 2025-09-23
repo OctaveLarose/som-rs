@@ -543,7 +543,7 @@ impl MethodCodegen for ast::Expression {
                             loop {
                                 let lit = ctxt.get_literal(i);
                                 match lit {
-                                    None => break Literal::String(gc_interface.alloc(val.clone(), AllocSiteMarker::String)), // reached end of literals and no duplicate, we alloc
+                                    None => break Literal::String(gc_interface.alloc(val.clone(), AllocSiteMarker::StringLiteral)), // reached end of literals and no duplicate, we alloc
                                     Some(str_lit @ Literal::String(str_ptr)) if **str_ptr == *val => break str_lit.clone(),
                                     _ => {}
                                 }
@@ -914,6 +914,12 @@ pub fn compile_class(
         let signature = static_class_ctxt.interner.intern(method.signature.as_str());
         let mut method = compile_method(&mut static_class_ctxt, method, gc_interface)?;
         method.set_holder(&static_class_gc_ptr);
+
+        // bit of a hack, bytecode should be on the heap really
+        if let Method::Defined(method_info) = &method {
+            gc_interface.total_program_repr_size += (method_info.body.len() * size_of::<Bytecode>()) as u128;
+        }
+
         static_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Method));
     }
 
@@ -927,7 +933,7 @@ pub fn compile_class(
             let method = Method::Primitive(primitive, BasicMethodInfo::new(String::from(signature), static_class_gc_ptr.clone()));
 
             let signature = static_class_ctxt.interner.intern(signature);
-            static_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Class));
+            static_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Method));
         }
     }
 
@@ -935,11 +941,9 @@ pub fn compile_class(
     static_class_mut.fields = vec![Value::NIL; static_class_ctxt.fields.len()];
     static_class_mut.field_names = static_class_ctxt.fields.into_iter().collect();
     static_class_mut.methods = static_class_ctxt.methods;
-    // drop(static_class_mut);
 
-    // for method in static_class.borrow().methods.values() {
-    //     println!("{}", method);
-    // }
+    // not adding field names, since they're debugging information, and interned anyway.
+    gc_interface.total_program_repr_size += (static_class_mut.fields.len() * size_of::<Value>()) as u128;
 
     let mut locals = IndexSet::new();
 
@@ -979,6 +983,12 @@ pub fn compile_class(
         let signature = instance_class_ctxt.interner.intern(method.signature.as_str());
         let mut method = compile_method(&mut instance_class_ctxt, method, gc_interface)?;
         method.set_holder(&instance_class_gc_ptr);
+
+        // bit of a hack, bytecode should be on the heap really
+        if let Method::Defined(method_info) = &method {
+            gc_interface.total_program_repr_size += (method_info.body.len() * size_of::<Bytecode>()) as u128;
+        }
+
         instance_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Method));
     }
 
@@ -1000,13 +1010,9 @@ pub fn compile_class(
     instance_class_mut.fields = vec![Value::NIL; instance_class_ctxt.fields.len()];
     instance_class_mut.field_names = instance_class_ctxt.fields.into_iter().collect();
     instance_class_mut.methods = instance_class_ctxt.methods;
-    // drop(instance_class_mut);
 
-    // for method in instance_class.borrow().methods.values() {
-    //     println!("{}", method);
-    // }
-
-    // println!("compiled '{}' !", defn.name);
+    // not adding field names, since they're debugging information, and interned anyway.
+    gc_interface.total_program_repr_size += (instance_class_mut.fields.len() * size_of::<Value>()) as u128;
 
     Some(instance_class_gc_ptr)
 }

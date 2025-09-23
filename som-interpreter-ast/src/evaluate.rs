@@ -160,7 +160,9 @@ impl Evaluate for AstLiteral {
                     let value = propagate!(literal.clone().evaluate(universe, _value_stack));
                     output.push(value);
                 }
-                Return::Local(Value::Array(VecValue(universe.gc_interface.alloc_slice(&output, AllocSiteMarker::VecValue))))
+                Return::Local(Value::Array(VecValue(
+                    universe.gc_interface.alloc_slice(&output, AllocSiteMarker::VecValue),
+                )))
             }
             Self::Integer(int) => Return::Local(Value::Integer(*int)),
             Self::BigInteger(bigint) => Return::Local(Value::BigInteger(bigint.clone())),

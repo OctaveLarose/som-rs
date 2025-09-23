@@ -338,6 +338,10 @@ impl GlobalValueStack {
     pub fn iter(&self) -> Iter<'_, Value> {
         self.0.iter()
     }
+
+    pub fn get_capacity(&self) -> usize {
+        self.0.capacity()
+    }
 }
 
 impl Universe {
