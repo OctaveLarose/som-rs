@@ -66,6 +66,7 @@ impl Frame {
 
         let size = Frame::get_true_size(max_stack_size, nbr_args as u8, nbr_locals);
         let mut frame_ptr: Gc<Frame> = gc_interface.request_memory_for_type(size, AllocSiteMarker::BlockFrame);
+        gc_interface.total_other_memory_size -= (max_stack_size * size_of::<Value>()) as u128;
 
         let block_value = prev_frame.stack_nth_back(nbr_args - 1);
         *frame_ptr = Frame::from_block(block_value.as_block().unwrap());
@@ -90,6 +91,7 @@ impl Frame {
 
         let nbr_gc_runs = gc_interface.get_nbr_collections();
         let mut frame_ptr: Gc<Frame> = gc_interface.request_memory_for_type(size, AllocSiteMarker::InitMethodFrame);
+        gc_interface.total_other_memory_size -= (max_stack_size * size_of::<Value>()) as u128;
 
         assert_eq!(
             nbr_gc_runs,

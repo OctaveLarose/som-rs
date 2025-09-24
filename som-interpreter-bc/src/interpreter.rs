@@ -105,6 +105,7 @@ impl Interpreter {
 
         let size = Frame::get_true_size(max_stack_size, nbr_args as u8, nbr_locals);
         let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::MethodFrame);
+        mutator.total_other_memory_size -= (max_stack_size * size_of::<Value>()) as u128;
 
         *frame_ptr = Frame::from_method(self.frame_method_root.clone());
 
@@ -135,6 +136,7 @@ impl Interpreter {
         self.frame_args_root = Some(args);
 
         let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::MethodFrameWithArgs);
+        mutator.total_other_memory_size -= (max_stack_size * size_of::<Value>()) as u128;
 
         *frame_ptr = Frame::from_method(self.frame_method_root.clone());
         Frame::init_frame_post_alloc(
