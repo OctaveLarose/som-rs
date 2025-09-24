@@ -78,6 +78,7 @@ fn run() -> anyhow::Result<()> {
     UNIVERSE_RAW_PTR_CONST.store(&mut universe, Ordering::SeqCst);
 
     interpreter.run(&mut universe);
+
     //let _total_nbr_frames = &universe
     //    .gc_interface
     //    .alloc_map

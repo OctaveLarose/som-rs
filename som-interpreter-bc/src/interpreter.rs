@@ -654,24 +654,34 @@ impl Interpreter {
             match &*method {
                 Method::Defined(_) => {
                     //let name = &method.holder().name.clone();
-                    //eprintln!("Invoking {:?} (in {:?})", &method.signature(), &name);
+                    //eprintln!("--- Invoking {:?} (in {:?})", &method.signature(), &name);
                     interpreter.push_method_frame(method, nb_params + 1, universe.gc_interface);
                 }
                 Method::Primitive(func, _met_info) => {
-                    //eprintln!("Invoking prim {:?} (in {:?})", &_met_info.signature, &_met_info.holder.name);
+                    //eprintln!("--- Invoking prim {:?} (in {:?})", &_met_info.signature, &_met_info.holder.name);
 
                     // dbg!(interpreter.current_frame);
                     func(interpreter, universe, nb_params + 1)
                         .with_context(|| anyhow::anyhow!("error calling primitive `{}`", universe.lookup_symbol(symbol)))
                         .unwrap();
                 }
-                Method::TrivialGlobal(met, _) => met.invoke(universe, interpreter),
+                Method::TrivialGlobal(met, _) => {
+                    //eprintln!("--- Invoking trivial method");
+                    met.invoke(universe, interpreter)
+                }
                 Method::TrivialLiteral(met, _) => {
+                    //eprintln!("--- Invoking trivial method");
                     interpreter.get_current_frame().stack_pop(); // remove the receiver
                     met.invoke(universe, interpreter)
                 }
-                Method::TrivialGetter(met, _) => met.invoke(universe, interpreter),
-                Method::TrivialSetter(met, _) => met.invoke(universe, interpreter),
+                Method::TrivialGetter(met, _) => {
+                    //eprintln!("--- Invoking trivial method");
+                    met.invoke(universe, interpreter)
+                }
+                Method::TrivialSetter(met, _) => {
+                    //eprintln!("--- Invoking trivial method");
+                    met.invoke(universe, interpreter)
+                }
             }
         }
 

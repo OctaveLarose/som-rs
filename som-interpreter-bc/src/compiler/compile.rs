@@ -645,7 +645,13 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
         }
     }
 
-    fn make_trivial_method_if_possible(body: &Vec<Bytecode>, literals: &[Literal], signature: &str, nbr_params: usize) -> Option<Method> {
+    fn make_trivial_method_if_possible(
+        body: &Vec<Bytecode>,
+        literals: &[Literal],
+        signature: &str,
+        nbr_params: usize,
+        interner: &Interner,
+    ) -> Option<Method> {
         match (body.as_slice(), nbr_params) {
             ([Bytecode::PushGlobal(x), Bytecode::ReturnLocal], 0) => match literals.get(*x as usize)? {
                 Literal::Symbol(interned) => Some(Method::TrivialGlobal(
@@ -666,11 +672,15 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                 BasicMethodInfo::new(String::from(signature), Gc::default()),
             )),
             ([literal_bc, Bytecode::ReturnLocal], 0) => {
-                let maybe_literal = match literal_bc {
-                    Bytecode::PushConstant(x) => literals.get(*x as usize),
-                    Bytecode::Push0 => Some(&Literal::Integer(0)),
-                    Bytecode::Push1 => Some(&Literal::Integer(1)),
-                    // this case breaks, which i'm not sure makes sense. it's pretty much unused in our benchmarks anyway + AST doesn't have an equivalent optim like that, so it's OK.
+                let maybe_literal: Option<Literal> = match literal_bc {
+                    Bytecode::PushConstant(x) => literals.get(*x as usize).cloned(),
+                    Bytecode::Push0 => Some(Literal::Integer(0)),
+                    Bytecode::Push1 => Some(Literal::Integer(1)),
+                    Bytecode::PushNil => {
+                        let nil_interned = interner.reverse_lookup("nil").unwrap_or_else(|| panic!("how did we not make nil a global yet?"));
+                        Some(Literal::Symbol(nil_interned))
+                    }
+                    // this case breaks, which i'm not sure makes sense. it's pretty much unused in our benchmarks anyway + AST doesn't have an equivalent optim so it's OK.
                     // Bytecode::PushBlock(x) => literals.get(*x as usize),
                     _ => None,
                 };
@@ -773,7 +783,8 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                     }
                 };
 
-                if let Some(trivial_method) = make_trivial_method_if_possible(&body, &literals, &signature, nbr_params as usize) {
+                if let Some(trivial_method) = make_trivial_method_if_possible(&body, &literals, &signature, nbr_params as usize, ctxt.get_interner())
+                {
                     trivial_method
                 } else {
                     let inline_cache = vec![None; body.len()];

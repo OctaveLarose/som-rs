@@ -81,8 +81,8 @@ fn main() -> anyhow::Result<()> {
             //    })
             //    .sum::<usize>();
             //dbg!(&_total_nbr_frames);
-            //dbg!(&universe.gc_interface.alloc_map);
-
+            ////dbg!(&universe.gc_interface.alloc_map);
+            //
             debug_assert!(value_stack.is_empty());
 
             match output {
