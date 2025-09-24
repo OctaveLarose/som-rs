@@ -390,9 +390,10 @@ impl SOMAllocator for GCInterface {
 
         use AllocSiteMarker::*;
         match _alloc_origin_marker {
-            AstFrame | Instance | MethodFrame | MethodFrameWithArgs | InitMethodFrame | BlockFrame | String | VecValue | BigInt | SliceAstLiteral
-            | RuntimeBlock => self.total_other_memory_size += size as u128,
-            Block | Method | Class | SliceAstExpression | VecBCLiteral | StringLiteral => self.total_program_repr_size += size as u128,
+            AstFrame | Instance | MethodFrame | MethodFrameWithArgs | InitMethodFrame | BlockFrame | String | VecValue | BigInt | SliceAstLiteral | RuntimeBlock => {
+                self.total_other_memory_size += size as u128
+            }
+            Block |  Method | Class | SliceAstExpression | VecBCLiteral | StringLiteral => self.total_program_repr_size += size as u128,
         }
 
         let _gc_watcher = self.start_the_world_count;
