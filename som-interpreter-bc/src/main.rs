@@ -78,6 +78,28 @@ fn run() -> anyhow::Result<()> {
     UNIVERSE_RAW_PTR_CONST.store(&mut universe, Ordering::SeqCst);
 
     interpreter.run(&mut universe);
+    //let _total_nbr_frames = &universe
+    //    .gc_interface
+    //    .alloc_map
+    //    .iter()
+    //    .map(|(k, v)| {
+    //        if [
+    //            &AllocSiteMarker::AstFrame,
+    //            &AllocSiteMarker::BlockFrame,
+    //            &AllocSiteMarker::MethodFrame,
+    //            &AllocSiteMarker::MethodFrameWithArgs,
+    //            &AllocSiteMarker::InitMethodFrame,
+    //        ]
+    //        .contains(&k)
+    //        {
+    //            *v
+    //        } else {
+    //            0
+    //        }
+    //    })
+    //    .sum::<usize>();
+    //dbg!(&_total_nbr_frames);
+    //dbg!(&universe.gc_interface.alloc_map);
 
     Ok(())
 }

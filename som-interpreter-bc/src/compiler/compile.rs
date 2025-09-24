@@ -861,7 +861,7 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
                 #[cfg(feature = "frame-debug-info")]
                 block_debug_info: ctxt.debug_info,
             }),
-            AllocSiteMarker::Method,
+            AllocSiteMarker::BlockMethod,
         ),
     };
 

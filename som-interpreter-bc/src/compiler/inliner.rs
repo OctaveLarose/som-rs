@@ -9,7 +9,7 @@ use crate::vm_objects::method::{BasicMethodInfo, Method, MethodInfo};
 use som_core::ast;
 use som_core::bytecode::Bytecode;
 use som_core::interner::Interner;
-use som_gc::gc_interface::GCInterface;
+use som_gc::gc_interface::{AllocSiteMarker, GCInterface};
 use som_gc::gcref::Gc;
 
 pub(crate) enum JumpType {
@@ -93,6 +93,9 @@ impl PrimMessageInliner for ast::Message {
 
         // because we just inlined that block, i don't want it counted towards the total program representation amount
         gc_interface.total_program_repr_size -= (size_of::<Block>() + 8) as u128;
+        gc_interface.total_program_repr_size -= (size_of::<Method>() + 8) as u128; // block had an associated method.
+        *gc_interface.alloc_map.get_mut(&AllocSiteMarker::BlockMethod).unwrap() -= 1;
+        *gc_interface.alloc_map.get_mut(&AllocSiteMarker::Block).unwrap() -= 1;
 
         match self.inline_compiled_block(ctxt, &(cond_block_ref.blk_info), gc_interface) {
             None => panic!("Inlining a compiled block failed!"),

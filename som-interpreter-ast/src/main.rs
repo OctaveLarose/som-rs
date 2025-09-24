@@ -60,6 +60,29 @@ fn main() -> anyhow::Result<()> {
 
             let output = universe.initialize(args, &mut value_stack).unwrap_or_else(|| panic!("could not find 'System>>#initialize:'"));
 
+            //let _total_nbr_frames = &universe
+            //    .gc_interface
+            //    .alloc_map
+            //    .iter()
+            //    .map(|(k, v)| {
+            //        if [
+            //            &AllocSiteMarker::AstFrame,
+            //            &AllocSiteMarker::BlockFrame,
+            //            &AllocSiteMarker::MethodFrame,
+            //            &AllocSiteMarker::MethodFrameWithArgs,
+            //            &AllocSiteMarker::InitMethodFrame,
+            //        ]
+            //        .contains(&k)
+            //        {
+            //            *v
+            //        } else {
+            //            0
+            //        }
+            //    })
+            //    .sum::<usize>();
+            //dbg!(&_total_nbr_frames);
+            //dbg!(&universe.gc_interface.alloc_map);
+
             debug_assert!(value_stack.is_empty());
 
             match output {
