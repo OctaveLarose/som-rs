@@ -46,6 +46,7 @@ rstest = "0.24.0"
 jemalloc = ["jemallocator"]
 frame-debug-info = []
 inlining-disabled = []
+track-allocations = ["som-gc/track-allocations"]
 profiler = ["measureme"]
 
 ## mmtk stuff

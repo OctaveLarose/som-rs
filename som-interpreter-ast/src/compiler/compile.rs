@@ -1,7 +1,7 @@
 use super::inliner::PrimMessageInliner;
 use crate::ast::{
     AstBinaryDispatch, AstBlock, AstBody, AstDispatchNode, AstExpression, AstLiteral, AstMethodDef, AstNAryDispatch, AstSuperMessage,
-    AstTernaryDispatch, AstUnaryDispatch, InlinedNode,
+    AstTernaryDispatch, AstUnaryDispatch,
 };
 use crate::nodes::global_read::GlobalNode;
 use crate::nodes::trivial_methods::{TrivialGetterMethod, TrivialGlobalMethod, TrivialLiteralMethod, TrivialSetterMethod};
@@ -76,104 +76,110 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     // ...but for regular methods, we calculate the total size of the expressions also
                     // we only add the size of the expressions and not the vector since the vector is already counted within the methodkind
 
-                    /// NOT the best way to do this, but I thought it'd be nice to do it AFTER all the compilation and inlining is done, to make sure we are accurate
-                    fn get_tree_size(expr: &AstExpression) -> u128 {
-                        use AstExpression::*;
-                        let expr_size = size_of::<AstExpression>() as u128;
-                        match expr {
-                            LocalVarRead(_)
-                            | NonLocalVarRead(_, _)
-                            | ArgRead(_, _)
-                            | FieldRead(_)
-                            | IncLocal(_)
-                            | DecLocal(_)
-                            | GlobalRead(_)
-                            | Literal(_) => expr_size,
-                            LocalVarWrite(_, ast_expression)
-                            | NonLocalVarWrite(_, _, ast_expression)
-                            | ArgWrite(_, _, ast_expression)
-                            | LocalExit(ast_expression)
-                            | NonLocalExit(ast_expression, _)
-                            | FieldWrite(_, ast_expression) => expr_size + get_tree_size(ast_expression),
-                            UnaryDispatch(ast_unary_dispatch) => {
-                                // the minus feels silly, but the logic is that since it's not a box in AstUnaryDispatch,
-                                // if we count the size of AstUnaryDispatch but then also invoke get_tree_size on the receiver, the receiver would get counted twice
-                                expr_size + size_of::<AstUnaryDispatch>() as u128 + get_tree_size(&ast_unary_dispatch.dispatch_node.receiver)
-                                    - expr_size
-                            }
-                            BinaryDispatch(ast_binary_dispatch) => {
-                                // here count an AstBinaryDispatch but avoid double counting the expressions
-                                expr_size
-                                    + size_of::<AstBinaryDispatch>() as u128
-                                    + get_tree_size(&ast_binary_dispatch.arg)
-                                    + get_tree_size(&ast_binary_dispatch.dispatch_node.receiver)
-                                    - expr_size * 2
-                            }
-                            TernaryDispatch(ast_ternary_dispatch) => {
-                                expr_size
-                                    + size_of::<AstTernaryDispatch>() as u128
-                                    + get_tree_size(&ast_ternary_dispatch.dispatch_node.receiver)
-                                    + get_tree_size(&ast_ternary_dispatch.arg1)
-                                    + get_tree_size(&ast_ternary_dispatch.arg2)
-                                    - expr_size * 3
-                            }
-                            NAryDispatch(ast_nary_dispatch) => {
-                                expr_size
-                                    + size_of::<AstNAryDispatch>() as u128
-                                    + get_tree_size(&ast_nary_dispatch.dispatch_node.receiver)
-                                    + ast_nary_dispatch.values.iter().map(get_tree_size).sum::<u128>()
-                                    - expr_size // only one here - it's a Vec (counted within ASTNaryDispatch), so we've not double counted elements
-                            }
-                            SuperMessage(ast_super_message) => {
-                                expr_size + size_of::<AstSuperMessage>() as u128 + ast_super_message.values.iter().map(get_tree_size).sum::<u128>()
-                            }
-                            Block(block) => {
-                                // block is on the GC heap, we only need to consider its body expressions.
-                                expr_size + block.body.exprs.iter().map(get_tree_size).sum::<u128>()
-                            }
-                            InlinedCall(inlined_node) => {
-                                expr_size + size_of::<InlinedNode>() as u128 + {
+                    // NOT the best way to do this, but I thought it'd be nice to do it AFTER all the compilation and inlining is done, to make sure we are accurate
+                    #[cfg(feature = "track-allocations")]
+                    {
+                        fn get_tree_size(expr: &AstExpression) -> u128 {
+                            use AstExpression::*;
+                            let expr_size = size_of::<AstExpression>() as u128;
+                            match expr {
+                                LocalVarRead(_)
+                                | NonLocalVarRead(_, _)
+                                | ArgRead(_, _)
+                                | FieldRead(_)
+                                | IncLocal(_)
+                                | DecLocal(_)
+                                | GlobalRead(_)
+                                | Literal(_) => expr_size,
+                                LocalVarWrite(_, ast_expression)
+                                | NonLocalVarWrite(_, _, ast_expression)
+                                | ArgWrite(_, _, ast_expression)
+                                | LocalExit(ast_expression)
+                                | NonLocalExit(ast_expression, _)
+                                | FieldWrite(_, ast_expression) => expr_size + get_tree_size(ast_expression),
+                                UnaryDispatch(ast_unary_dispatch) => {
+                                    // the minus feels silly, but the logic is that since it's not a box in AstUnaryDispatch,
+                                    // if we count the size of AstUnaryDispatch but then also invoke get_tree_size on the receiver, the receiver would get counted twice
+                                    expr_size + size_of::<AstUnaryDispatch>() as u128 + get_tree_size(&ast_unary_dispatch.dispatch_node.receiver)
+                                        - expr_size
+                                }
+                                BinaryDispatch(ast_binary_dispatch) => {
+                                    // here count an AstBinaryDispatch but avoid double counting the expressions
+                                    expr_size
+                                        + size_of::<AstBinaryDispatch>() as u128
+                                        + get_tree_size(&ast_binary_dispatch.arg)
+                                        + get_tree_size(&ast_binary_dispatch.dispatch_node.receiver)
+                                        - expr_size * 2
+                                }
+                                TernaryDispatch(ast_ternary_dispatch) => {
+                                    expr_size
+                                        + size_of::<AstTernaryDispatch>() as u128
+                                        + get_tree_size(&ast_ternary_dispatch.dispatch_node.receiver)
+                                        + get_tree_size(&ast_ternary_dispatch.arg1)
+                                        + get_tree_size(&ast_ternary_dispatch.arg2)
+                                        - expr_size * 3
+                                }
+                                NAryDispatch(ast_nary_dispatch) => {
+                                    expr_size
+                                        + size_of::<AstNAryDispatch>() as u128
+                                        + get_tree_size(&ast_nary_dispatch.dispatch_node.receiver)
+                                        + ast_nary_dispatch.values.iter().map(get_tree_size).sum::<u128>()
+                                        - expr_size // only one here - it's a Vec (counted within ASTNaryDispatch), so we've not double counted elements
+                                }
+                                SuperMessage(ast_super_message) => {
+                                    expr_size
+                                        + size_of::<AstSuperMessage>() as u128
+                                        + ast_super_message.values.iter().map(get_tree_size).sum::<u128>()
+                                }
+                                Block(block) => {
+                                    // block is on the GC heap, we only need to consider its body expressions.
+                                    expr_size + block.body.exprs.iter().map(get_tree_size).sum::<u128>()
+                                }
+                                InlinedCall(inlined_node) => {
+                                    use crate::ast::InlinedNode;
                                     use crate::ast::InlinedNode::*;
-                                    match &**inlined_node {
-                                        IfInlined(if_inlined_node) => if_inlined_node.body_instrs.exprs.iter().map(get_tree_size).sum::<u128>(),
-                                        IfTrueIfFalseInlined(if_true_if_false_inlined_node) => {
-                                            get_tree_size(&if_true_if_false_inlined_node.cond_expr)
-                                                + if_true_if_false_inlined_node.body_1_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
-                                                + if_true_if_false_inlined_node.body_2_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
-                                        }
-                                        IfNilInlined(if_nil_inlined_node) => {
-                                            get_tree_size(&if_nil_inlined_node.cond_expr)
-                                                + if_nil_inlined_node.body_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
-                                        }
-                                        IfNilIfNotNilInlined(if_nil_if_not_nil_inlined_node) => {
-                                            get_tree_size(&if_nil_if_not_nil_inlined_node.cond_expr)
-                                                + if_nil_if_not_nil_inlined_node.body_1_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
-                                                + if_nil_if_not_nil_inlined_node.body_2_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
-                                        }
-                                        WhileInlined(while_inlined_node) => {
-                                            while_inlined_node.cond_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
-                                                + while_inlined_node.body_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
-                                        }
-                                        OrInlined(or_inlined_node) => {
-                                            get_tree_size(&or_inlined_node.first)
-                                                + or_inlined_node.second.exprs.iter().map(get_tree_size).sum::<u128>()
-                                        }
-                                        AndInlined(and_inlined_node) => {
-                                            get_tree_size(&and_inlined_node.first)
-                                                + and_inlined_node.second.exprs.iter().map(get_tree_size).sum::<u128>()
-                                        }
-                                        ToDoInlined(to_do_inlined_node) => {
-                                            get_tree_size(&to_do_inlined_node.start)
-                                                + get_tree_size(&to_do_inlined_node.end)
-                                                + to_do_inlined_node.body.exprs.iter().map(get_tree_size).sum::<u128>()
+                                    expr_size + size_of::<InlinedNode>() as u128 + {
+                                        match &**inlined_node {
+                                            IfInlined(if_inlined_node) => if_inlined_node.body_instrs.exprs.iter().map(get_tree_size).sum::<u128>(),
+                                            IfTrueIfFalseInlined(if_true_if_false_inlined_node) => {
+                                                get_tree_size(&if_true_if_false_inlined_node.cond_expr)
+                                                    + if_true_if_false_inlined_node.body_1_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
+                                                    + if_true_if_false_inlined_node.body_2_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
+                                            }
+                                            IfNilInlined(if_nil_inlined_node) => {
+                                                get_tree_size(&if_nil_inlined_node.cond_expr)
+                                                    + if_nil_inlined_node.body_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
+                                            }
+                                            IfNilIfNotNilInlined(if_nil_if_not_nil_inlined_node) => {
+                                                get_tree_size(&if_nil_if_not_nil_inlined_node.cond_expr)
+                                                    + if_nil_if_not_nil_inlined_node.body_1_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
+                                                    + if_nil_if_not_nil_inlined_node.body_2_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
+                                            }
+                                            WhileInlined(while_inlined_node) => {
+                                                while_inlined_node.cond_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
+                                                    + while_inlined_node.body_instrs.exprs.iter().map(get_tree_size).sum::<u128>()
+                                            }
+                                            OrInlined(or_inlined_node) => {
+                                                get_tree_size(&or_inlined_node.first)
+                                                    + or_inlined_node.second.exprs.iter().map(get_tree_size).sum::<u128>()
+                                            }
+                                            AndInlined(and_inlined_node) => {
+                                                get_tree_size(&and_inlined_node.first)
+                                                    + and_inlined_node.second.exprs.iter().map(get_tree_size).sum::<u128>()
+                                            }
+                                            ToDoInlined(to_do_inlined_node) => {
+                                                get_tree_size(&to_do_inlined_node.start)
+                                                    + get_tree_size(&to_do_inlined_node.end)
+                                                    + to_do_inlined_node.body.exprs.iter().map(get_tree_size).sum::<u128>()
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
+                        let total_tree_size: u128 = ast_method_def.body.exprs.iter().map(get_tree_size).sum();
+                        gc_interface.total_program_repr_size += total_tree_size;
                     }
-                    let total_tree_size: u128 = ast_method_def.body.exprs.iter().map(get_tree_size).sum();
-                    gc_interface.total_program_repr_size += total_tree_size;
                     MethodKind::Defined(ast_method_def)
                 }
             }

@@ -100,7 +100,7 @@ fn run() -> anyhow::Result<()> {
     //    })
     //    .sum::<usize>();
     //dbg!(&_total_nbr_frames);
-    //dbg!(&universe.gc_interface.alloc_map);
+    //dbg!(&universe.gc_interface.alloc_map[&AllocSiteMarker::Instance]);
 
     Ok(())
 }

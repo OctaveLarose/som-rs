@@ -19,6 +19,7 @@ use mmtk::util::{Address, ObjectReference, OpaquePointer, VMMutatorThread, VMThr
 use mmtk::vm::SlotVisitor;
 use mmtk::{memory_manager, AllocationSemantics, MMTKBuilder, Mutator};
 use num_bigint::BigInt;
+#[cfg(feature = "track-allocations")]
 use std::collections::HashMap;
 use std::sync::{Condvar, LazyLock, Mutex};
 use std::time::{Duration, Instant};
@@ -50,8 +51,11 @@ pub struct GCInterface {
     start_the_world_count: usize,
     total_gc_time: Duration,
 
+    #[cfg(feature = "track-allocations")]
     pub total_program_repr_size: u128, // public as a hack
+    #[cfg(feature = "track-allocations")]
     pub total_other_memory_size: u128, // this + program repr should account for all allocations
+    #[cfg(feature = "track-allocations")]
     pub alloc_map: HashMap<AllocSiteMarker, usize>,
 }
 
@@ -92,8 +96,12 @@ impl GCInterface {
             alloc_bump_ptr: BumpPointer::default(),
             start_the_world_count: 0,
             total_gc_time: Duration::new(0, 0),
+
+            #[cfg(feature = "track-allocations")]
             total_program_repr_size: 0,
+            #[cfg(feature = "track-allocations")]
             total_other_memory_size: 0,
+            #[cfg(feature = "track-allocations")]
             alloc_map: HashMap::new(),
         });
 
@@ -392,14 +400,18 @@ impl SOMAllocator for GCInterface {
     fn request_bytes(&mut self, size: usize, _alloc_origin_marker: AllocSiteMarker) -> Address {
         //unsafe { &mut (*self.default_allocator) }.alloc(size, GC_ALIGN, GC_OFFSET)
 
-        use AllocSiteMarker::*;
-        match _alloc_origin_marker {
-            AstFrame | Instance | MethodFrame | MethodFrameWithArgs | InitMethodFrame | BlockFrame | String | VecValue | BigInt | SliceAstLiteral
-            | RuntimeBlock => self.total_other_memory_size += size as u128,
-            Block | Method | BlockMethod | Class | SliceAstExpression | VecBCLiteral | StringLiteral => self.total_program_repr_size += size as u128,
+        #[cfg(feature = "track-allocations")]
+        {
+            use AllocSiteMarker::*;
+            match _alloc_origin_marker {
+                AstFrame | Instance | MethodFrame | MethodFrameWithArgs | InitMethodFrame | BlockFrame | String | VecValue | BigInt
+                | SliceAstLiteral | RuntimeBlock => self.total_other_memory_size += size as u128,
+                Block | Method | BlockMethod | Class | SliceAstExpression | VecBCLiteral | StringLiteral => {
+                    self.total_program_repr_size += size as u128
+                }
+            }
+            *self.alloc_map.entry(_alloc_origin_marker).or_insert(0) += 1;
         }
-
-        *self.alloc_map.entry(_alloc_origin_marker).or_insert(0) += 1;
 
         let _gc_watcher = self.start_the_world_count;
 

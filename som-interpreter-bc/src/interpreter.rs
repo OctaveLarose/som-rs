@@ -655,6 +655,7 @@ impl Interpreter {
                 Method::Defined(_) => {
                     //let name = &method.holder().name.clone();
                     //eprintln!("--- Invoking {:?} (in {:?})", &method.signature(), &name);
+                    //eprintln!("--- Invoking {:?}", &method.signature());
                     interpreter.push_method_frame(method, nb_params + 1, universe.gc_interface);
                 }
                 Method::Primitive(func, _met_info) => {

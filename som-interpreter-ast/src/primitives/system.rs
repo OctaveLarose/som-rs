@@ -190,9 +190,9 @@ fn gc_stats(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Vec
 
     let (total_gc, total_gc_time, total_bytes_bigint) = {
         // ----- INTENDED BEHAVIOR -----
-        //let total_gc = gc_interface.get_nbr_collections();
-        //let total_gc_time = gc_interface.alloc(BigInt::from(gc_interface.get_total_gc_time()), AllocSiteMarker::BigInt);
-        //let total_bytes_bigint = gc_interface.alloc(BigInt::from(gc_interface.get_used_bytes()), AllocSiteMarker::BigInt);
+        let total_gc = gc_interface.get_nbr_collections();
+        let total_gc_time = gc_interface.alloc(BigInt::from(gc_interface.get_total_gc_time()), AllocSiteMarker::BigInt);
+        let total_bytes_bigint = gc_interface.alloc(BigInt::from(gc_interface.get_used_bytes()), AllocSiteMarker::BigInt);
 
         // -----  PROGRAM REPR SIZE -----
         //let total_gc: usize = 24;
@@ -200,17 +200,17 @@ fn gc_stats(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Vec
         //let total_bytes_bigint = gc_interface.alloc(BigInt::from(gc_interface.total_program_repr_size), AllocSiteMarker::BigInt);
 
         // -----  TOTAL MEM USAGE -----
-        let total_gc: usize = 42;
-        let total_gc_time = gc_interface.alloc(BigInt::from(-4242), AllocSiteMarker::BigInt);
-        let total_bytes_bigint = gc_interface.alloc(
-            BigInt::from(
-                gc_interface.total_program_repr_size
-                + gc_interface.total_other_memory_size
-                // not fully accurate since the stack may grow later still? but i think it's very much fine
-                + (stack.get_capacity() * size_of::<Value>()) as u128,
-            ),
-            AllocSiteMarker::BigInt,
-        );
+        //let total_gc: usize = 42;
+        //let total_gc_time = gc_interface.alloc(BigInt::from(-4242), AllocSiteMarker::BigInt);
+        //let total_bytes_bigint = gc_interface.alloc(
+        //    BigInt::from(
+        //        gc_interface.total_program_repr_size
+        //        + gc_interface.total_other_memory_size
+        //        // not fully accurate since the stack may grow later still? but i think it's very much fine
+        //        + (stack.get_capacity() * size_of::<Value>()) as u128,
+        //    ),
+        //    AllocSiteMarker::BigInt,
+        //);
 
         (total_gc, total_gc_time, total_bytes_bigint)
     };

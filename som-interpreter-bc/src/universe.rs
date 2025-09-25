@@ -257,6 +257,7 @@ impl Universe {
         let method = value.lookup_method(self, method_name)?;
 
         interpreter.get_current_frame().bytecode_idx = interpreter.bytecode_idx;
+        //eprintln!("--- Invoking {:?}", &method.signature());
         interpreter.push_method_frame_with_args(method, vec![value, Value::Symbol(name)], self.gc_interface);
 
         Some(())

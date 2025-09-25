@@ -927,8 +927,11 @@ pub fn compile_class(
         method.set_holder(&static_class_gc_ptr);
 
         // bit of a hack, bytecode should be on the heap really
-        if let Method::Defined(method_info) = &method {
-            gc_interface.total_program_repr_size += (method_info.body.len() * size_of::<Bytecode>()) as u128;
+        #[cfg(feature = "track-allocations")]
+        {
+            if let Method::Defined(method_info) = &method {
+                gc_interface.total_program_repr_size += (method_info.body.len() * size_of::<Bytecode>()) as u128;
+            }
         }
 
         static_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Method));
@@ -954,7 +957,10 @@ pub fn compile_class(
     static_class_mut.methods = static_class_ctxt.methods;
 
     // not adding field names, since they're debugging information, and interned anyway.
-    gc_interface.total_program_repr_size += (static_class_mut.fields.len() * size_of::<Value>()) as u128;
+    #[cfg(feature = "track-allocations")]
+    {
+        gc_interface.total_program_repr_size += (static_class_mut.fields.len() * size_of::<Value>()) as u128;
+    }
 
     let mut locals = IndexSet::new();
 
@@ -996,8 +1002,11 @@ pub fn compile_class(
         method.set_holder(&instance_class_gc_ptr);
 
         // bit of a hack, bytecode should be on the heap really
-        if let Method::Defined(method_info) = &method {
-            gc_interface.total_program_repr_size += (method_info.body.len() * size_of::<Bytecode>()) as u128;
+        #[cfg(feature = "track-allocations")]
+        {
+            if let Method::Defined(method_info) = &method {
+                gc_interface.total_program_repr_size += (method_info.body.len() * size_of::<Bytecode>()) as u128;
+            }
         }
 
         instance_class_ctxt.methods.insert(signature, gc_interface.alloc(method, AllocSiteMarker::Method));
@@ -1023,7 +1032,10 @@ pub fn compile_class(
     instance_class_mut.methods = instance_class_ctxt.methods;
 
     // not adding field names, since they're debugging information, and interned anyway.
-    gc_interface.total_program_repr_size += (instance_class_mut.fields.len() * size_of::<Value>()) as u128;
+    #[cfg(feature = "track-allocations")]
+    {
+        gc_interface.total_program_repr_size += (instance_class_mut.fields.len() * size_of::<Value>()) as u128;
+    }
 
     Some(instance_class_gc_ptr)
 }
