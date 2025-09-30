@@ -31,7 +31,7 @@ impl Invoke for Gc<Method> {
 
         match &self.kind {
             MethodKind::Defined(_method) => {
-                //eprintln!("--- Invoking {:?} (in {:?})", &self.signature, &self.holder.class().name);
+                //eprintln!("--- Invoking {:?} (in {:?})", &self.signature, &self.holder.name);
                 //eprintln!("--- Invoking {:?}", &self.signature);
             }
             MethodKind::Primitive(_func) => {

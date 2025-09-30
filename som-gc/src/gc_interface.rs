@@ -323,6 +323,8 @@ pub trait SOMAllocator {
     fn alloc_slice<T>(&mut self, obj: &[T], alloc_origin_marker: AllocSiteMarker) -> GcSlice<T>
     where
         T: SupportedSliceType + std::fmt::Debug;
+    #[cfg(feature = "track-allocations")]
+    fn get_total_nbr_frames(&self) -> usize;
 }
 
 impl SOMAllocator for GCInterface {
@@ -388,6 +390,19 @@ impl SOMAllocator for GCInterface {
     /// Importantly, this MAY TRIGGER A COLLECTION. Which means any function that relies on it must be mindful of this,
     /// such as by making sure no arguments are dangling on the Rust stack away from the GC's reach.
     fn request_bytes(&mut self, size: usize, _alloc_origin_marker: AllocSiteMarker) -> Address {
+        #[cfg(feature = "track-allocations")]
+        {
+            use AllocSiteMarker::*;
+            match _alloc_origin_marker {
+                AstFrame | Instance | MethodFrame | MethodFrameWithArgs | InitMethodFrame | BlockFrame | String | VecValue | BigInt
+                | SliceAstLiteral | RuntimeBlock => self.total_other_memory_size += size as u128,
+                Block | Method | BlockMethod | Class | SliceAstExpression | VecBCLiteral | StringLiteral => {
+                    self.total_program_repr_size += size as u128
+                }
+            }
+            *self.alloc_map.entry(_alloc_origin_marker).or_insert(0) += 1;
+        }
+
         unsafe { &mut (*self.default_allocator) }.alloc(size, GC_ALIGN, GC_OFFSET)
         // slow path, for debugging
         // crate::api::mmtk_alloc(&mut self.mutator, size, GC_ALIGN, GC_OFFSET, AllocationSemantics::Default)
@@ -482,6 +497,28 @@ impl SOMAllocator for GCInterface {
         };
 
         header_addr
+    }
+
+    #[cfg(feature = "track-allocations")]
+    fn get_total_nbr_frames(&self) -> usize {
+        self.alloc_map
+            .iter()
+            .map(|(k, v)| {
+                if [
+                    &AllocSiteMarker::AstFrame,
+                    &AllocSiteMarker::BlockFrame,
+                    &AllocSiteMarker::MethodFrame,
+                    &AllocSiteMarker::MethodFrameWithArgs,
+                    &AllocSiteMarker::InitMethodFrame,
+                ]
+                .contains(&k)
+                {
+                    *v
+                } else {
+                    0
+                }
+            })
+            .sum::<usize>()
     }
 }
 

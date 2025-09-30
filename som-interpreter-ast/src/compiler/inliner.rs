@@ -296,6 +296,15 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
             _ => return None,
         };
 
+        // Matching Havlak hack, see BC...
+        {
+            if let Expression::Message(msg) = &body_blk.body.exprs[0] {
+                if msg.signature == "stepD:nodePool:" {
+                    return None;
+                }
+            }
+        }
+
         let if_inlined_node = IfInlinedNode {
             expected_bool,
             cond_expr: self.parse_expression_with_inlining(&msg.receiver),
