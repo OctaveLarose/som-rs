@@ -190,14 +190,14 @@ fn gc_stats(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Vec
 
     let (total_gc, total_gc_time, total_bytes_bigint) = {
         // ----- INTENDED BEHAVIOR -----
-        let total_gc = gc_interface.get_nbr_collections();
-        let total_gc_time = gc_interface.alloc(BigInt::from(gc_interface.get_total_gc_time()), AllocSiteMarker::BigInt);
-        let total_bytes_bigint = gc_interface.alloc(BigInt::from(gc_interface.get_used_bytes()), AllocSiteMarker::BigInt);
+        //let total_gc = gc_interface.get_nbr_collections();
+        //let total_gc_time = gc_interface.alloc(BigInt::from(gc_interface.get_total_gc_time()), AllocSiteMarker::BigInt);
+        //let total_bytes_bigint = gc_interface.alloc(BigInt::from(gc_interface.get_used_bytes()), AllocSiteMarker::BigInt);
 
         // -----  PROGRAM REPR SIZE -----
-        //let total_gc: usize = 24;
-        //let total_gc_time = gc_interface.alloc(BigInt::from(-2424), AllocSiteMarker::BigInt);
-        //let total_bytes_bigint = gc_interface.alloc(BigInt::from(gc_interface.total_program_repr_size), AllocSiteMarker::BigInt);
+        let total_gc: usize = 24;
+        let total_gc_time = gc_interface.alloc(BigInt::from(-2424), AllocSiteMarker::BigInt);
+        let total_bytes_bigint = gc_interface.alloc(BigInt::from(gc_interface.total_program_repr_size), AllocSiteMarker::BigInt);
 
         // -----  TOTAL MEM USAGE -----
         //let total_gc: usize = 42;
