@@ -7,6 +7,9 @@
 /// SOM-specific parser combinators.
 pub mod lang;
 
+/// Inlining SOM control flow methods.
+pub mod inliner;
+
 #[cfg(feature = "block-debug-info")]
 use som_core::ast::BlockDebugInfo;
 use som_core::ast::{ClassDef, Expression};
@@ -36,6 +39,7 @@ pub struct AstGenCtxtData<'a> {
     local_names: Vec<String>,
     param_names: Vec<String>,
     current_scope: usize,
+    is_getting_inlined: bool,
     outer_ctxt: Option<AstGenCtxt<'a>>,
 }
 
@@ -58,6 +62,7 @@ impl AstGenCtxtData<'_> {
             param_names: vec![],
             current_scope: 0,
             outer_ctxt: None,
+            is_getting_inlined: false,
         }
     }
 }
@@ -71,6 +76,7 @@ impl<'a> AstGenCtxtData<'a> {
             local_names: vec![],
             param_names: vec![],
             current_scope: outer.borrow().current_scope + 1,
+            is_getting_inlined: false,
             outer_ctxt: Some(Rc::clone(&outer)),
         }))
     }
@@ -137,19 +143,8 @@ impl<'a> AstGenCtxtData<'a> {
                     }),
                 }
             })
-        // .or_else(|| // ...and if we recursively searched and it wasn't in a block, it must be a field (or search fails and it's a global).
-        //     match self.kind {
-        //         AstGenCtxtType::Method(method_type) => {
-        //             let class_ctxt = self.outer_ctxt.as_ref().unwrap().borrow();
-        //             match method_type {
-        //                 AstMethodGenCtxtType::INSTANCE => class_ctxt.get_instance_field(name).map(FoundVar::Field),
-        //                 AstMethodGenCtxtType::CLASS => class_ctxt.get_static_field(name).map(FoundVar::Field),
-        //             }
-        //         }
-        //         _ => None,
-        //     }
-        // )
     }
+
     fn get_var_read(&self, name: &String) -> Expression {
         if name == "self" {
             return Expression::ArgRead(self.get_method_scope(), 0);
@@ -213,11 +208,6 @@ impl<'a> AstGenCtxtData<'a> {
 
 /// Parses the input of an entire file into an AST.
 pub fn parse_file(input: &[Token]) -> Option<ClassDef> {
-    self::apply(lang::file(), input)
-}
-
-/// Parses the input of an entire file into an AST, without access to the universe (system classes are initialized before the Universe itself, and don't need access to it)
-pub fn parse_file_no_universe(input: &[Token]) -> Option<ClassDef> {
     self::apply(lang::file(), input)
 }
 

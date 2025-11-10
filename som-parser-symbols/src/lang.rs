@@ -1,3 +1,4 @@
+use crate::inliner::PrimMessageInliner;
 use crate::{AstGenCtxt, AstGenCtxtData, AstGenCtxtType, AstMethodGenCtxtType};
 use som_core::ast::*;
 use som_lexer::Token;
@@ -190,11 +191,11 @@ pub fn unary_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> 
         let ((receiver, signatures), input, genctxt) = primary().and(many(identifier())).parse(input, genctxt)?;
 
         let a = signatures.into_iter().fold(receiver, |receiver, signature| {
-            Expression::Message(Box::new(Message {
+            Expression::Message(Box::new(Message::Regular(RegularMessage {
                 receiver,
                 signature,
                 values: Vec::new(),
-            }))
+            })))
         });
         Some((a, input, genctxt))
     }
@@ -203,24 +204,38 @@ pub fn unary_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> 
 pub fn binary_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     unary_send().and(many(operator().and(unary_send()))).map(|(lhs, operands)| {
         operands.into_iter().fold(lhs, |lhs, (op, rhs)| {
-            Expression::Message(Box::new(Message {
+            let msg = RegularMessage {
                 receiver: lhs,
                 signature: op,
                 values: vec![rhs],
-            }))
+            };
+            Expression::Message(Box::new(Message::Regular(msg)))
+            //match genctxt.inline_if_possible(msg) {
+            //    Some(inlined_msg) => inlined_msg,
+            //    None => Expression::Message(Box::new(Message::Regular(msg))),
+            //}
         })
     })
 }
 
 pub fn positional_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     move |input: &'a [Token], genctxt| {
-        let ((receiver, pairs), input, genctxt) = binary_send().and(many(keyword().and(binary_send()))).parse(input, genctxt)?;
+        let ((receiver, pairs), input, mut genctxt) = binary_send().and(many(keyword().and(binary_send()))).parse(input, genctxt)?;
 
         if pairs.is_empty() {
             Some((receiver, input, genctxt))
         } else {
             let (signature, values) = pairs.into_iter().unzip();
-            Some((Expression::Message(Box::new(Message { receiver, signature, values })), input, genctxt))
+            let msg = RegularMessage { receiver, signature, values };
+
+            let msg = {
+                match genctxt.inline_if_possible(&msg) {
+                    Some(inlined_msg) => inlined_msg,
+                    None => Message::Regular(msg),
+                }
+            };
+
+            Some((Expression::Message(Box::new(msg)), input, genctxt))
         }
     }
 }

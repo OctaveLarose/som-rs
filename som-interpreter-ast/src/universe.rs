@@ -199,7 +199,7 @@ impl Universe {
             let tokens: Vec<_> = som_lexer::Lexer::new(contents.as_str()).skip_comments(true).skip_whitespace(true).collect();
 
             // Parse class definition from the tokens.
-            let defn = match som_parser::parse_file_no_universe(tokens.as_slice()) {
+            let defn = match som_parser::parse_file(tokens.as_slice()) {
                 Some(defn) => defn,
                 None => return Err(anyhow!("could not parse the '{}' system class", class_name)),
             };

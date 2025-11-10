@@ -38,15 +38,15 @@ fn expression_test_1() {
 
     assert_eq!(
         expression,
-        Expression::Message(Box::new(Message {
+        Expression::Message(Box::new(Message::Regular(RegularMessage {
             signature: String::from("+"),
             receiver: Expression::Literal(Literal::Integer(3)),
-            values: vec![Expression::Message(Box::new(Message {
+            values: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
                 receiver: Expression::GlobalRead(String::from("counter")),
                 signature: String::from("get"),
                 values: vec![],
-            }))],
-        }))
+            })))],
+        })))
     );
 }
 
@@ -73,11 +73,11 @@ fn block_test() {
             body: Body {
                 exprs: vec![
                     Expression::LocalVarWrite(0, Box::new(Expression::Literal(Literal::String(String::from("this is correct"))))),
-                    Expression::Message(Box::new(Message {
+                    Expression::Message(Box::new(Message::Regular(RegularMessage {
                         receiver: Expression::LocalVarRead(0),
                         signature: String::from("println"),
                         values: vec![],
-                    }))
+                    })))
                 ],
                 full_stopped: true,
             }
@@ -99,12 +99,12 @@ fn expression_test_2() {
 
     assert_eq!(
         expression,
-        Expression::Message(Box::new(Message {
-            receiver: Expression::Message(Box::new(Message {
+        Expression::Message(Box::new(Message::Regular(RegularMessage {
+            receiver: Expression::Message(Box::new(Message::Regular(RegularMessage {
                 signature: String::from("=="),
                 receiver: Expression::Literal(Literal::Integer(3)),
                 values: vec![Expression::Literal(Literal::Integer(3))],
-            })),
+            }))),
             signature: String::from("ifTrue:ifFalse:"),
             values: vec![
                 Expression::Block(Block {
@@ -116,11 +116,11 @@ fn expression_test_2() {
                     nbr_params: 0,
                     nbr_locals: 0,
                     body: Body {
-                        exprs: vec![Expression::Message(Box::new(Message {
+                        exprs: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
                             receiver: Expression::Literal(Literal::String(String::from("this is correct"))),
                             signature: String::from("println"),
                             values: vec![],
-                        }))],
+                        })))],
                         full_stopped: true,
                     }
                 }),
@@ -133,16 +133,16 @@ fn expression_test_2() {
                     nbr_params: 0,
                     nbr_locals: 0,
                     body: Body {
-                        exprs: vec![Expression::Message(Box::new(Message {
+                        exprs: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
                             receiver: Expression::Literal(Literal::String(String::from("oh no"))),
                             signature: String::from("println"),
                             values: vec![],
-                        }))],
+                        })))],
                         full_stopped: false,
                     }
                 }),
-            ],
-        }),)
+            ]
+        })),)
     );
 }
 
@@ -167,27 +167,27 @@ fn primary_test() {
             nbr_params: 0,
             nbr_locals: 0,
             body: Body {
-                exprs: vec![Expression::Message(Box::new(Message {
+                exprs: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
                     receiver: Expression::ArgRead(0, 0),
                     signature: String::from("fib:"),
-                    values: vec![Expression::Message(Box::new(Message {
+                    values: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
                         signature: String::from("+"),
-                        receiver: Expression::Message(Box::new(Message {
+                        receiver: Expression::Message(Box::new(Message::Regular(RegularMessage {
                             signature: String::from("-"),
                             receiver: Expression::GlobalRead(String::from("n")),
                             values: vec![Expression::Literal(Literal::Integer(1))],
-                        })),
-                        values: vec![Expression::Message(Box::new(Message {
+                        }))),
+                        values: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
                             receiver: Expression::ArgRead(0, 0),
                             signature: String::from("fib:"),
-                            values: vec![Expression::Message(Box::new(Message {
+                            values: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
                                 signature: String::from("-"),
                                 receiver: Expression::GlobalRead(String::from("n")),
                                 values: vec![Expression::Literal(Literal::Integer(2))],
-                            }))],
-                        }))]
-                    }))],
-                }))],
+                            })))],
+                        })))]
+                    })))],
+                })))],
                 full_stopped: false,
             }
         }),

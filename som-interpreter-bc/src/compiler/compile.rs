@@ -21,9 +21,9 @@ use crate::vm_objects::block::Block;
 use crate::vm_objects::class::Class;
 use crate::vm_objects::method::{BasicMethodInfo, Method, MethodInfo};
 use crate::vm_objects::trivial_methods::{TrivialGetterMethod, TrivialGlobalMethod, TrivialLiteralMethod, TrivialSetterMethod};
-use som_core::ast;
 #[cfg(feature = "frame-debug-info")]
 use som_core::ast::BlockDebugInfo;
+use som_core::ast::{self};
 use som_core::ast::{Expression, MethodBody};
 use som_core::bytecode::Bytecode;
 use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
@@ -470,6 +470,13 @@ impl MethodCodegen for ast::Expression {
                 Some(())
             }
             ast::Expression::Message(message) => {
+                let message = {
+                    match &**message {
+                        ast::Message::Regular(reg_msg) => reg_msg,
+                        _ => todo!("we made it to the BC parser itself!"),
+                    }
+                };
+
                 let is_super_call = matches!(&message.receiver, _super if _super == &Expression::GlobalRead(String::from("super")));
 
                 message.receiver.codegen(ctxt, mutator)?;

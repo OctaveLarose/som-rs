@@ -20,24 +20,24 @@ pub enum VarType<'a> {
 
 #[allow(unused)] // if inlining is disabled, a lot of them go completely unused.
 pub(crate) trait PrimMessageInliner {
-    fn inline_if_possible(&mut self, msg: &ast::Message) -> Option<InlinedNode>;
+    fn inline_if_possible(&mut self, msg: &ast::RegularMessage) -> Option<InlinedNode>;
     fn parse_expression_with_inlining(&mut self, expression: &Expression) -> AstExpression;
     fn inline_block(&mut self, expression: &Block) -> AstBody;
     fn adapt_block_after_outer_inlined(&mut self, blk: &Block) -> AstBlock;
     fn adapt_var_coords_from_inlining(&self, up_idx: usize, idx: usize) -> (u8, u8);
     fn adapt_arg_access_from_inlining(&mut self, input_expr: &Expression) -> AstExpression;
-    fn inline_if_true_or_if_false(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode>;
-    fn inline_if_true_if_false(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode>;
-    fn inline_if_nil_or_if_not_nil(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode>;
-    fn inline_if_nil_if_not_nil(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode>;
-    fn inline_while(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode>;
-    fn inline_or(&mut self, msg: &ast::Message) -> Option<InlinedNode>;
-    fn inline_and(&mut self, msg: &ast::Message) -> Option<InlinedNode>;
-    fn inline_to_do(&mut self, msg: &ast::Message) -> Option<InlinedNode>;
+    fn inline_if_true_or_if_false(&mut self, msg: &ast::RegularMessage, expected_bool: bool) -> Option<InlinedNode>;
+    fn inline_if_true_if_false(&mut self, msg: &ast::RegularMessage, expected_bool: bool) -> Option<InlinedNode>;
+    fn inline_if_nil_or_if_not_nil(&mut self, msg: &ast::RegularMessage, expected_bool: bool) -> Option<InlinedNode>;
+    fn inline_if_nil_if_not_nil(&mut self, msg: &ast::RegularMessage, expected_bool: bool) -> Option<InlinedNode>;
+    fn inline_while(&mut self, msg: &ast::RegularMessage, expected_bool: bool) -> Option<InlinedNode>;
+    fn inline_or(&mut self, msg: &ast::RegularMessage) -> Option<InlinedNode>;
+    fn inline_and(&mut self, msg: &ast::RegularMessage) -> Option<InlinedNode>;
+    fn inline_to_do(&mut self, msg: &ast::RegularMessage) -> Option<InlinedNode>;
 }
 
 impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
-    fn inline_if_possible(&mut self, msg: &ast::Message) -> Option<InlinedNode> {
+    fn inline_if_possible(&mut self, msg: &ast::RegularMessage) -> Option<InlinedNode> {
         // return None;
         match msg.signature.as_str() {
             "ifTrue:" => self.inline_if_true_or_if_false(msg, true),
@@ -290,7 +290,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         }
     }
 
-    fn inline_if_true_or_if_false(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode> {
+    fn inline_if_true_or_if_false(&mut self, msg: &ast::RegularMessage, expected_bool: bool) -> Option<InlinedNode> {
         let body_blk = match msg.values.first() {
             Some(Expression::Block(blk)) => blk,
             _ => return None,
@@ -305,7 +305,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         Some(InlinedNode::IfInlined(if_inlined_node))
     }
 
-    fn inline_if_true_if_false(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode> {
+    fn inline_if_true_if_false(&mut self, msg: &ast::RegularMessage, expected_bool: bool) -> Option<InlinedNode> {
         // With a special case for the Fibonacci benchmark.
         // This code could easily be made more generalized/modular, have some blocks/expressions be considered "inlinable", but this special-casing is less dev time...
         let (body_blk_1, body_blk_2) = match (msg.values.first(), msg.values.get(1)) {
@@ -336,7 +336,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         Some(InlinedNode::IfTrueIfFalseInlined(if_true_if_false_inlined_node))
     }
 
-    fn inline_while(&mut self, msg: &ast::Message, expected_bool: bool) -> Option<InlinedNode> {
+    fn inline_while(&mut self, msg: &ast::RegularMessage, expected_bool: bool) -> Option<InlinedNode> {
         let (cond_blk, body_blk) = match (&msg.receiver, msg.values.first()) {
             (Expression::Block(cond_blk), Some(Expression::Block(body_blk))) => (cond_blk, body_blk),
             _ => return None,
@@ -351,7 +351,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         Some(InlinedNode::WhileInlined(while_inlined_node))
     }
 
-    fn inline_or(&mut self, msg: &ast::Message) -> Option<InlinedNode> {
+    fn inline_or(&mut self, msg: &ast::RegularMessage) -> Option<InlinedNode> {
         let snd_blk = match msg.values.first() {
             Some(Expression::Block(blk)) => blk,
             _ => return None,
@@ -365,7 +365,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         Some(InlinedNode::OrInlined(or_inlined_node))
     }
 
-    fn inline_and(&mut self, msg: &ast::Message) -> Option<InlinedNode> {
+    fn inline_and(&mut self, msg: &ast::RegularMessage) -> Option<InlinedNode> {
         let snd_blk = match msg.values.first() {
             Some(Expression::Block(blk)) => blk,
             _ => return None,
@@ -379,7 +379,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         Some(InlinedNode::AndInlined(and_inlined_node))
     }
 
-    fn inline_to_do(&mut self, msg: &ast::Message) -> Option<InlinedNode> {
+    fn inline_to_do(&mut self, msg: &ast::RegularMessage) -> Option<InlinedNode> {
         let (start_expr, end_expr, body_blk) = match (&msg.receiver, msg.values.first(), msg.values.get(1)) {
             (Expression::Block(_), _, _) | (_, Some(Expression::Block(_)), _) => {
                 todo!("to:do: inlining: those cases should be handled (may be trivial)")
@@ -408,7 +408,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         Some(InlinedNode::ToDoInlined(to_do_inlined_node))
     }
 
-    fn inline_if_nil_or_if_not_nil(&mut self, msg: &ast::Message, expects_nil: bool) -> Option<InlinedNode> {
+    fn inline_if_nil_or_if_not_nil(&mut self, msg: &ast::RegularMessage, expects_nil: bool) -> Option<InlinedNode> {
         let body_blk = match msg.values.first() {
             Some(Expression::Block(blk)) => blk,
             _ => return None,
@@ -423,7 +423,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
         Some(InlinedNode::IfNilInlined(if_nil_inlined_node))
     }
 
-    fn inline_if_nil_if_not_nil(&mut self, msg: &ast::Message, expects_nil: bool) -> Option<InlinedNode> {
+    fn inline_if_nil_if_not_nil(&mut self, msg: &ast::RegularMessage, expects_nil: bool) -> Option<InlinedNode> {
         let (body_blk_1, body_blk_2) = match (msg.values.first(), msg.values.get(1)) {
             (Some(Expression::Block(blk)), Some(Expression::Block(blk2))) => (blk, blk2),
             _ => return None,

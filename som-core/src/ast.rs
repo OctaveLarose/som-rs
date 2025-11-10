@@ -141,13 +141,26 @@ pub enum Expression {
 /// value == 3
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct Message {
+pub enum Message {
+    Regular(RegularMessage),
+    IfInlined(IfInlinedMessage),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RegularMessage {
     /// The object to which the message is sent to.
     pub receiver: Expression,
     /// The signature of the message (eg. "ifTrue:ifFalse:").
     pub signature: String,
     /// The list of dynamic values that are passed.
     pub values: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfInlinedMessage {
+    pub expected_bool: bool,
+    pub cond_expr: Expression,
+    pub body_instrs: Vec<Expression>,
 }
 
 /// A message with "super" as the receiver, so the superclass.

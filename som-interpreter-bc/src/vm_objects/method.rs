@@ -90,7 +90,7 @@ impl Method {
                 env.base_method_info.holder = holder_ptr.clone();
                 for lit in &mut env.literals {
                     if let Literal::Block(blk) = lit {
-                        blk.blk_info.set_holder(&holder_ptr);
+                        blk.blk_info.set_holder(holder_ptr);
                     }
                 }
             }

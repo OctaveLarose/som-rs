@@ -50,7 +50,7 @@ pub(crate) trait PrimMessageInliner {
     fn inline_if_nil_if_not_nil(&self, ctxt: &mut dyn InnerGenCtxt, jump_type: JumpType, gc_interface: &mut GCInterface) -> Option<()>;
 }
 
-impl PrimMessageInliner for ast::Message {
+impl PrimMessageInliner for ast::RegularMessage {
     fn inline_if_possible(&self, ctxt: &mut dyn InnerGenCtxt, gc_interface: &mut GCInterface) -> Option<()> {
         match self.signature.as_str() {
             "ifTrue:" => self.inline_if_true_or_if_false(ctxt, JumpOnFalse, gc_interface),

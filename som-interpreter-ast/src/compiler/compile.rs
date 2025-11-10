@@ -358,6 +358,13 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         msg: &ast::Message,
         expr_parsing_func: fn(&mut AstMethodCompilerCtxt<'a>, &Expression) -> AstExpression,
     ) -> AstExpression {
+        let msg = {
+            match msg {
+                ast::Message::Regular(reg_msg) => reg_msg,
+                _ => todo!("we made it to the AST parser itself!"),
+            }
+        };
+
         #[cfg(not(feature = "inlining-disabled"))]
         {
             let maybe_inlined = self.inline_if_possible(msg);
