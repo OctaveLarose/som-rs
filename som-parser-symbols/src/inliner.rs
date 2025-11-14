@@ -1,5 +1,5 @@
 use crate::AstGenCtxt;
-use som_core::ast::{self, Message};
+use som_core::ast::{self, Message, RegularMessage};
 use som_core::ast::{Block, Expression};
 
 /// Helper enum for some variable-related logic when inlining.
@@ -25,7 +25,7 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
     fn inline_if_possible(&mut self, msg: &ast::RegularMessage) -> Option<Message> {
         match msg.signature.as_str() {
             "ifTrue:" => self.inline_if_true_or_if_false(msg, true),
-            "ifFalse:" => self.inline_if_true_or_if_false(msg, false),
+            //"ifFalse:" => self.inline_if_true_or_if_false(msg, false),
             // more to come. how exciting
             _ => None,
         }
@@ -38,21 +38,12 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
                 let new_blk = self.adapt_block_after_outer_inlined(blk);
                 Expression::Block(new_blk)
             }
-            Expression::LocalVarRead(idx)
-            | Expression::LocalVarWrite(idx, _)
-            | Expression::NonLocalVarRead(_, idx)
-            | Expression::NonLocalVarWrite(_, idx, _) => {
-                let up_idx = match expression {
-                    Expression::LocalVarRead(..) | Expression::LocalVarWrite(..) => 0,
-                    Expression::NonLocalVarRead(up_idx, ..) | Expression::NonLocalVarWrite(up_idx, ..) => *up_idx,
-                    _ => unreachable!(),
-                };
-
-                let (new_up_idx, new_idx) = self.adapt_var_coords_from_inlining(up_idx, *idx);
+            Expression::VarRead(idx, up_idx) | Expression::VarWrite(idx, up_idx, _) => {
+                let (new_up_idx, new_idx) = self.adapt_var_coords_from_inlining(*up_idx, *idx);
 
                 let var_type = match expression {
-                    Expression::LocalVarRead(..) | Expression::NonLocalVarRead(..) => VarType::Read,
-                    Expression::LocalVarWrite(_, expr) | Expression::NonLocalVarWrite(_, _, expr) => VarType::Write(expr),
+                    Expression::VarRead(..) => VarType::Read,
+                    Expression::VarWrite(_, _, expr) => VarType::Write(expr),
                     _ => unreachable!(),
                 };
 
@@ -79,7 +70,20 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
             global_read @ Expression::GlobalRead(_a) => global_read.clone(),
             Expression::GlobalWrite(name, expr) => Expression::GlobalWrite(name.clone(), Box::new(self.parse_expression_with_inlining(expr))),
             //Expression::Message(msg) => self.parse_message_with_inlining(msg),
-            Expression::Message(_msg) => todo!("parsing a message when we already encounter a message"),
+            Expression::Message(msg) => {
+                let old_msg = match &**msg {
+                    Message::Regular(reg_msg) => reg_msg,
+                    _ => todo!("not handling inlining methods within inlined blocks"),
+                };
+
+                let new_msg = RegularMessage {
+                    receiver: self.parse_expression_with_inlining(&old_msg.receiver),
+                    signature: old_msg.signature.clone(),
+                    values: old_msg.values.iter().map(|v| self.parse_expression_with_inlining(v)).collect(),
+                };
+
+                Expression::Message(Box::new(Message::Regular(new_msg)))
+            }
             lit_expr @ Expression::Literal(_) => lit_expr.clone(),
         };
 
@@ -132,7 +136,7 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
     }
 
     fn adapt_var_coords_from_inlining(&mut self, _up_idx: usize, _idx: usize) -> (u8, u8) {
-        todo!("extremely complicated in the AST, but easier here since we've got the names of locals on hand")
+        todo!("err, annoying to implement here honestly")
     }
 
     fn adapt_arg_access_from_inlining(&mut self, _input_expr: &Expression) -> Expression {
@@ -141,13 +145,9 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
 
     /// Helper function: generates a local variable expression given coordinates. We get duplicated logic otherwise.
     fn var_from_coords(&mut self, up_idx: u8, idx: u8, var_type: VarType) -> Expression {
-        match (up_idx, var_type) {
-            (0, VarType::Read) => Expression::LocalVarRead(idx as usize),
-            (0, VarType::Write(expr)) => Expression::LocalVarWrite(idx as usize, Box::new(self.parse_expression_with_inlining(expr))),
-            (_, VarType::Read) => Expression::NonLocalVarRead(up_idx as usize, idx as usize),
-            (_, VarType::Write(expr)) => {
-                Expression::NonLocalVarWrite(up_idx as usize, idx as usize, Box::new(self.parse_expression_with_inlining(expr)))
-            }
+        match var_type {
+            VarType::Read => Expression::VarRead(up_idx as usize, idx as usize),
+            VarType::Write(expr) => Expression::VarWrite(up_idx as usize, idx as usize, Box::new(self.parse_expression_with_inlining(expr))),
         }
     }
 

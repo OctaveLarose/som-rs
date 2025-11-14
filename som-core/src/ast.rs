@@ -107,15 +107,13 @@ pub enum Expression {
     GlobalRead(String),
     /// This does NOT exist: this is a field write which will be resolved by the AST/BC compilers, or it's an error.
     GlobalWrite(String, Box<Expression>),
-    /// Read of a local var.
-    LocalVarRead(usize),
-    /// Read of a nonlocal var.
-    NonLocalVarRead(usize, usize),
     /// Read of an argument.
     ArgRead(usize, usize),
+    /// Read of a var.
+    VarRead(usize, usize),
     /// An assignment to a binding (eg. `counter := 10`).
-    LocalVarWrite(usize, Box<Expression>),
-    NonLocalVarWrite(usize, usize, Box<Expression>),
+    VarWrite(usize, usize, Box<Expression>),
+    /// An assignment to an argument.
     ArgWrite(usize, usize, Box<Expression>),
     /// A message send (eg. `counter incrementBy: 5`).
     Message(Box<Message>),

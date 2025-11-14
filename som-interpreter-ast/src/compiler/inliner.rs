@@ -65,21 +65,12 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
                 let new_blk_ptr = self.gc_interface.alloc(new_blk, AllocSiteMarker::Block); // could we just adapt the old block instead of allocating?
                 AstExpression::Block(new_blk_ptr)
             }
-            Expression::LocalVarRead(idx)
-            | Expression::LocalVarWrite(idx, _)
-            | Expression::NonLocalVarRead(_, idx)
-            | Expression::NonLocalVarWrite(_, idx, _) => {
-                let up_idx = match expression {
-                    Expression::LocalVarRead(..) | Expression::LocalVarWrite(..) => 0,
-                    Expression::NonLocalVarRead(up_idx, ..) | Expression::NonLocalVarWrite(up_idx, ..) => *up_idx,
-                    _ => unreachable!(),
-                };
-
-                let (new_up_idx, new_idx) = self.adapt_var_coords_from_inlining(up_idx, *idx);
+            Expression::VarRead(up_idx, idx) | Expression::VarWrite(up_idx, idx, _) => {
+                let (new_up_idx, new_idx) = self.adapt_var_coords_from_inlining(*up_idx, *idx);
 
                 let var_type = match expression {
-                    Expression::LocalVarRead(..) | Expression::NonLocalVarRead(..) => VarType::Read,
-                    Expression::LocalVarWrite(_, expr) | Expression::NonLocalVarWrite(_, _, expr) => VarType::Write(expr),
+                    Expression::VarRead(..) => VarType::Read,
+                    Expression::VarWrite(_, _, expr) => VarType::Write(expr),
                     _ => unreachable!(),
                 };
 

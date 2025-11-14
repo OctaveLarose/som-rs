@@ -39,7 +39,7 @@ pub struct AstGenCtxtData<'a> {
     local_names: Vec<String>,
     param_names: Vec<String>,
     current_scope: usize,
-    is_getting_inlined: bool,
+    _is_getting_inlined: bool,
     outer_ctxt: Option<AstGenCtxt<'a>>,
 }
 
@@ -62,7 +62,7 @@ impl AstGenCtxtData<'_> {
             param_names: vec![],
             current_scope: 0,
             outer_ctxt: None,
-            is_getting_inlined: false,
+            _is_getting_inlined: false,
         }
     }
 }
@@ -76,7 +76,7 @@ impl<'a> AstGenCtxtData<'a> {
             local_names: vec![],
             param_names: vec![],
             current_scope: outer.borrow().current_scope + 1,
-            is_getting_inlined: false,
+            _is_getting_inlined: false,
             outer_ctxt: Some(Rc::clone(&outer)),
         }))
     }
@@ -154,10 +154,7 @@ impl<'a> AstGenCtxtData<'a> {
             None => Expression::GlobalRead(name.clone()),
             Some(v) => {
                 match v {
-                    FoundVar::Local(up_idx, idx) => match up_idx {
-                        0 => Expression::LocalVarRead(idx),
-                        _ => Expression::NonLocalVarRead(up_idx, idx),
-                    },
+                    FoundVar::Local(up_idx, idx) => Expression::VarRead(up_idx, idx),
                     FoundVar::Argument(up_idx, idx) => Expression::ArgRead(up_idx, idx + 1),
                     // FoundVar::Field(idx) => Expression::FieldRead(idx)
                 }
@@ -170,10 +167,7 @@ impl<'a> AstGenCtxtData<'a> {
             None => Expression::GlobalWrite(name.clone(), expr),
             Some(v) => {
                 match v {
-                    FoundVar::Local(up_idx, idx) => match up_idx {
-                        0 => Expression::LocalVarWrite(idx, expr),
-                        _ => Expression::NonLocalVarWrite(up_idx, idx, expr),
-                    },
+                    FoundVar::Local(up_idx, idx) => Expression::VarWrite(up_idx, idx, expr),
                     FoundVar::Argument(up_idx, idx) => Expression::ArgWrite(up_idx, idx + 1, expr), // + 1 to adjust for self
                                                                                                     // FoundVar::Field(idx) => Expression::FieldWrite(idx, expr)
                 }

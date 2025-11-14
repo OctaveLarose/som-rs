@@ -72,9 +72,9 @@ fn block_test() {
             nbr_locals: 1,
             body: Body {
                 exprs: vec![
-                    Expression::LocalVarWrite(0, Box::new(Expression::Literal(Literal::String(String::from("this is correct"))))),
+                    Expression::VarWrite(0, 0, Box::new(Expression::Literal(Literal::String(String::from("this is correct"))))),
                     Expression::Message(Box::new(Message::Regular(RegularMessage {
-                        receiver: Expression::LocalVarRead(0),
+                        receiver: Expression::VarRead(0, 0),
                         signature: String::from("println"),
                         values: vec![],
                     })))

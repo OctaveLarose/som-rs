@@ -263,17 +263,18 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         match expr.clone() {
             Expression::GlobalRead(global_name) => self.global_or_field_read_from_superclass(global_name),
             Expression::GlobalWrite(global_name, expr) => self.resolve_global_write_to_field_write(&global_name, expr.as_ref()),
-            Expression::LocalVarRead(idx) => AstExpression::LocalVarRead(idx as u8),
-            Expression::NonLocalVarRead(scope, idx) => AstExpression::NonLocalVarRead(scope as u8, idx as u8),
+            Expression::VarRead(scope, idx) => AstExpression::NonLocalVarRead(scope as u8, idx as u8),
             Expression::ArgRead(scope, idx) => AstExpression::ArgRead(scope as u8, idx as u8),
-            Expression::LocalVarWrite(a, b) => {
-                let local_write_expr = AstExpression::LocalVarWrite(a as u8, Box::new(self.parse_expression(b.as_ref())));
-                match self.maybe_make_inc_or_dec(&local_write_expr) {
-                    Some(inc_or_dec) => inc_or_dec,
-                    None => local_write_expr,
+            Expression::VarWrite(scope, idx, expr) => match scope {
+                0 => {
+                    let local_write_expr = AstExpression::LocalVarWrite(idx as u8, Box::new(self.parse_expression(expr.as_ref())));
+                    match self.maybe_make_inc_or_dec(&local_write_expr) {
+                        Some(inc_or_dec) => inc_or_dec,
+                        None => local_write_expr,
+                    }
                 }
-            }
-            Expression::NonLocalVarWrite(a, b, c) => AstExpression::NonLocalVarWrite(a as u8, b as u8, Box::new(self.parse_expression(c.as_ref()))),
+                _ => AstExpression::NonLocalVarWrite(scope as u8, idx as u8, Box::new(self.parse_expression(expr.as_ref()))),
+            },
             Expression::ArgWrite(a, b, c) => AstExpression::ArgWrite(a as u8, b as u8, Box::new(self.parse_expression(c.as_ref()))),
             Expression::Message(msg) => self.parse_message(msg.as_ref()),
             Expression::Exit(a, b) => match b {

@@ -409,12 +409,11 @@ impl MethodCodegen for ast::Body {
 impl MethodCodegen for ast::Expression {
     fn codegen(&self, ctxt: &mut dyn InnerGenCtxt, mutator: &mut GCInterface) -> Option<()> {
         match self {
-            ast::Expression::LocalVarRead(idx) => {
-                ctxt.push_instr(Bytecode::PushLocal(*idx as u8));
-                Some(())
-            }
-            ast::Expression::NonLocalVarRead(up_idx, idx) => {
-                ctxt.push_instr(Bytecode::PushNonLocal(*up_idx as u8, *idx as u8));
+            ast::Expression::VarRead(up_idx, idx) => {
+                match up_idx {
+                    0 => ctxt.push_instr(Bytecode::PushLocal(*idx as u8)),
+                    _ => ctxt.push_instr(Bytecode::PushNonLocal(*up_idx as u8, *idx as u8)),
+                }
                 Some(())
             }
             ast::Expression::ArgRead(up_idx, idx) => {
@@ -444,12 +443,14 @@ impl MethodCodegen for ast::Expression {
 
                 Some(())
             }
-            ast::Expression::LocalVarWrite(_, expr) | ast::Expression::NonLocalVarWrite(_, _, expr) => {
+            ast::Expression::VarWrite(_, _, expr) => {
                 expr.codegen(ctxt, mutator)?;
                 ctxt.push_instr(Bytecode::Dup);
                 match self {
-                    ast::Expression::LocalVarWrite(idx, _) => ctxt.push_instr(Bytecode::PopLocal(0, *idx as u8)),
-                    ast::Expression::NonLocalVarWrite(up_idx, idx, _) => ctxt.push_instr(Bytecode::PopLocal(*up_idx as u8, *idx as u8)),
+                    ast::Expression::VarWrite(up_idx, idx, _) => match up_idx {
+                        0 => ctxt.push_instr(Bytecode::PopLocal(0, *idx as u8)),
+                        _ => ctxt.push_instr(Bytecode::PopLocal(*up_idx as u8, *idx as u8)),
+                    },
                     _ => unreachable!(),
                 }
                 Some(())
