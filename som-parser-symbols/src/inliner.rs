@@ -1,5 +1,5 @@
 use crate::AstGenCtxt;
-use som_core::ast::{self, Message, RegularMessage};
+use som_core::ast::{self, Message};
 use som_core::ast::{Block, Expression};
 
 /// Helper enum for some variable-related logic when inlining.
@@ -32,62 +32,63 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
     }
 
     /// Parses an expression while taking the possible effects of inlining into account.
-    fn parse_expression_with_inlining(&mut self, expression: &Expression) -> Expression {
-        let expr = match expression {
-            Expression::Block(blk) => {
-                let new_blk = self.adapt_block_after_outer_inlined(blk);
-                Expression::Block(new_blk)
-            }
-            Expression::VarRead(idx, up_idx) | Expression::VarWrite(idx, up_idx, _) => {
-                let (new_up_idx, new_idx) = self.adapt_var_coords_from_inlining(*up_idx, *idx);
+    fn parse_expression_with_inlining(&mut self, _expression: &Expression) -> Expression {
+        todo!();
+        //let expr = match expression {
+        //Expression::Block(blk) => {
+        //    let new_blk = self.adapt_block_after_outer_inlined(blk);
+        //    Expression::Block(new_blk)
+        //}
+        //Expression::VarRead(idx, up_idx) | Expression::VarWrite(idx, up_idx, _) => {
+        //    let (new_up_idx, new_idx) = self.adapt_var_coords_from_inlining(*up_idx, *idx);
+        //
+        //    let var_type = match expression {
+        //        Expression::VarRead(..) => VarType::Read,
+        //        Expression::VarWrite(_, _, expr) => VarType::Write(expr),
+        //        _ => unreachable!(),
+        //    };
+        //
+        //    self.var_from_coords(new_up_idx, new_idx, var_type)
+        //}
+        //expr @ Expression::ArgRead(..) | expr @ Expression::ArgWrite(..) => self.adapt_arg_access_from_inlining(expr),
+        //Expression::Exit(expr, scope) => {
+        //    let inline_expr = self.parse_expression_with_inlining(expr);
+        //    //let adjust_scope_by = self.scopes.iter().rev().take(*scope).filter(|e| e.is_getting_inlined).count();
+        //    let adjust_scope_by = {
+        //        let mut cur: Option<AstGenCtxt<'_>> = Some(self.clone());
+        //        let mut adjust_by = 0;
+        //
+        //        while cur.is_some() {
+        //            adjust_by += 1;
+        //            cur = cur.unwrap().borrow().outer_ctxt.clone();
+        //        }
+        //
+        //        adjust_by
+        //    };
+        //    let new_scope = scope - adjust_scope_by;
+        //    Expression::Exit(Box::new(inline_expr), (new_scope as u8).into())
+        //}
+        //global_read @ Expression::GlobalRead(_a) => global_read.clone(),
+        //Expression::GlobalWrite(name, expr) => Expression::GlobalWrite(name.clone(), Box::new(self.parse_expression_with_inlining(expr))),
+        ////Expression::Message(msg) => self.parse_message_with_inlining(msg),
+        //Expression::Message(msg) => {
+        //    let old_msg = match &**msg {
+        //        Message::Regular(reg_msg) => reg_msg,
+        //        _ => todo!("not handling inlining methods within inlined blocks"),
+        //    };
+        //
+        //    let new_msg = RegularMessage {
+        //        receiver: self.parse_expression_with_inlining(&old_msg.receiver),
+        //        signature: old_msg.signature.clone(),
+        //        values: old_msg.values.iter().map(|v| self.parse_expression_with_inlining(v)).collect(),
+        //    };
+        //
+        //    Expression::Message(Box::new(Message::Regular(new_msg)))
+        //}
+        //lit_expr @ Expression::Literal(_) => lit_expr.clone(),
+        //};
 
-                let var_type = match expression {
-                    Expression::VarRead(..) => VarType::Read,
-                    Expression::VarWrite(_, _, expr) => VarType::Write(expr),
-                    _ => unreachable!(),
-                };
-
-                self.var_from_coords(new_up_idx, new_idx, var_type)
-            }
-            expr @ Expression::ArgRead(..) | expr @ Expression::ArgWrite(..) => self.adapt_arg_access_from_inlining(expr),
-            Expression::Exit(expr, scope) => {
-                let inline_expr = self.parse_expression_with_inlining(expr);
-                //let adjust_scope_by = self.scopes.iter().rev().take(*scope).filter(|e| e.is_getting_inlined).count();
-                let adjust_scope_by = {
-                    let mut cur: Option<AstGenCtxt<'_>> = Some(self.clone());
-                    let mut adjust_by = 0;
-
-                    while cur.is_some() {
-                        adjust_by += 1;
-                        cur = cur.unwrap().borrow().outer_ctxt.clone();
-                    }
-
-                    adjust_by
-                };
-                let new_scope = scope - adjust_scope_by;
-                Expression::Exit(Box::new(inline_expr), (new_scope as u8).into())
-            }
-            global_read @ Expression::GlobalRead(_a) => global_read.clone(),
-            Expression::GlobalWrite(name, expr) => Expression::GlobalWrite(name.clone(), Box::new(self.parse_expression_with_inlining(expr))),
-            //Expression::Message(msg) => self.parse_message_with_inlining(msg),
-            Expression::Message(msg) => {
-                let old_msg = match &**msg {
-                    Message::Regular(reg_msg) => reg_msg,
-                    _ => todo!("not handling inlining methods within inlined blocks"),
-                };
-
-                let new_msg = RegularMessage {
-                    receiver: self.parse_expression_with_inlining(&old_msg.receiver),
-                    signature: old_msg.signature.clone(),
-                    values: old_msg.values.iter().map(|v| self.parse_expression_with_inlining(v)).collect(),
-                };
-
-                Expression::Message(Box::new(Message::Regular(new_msg)))
-            }
-            lit_expr @ Expression::Literal(_) => lit_expr.clone(),
-        };
-
-        expr
+        //expr
     }
 
     fn inline_block(&mut self, blk: &Block) -> Vec<Expression> {
@@ -144,11 +145,12 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
     }
 
     /// Helper function: generates a local variable expression given coordinates. We get duplicated logic otherwise.
-    fn var_from_coords(&mut self, up_idx: u8, idx: u8, var_type: VarType) -> Expression {
-        match var_type {
-            VarType::Read => Expression::VarRead(up_idx as usize, idx as usize),
-            VarType::Write(expr) => Expression::VarWrite(up_idx as usize, idx as usize, Box::new(self.parse_expression_with_inlining(expr))),
-        }
+    fn var_from_coords(&mut self, _up_idx: u8, _idx: u8, _var_type: VarType) -> Expression {
+        todo!()
+        //match var_type {
+        //VarType::Read => Expression::VarRead(up_idx as usize, idx as usize),
+        //VarType::Write(expr) => Expression::VarWrite(up_idx as usize, idx as usize, Box::new(self.parse_expression_with_inlining(expr))),
+        //}
     }
 
     /// Returns the number of arguments in a given scope, accounting for inlining.

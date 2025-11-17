@@ -278,7 +278,7 @@ pub fn block<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
         let new_genctxt = AstGenCtxtData::new_ctxt_from(genctxt, AstGenCtxtType::Block);
 
         let (((parameters, locals), body), input, genctxt) = default(parameters()).and(default(locals())).and(body()).parse(input, new_genctxt)?;
-        // we unwrap here at the risk of panicking since if it fails we would want to adjust the scope - but atm we just panoc instead of recovering
+        // we unwrap here at the risk of panicking since if it fails we would want to adjust the scope - but atm we just panic instead of recovering
 
         let (_, input, genctxt) = exact(Token::EndBlock).parse(input, genctxt)?;
 
@@ -288,8 +288,8 @@ pub fn block<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
             Expression::Block(Block {
                 nbr_params: parameters.len(),
                 nbr_locals: locals.len(),
-                #[cfg(feature = "block-debug-info")]
-                dbg_info: Rc::clone(&new_genctxt).borrow().get_debug_info(),
+                parameters,
+                locals,
                 body,
             }),
             input,
@@ -315,20 +315,14 @@ pub fn expression<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> 
 }
 
 pub fn primary<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
-    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| match identifier().parse(input, Rc::clone(&genctxt)) {
-        None => term().or(block()).or(literal().map(Expression::Literal)).parse(input, genctxt),
-        Some((name, input, genctxt)) => Some((genctxt.borrow().get_var_read(&name), input, Rc::clone(&genctxt))),
-    }
+    (identifier().map(Expression::Read)).or(term()).or(block()).or(literal().map(Expression::Literal))
 }
 
 pub fn assignment<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
-    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
-        identifier()
-            .and_left(exact(Token::Assign))
-            .and(opaque!(statement()))
-            .parse(input, genctxt)
-            .map(|((name, expr), input, genctxt)| (genctxt.borrow().get_var_write(&name, Box::new(expr.clone())), input, Rc::clone(&genctxt)))
-    }
+    identifier()
+        .and_left(exact(Token::Assign))
+        .and(opaque!(statement()))
+        .map(|(name, expr)| Expression::Write(name, Box::new(expr)))
 }
 
 pub fn statement<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
@@ -339,36 +333,20 @@ pub fn primitive<'a>() -> impl Parser<MethodBody, &'a [Token], AstGenCtxt<'a>> {
     exact(Token::Primitive).map(|_| MethodBody::Primitive)
 }
 
-// making several methods here to avoid having to make the general case be a "move" function, since I think that's a slowdown.
-#[cfg(feature = "block-debug-info")]
-pub fn method_body<'a>() -> impl Parser<MethodBody, &'a [Token], AstGenCtxt<'a>> {
-    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
-        let ((locals, body), input, genctxt) =
-            between(exact(Token::NewTerm), default(locals()).and(body()), exact(Token::EndTerm)).parse(input, genctxt)?;
-
-        let method_body = MethodBody::Body {
-            locals_nbr: locals.len(),
-            body,
-            debug_info: genctxt.borrow().get_debug_info(),
-        };
-
-        Some((method_body, input, genctxt))
-    }
-}
-
-#[cfg(not(feature = "block-debug-info"))]
 pub fn method_body<'a>() -> impl Parser<MethodBody, &'a [Token], AstGenCtxt<'a>> {
     between(exact(Token::NewTerm), default(locals()).and(body()), exact(Token::EndTerm)).map(|(locals, body)| MethodBody::Body {
         locals_nbr: locals.len(),
+        locals,
         body,
     })
 }
 
 pub fn unary_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGenCtxt<'a>> {
-    identifier()
-        .and_left(exact(Token::Equal))
-        .and(primitive().or(method_body()))
-        .map(|(signature, body)| MethodDef { signature, body })
+    identifier().and_left(exact(Token::Equal)).and(primitive().or(method_body())).map(|(signature, body)| MethodDef {
+        args: vec![],
+        signature,
+        body,
+    })
 }
 
 pub fn positional_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGenCtxt<'a>> {
@@ -381,7 +359,11 @@ pub fn positional_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGen
 
         let (body, input, genctxt) = primitive().or(method_body()).parse(input, genctxt)?;
 
-        let method_def = MethodDef { signature, body };
+        let method_def = MethodDef {
+            args: parameters,
+            signature,
+            body,
+        };
 
         Some((method_def, input, genctxt))
     }
@@ -393,7 +375,14 @@ pub fn operator_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGenCt
 
         genctxt.borrow_mut().add_params(&[rhs.clone()]);
 
-        primitive().or(method_body()).map(|body| MethodDef { signature: op.clone(), body }).parse(input, genctxt)
+        primitive()
+            .or(method_body())
+            .map(|body| MethodDef {
+                args: vec![rhs.clone()],
+                signature: op.clone(),
+                body,
+            })
+            .parse(input, genctxt)
     }
 }
 

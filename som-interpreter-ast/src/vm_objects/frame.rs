@@ -26,8 +26,8 @@ macro_rules! frame_locals_ptr {
 pub struct Frame {
     pub prev_frame: Gc<Frame>,
     /// This frame's kind.
-    // #[cfg(feature = "frame-debug-info")]
-    // pub kind: FrameKind,
+    //#[cfg(feature = "frame-debug-info")]
+    //pub kind: FrameKind,
     pub nbr_args: u8,
     pub nbr_locals: u8,
 

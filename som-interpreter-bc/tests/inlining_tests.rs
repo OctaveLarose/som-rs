@@ -153,7 +153,7 @@ fn while_true_false_inlining_ok() {
         &[
             PushLocal(0),
             PushConstant(1),
-            Send2(Interned(72)),
+            Send2(Interned(73)),
             JumpOnFalsePop(5),
             PushLocal(0),
             Inc,

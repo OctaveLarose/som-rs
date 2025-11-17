@@ -28,10 +28,16 @@ use som_core::ast::{Expression, MethodBody};
 use som_core::bytecode::Bytecode;
 use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 
+pub(crate) enum FoundVar {
+    Local(u8, u8),
+    Argument(u8, u8),
+    Field(u8),
+}
+
 pub(crate) trait GenCtxt {
+    fn find_var(&mut self, name: &str) -> Option<FoundVar>;
     fn intern_symbol(&mut self, name: &str) -> Interned;
     fn get_scope(&self) -> usize;
-    fn find_field(&mut self, name: &str) -> Option<usize>;
     fn get_interner(&self) -> &Interner;
 }
 
@@ -125,23 +131,36 @@ struct BlockGenCtxt<'a> {
     pub outer: &'a mut dyn GenCtxt,
     pub args_nbr: usize,
     pub locals_nbr: usize,
+    pub args: IndexSet<String>,
+    pub locals: IndexSet<String>,
     pub literals: IndexSet<Literal>,
     pub body: Option<Vec<Bytecode>>,
-    #[cfg(feature = "frame-debug-info")]
-    pub debug_info: BlockDebugInfo,
 }
 
 impl GenCtxt for BlockGenCtxt<'_> {
+    fn find_var(&mut self, name: &str) -> Option<FoundVar> {
+        let name = match name {
+            "super" => "self",
+            name => name,
+        };
+        (self.locals.get_index_of(name))
+            .map(|idx| FoundVar::Local(0, idx as u8))
+            .or_else(|| (self.args.get_index_of(name)).map(|idx| FoundVar::Argument(0, idx as u8)))
+            .or_else(|| {
+                self.outer.find_var(name).map(|found| match found {
+                    FoundVar::Local(up_idx, idx) => FoundVar::Local(up_idx + 1, idx),
+                    FoundVar::Argument(up_idx, idx) => FoundVar::Argument(up_idx + 1, idx),
+                    FoundVar::Field(idx) => FoundVar::Field(idx),
+                })
+            })
+    }
+
     fn intern_symbol(&mut self, name: &str) -> Interned {
         self.outer.intern_symbol(name)
     }
 
     fn get_scope(&self) -> usize {
         self.outer.get_scope() + 1
-    }
-
-    fn find_field(&mut self, name: &str) -> Option<usize> {
-        self.outer.find_field(name)
     }
 
     fn get_interner(&self) -> &Interner {
@@ -322,16 +341,16 @@ struct MethodGenCtxt<'a> {
 impl MethodGenCtxt<'_> {}
 
 impl GenCtxt for MethodGenCtxt<'_> {
+    fn find_var(&mut self, name: &str) -> Option<FoundVar> {
+        self.inner.find_var(name)
+    }
+
     fn intern_symbol(&mut self, name: &str) -> Interned {
         self.inner.intern_symbol(name)
     }
 
     fn get_scope(&self) -> usize {
         0
-    }
-
-    fn find_field(&mut self, name: &str) -> Option<usize> {
-        self.inner.find_field(name)
     }
 
     fn get_interner(&self) -> &Interner {
@@ -409,24 +428,18 @@ impl MethodCodegen for ast::Body {
 impl MethodCodegen for ast::Expression {
     fn codegen(&self, ctxt: &mut dyn InnerGenCtxt, mutator: &mut GCInterface) -> Option<()> {
         match self {
-            ast::Expression::VarRead(up_idx, idx) => {
-                match up_idx {
-                    0 => ctxt.push_instr(Bytecode::PushLocal(*idx as u8)),
-                    _ => ctxt.push_instr(Bytecode::PushNonLocal(*up_idx as u8, *idx as u8)),
-                }
-                Some(())
-            }
-            ast::Expression::ArgRead(up_idx, idx) => {
-                match (up_idx, idx) {
-                    (0, 0) => ctxt.push_instr(Bytecode::PushSelf),
-                    (0, _) => ctxt.push_instr(Bytecode::PushArg(*idx as u8)),
-                    _ => ctxt.push_instr(Bytecode::PushNonLocalArg(*up_idx as u8, *idx as u8)),
-                };
-                Some(())
-            }
-            ast::Expression::GlobalRead(name) => {
-                match ctxt.find_field(name) {
-                    Some(idx) => ctxt.push_instr(Bytecode::PushField(idx as u8)),
+            ast::Expression::Read(name) => {
+                match ctxt.find_var(name.as_str()) {
+                    Some(FoundVar::Local(up_idx, idx)) => match up_idx {
+                        0 => ctxt.push_instr(Bytecode::PushLocal(idx)),
+                        _ => ctxt.push_instr(Bytecode::PushNonLocal(up_idx, idx)),
+                    },
+                    Some(FoundVar::Argument(up_idx, idx)) => match (up_idx, idx) {
+                        (0, 0) => ctxt.push_instr(Bytecode::PushSelf),
+                        (0, _) => ctxt.push_instr(Bytecode::PushArg(idx)),
+                        _ => ctxt.push_instr(Bytecode::PushNonLocalArg(up_idx, idx)),
+                    },
+                    Some(FoundVar::Field(idx)) => ctxt.push_instr(Bytecode::PushField(idx)),
                     None => match name.as_str() {
                         "nil" => ctxt.push_instr(Bytecode::PushNil),
                         "super" => match ctxt.get_scope() {
@@ -440,34 +453,19 @@ impl MethodCodegen for ast::Expression {
                         }
                     },
                 }
-
                 Some(())
             }
-            ast::Expression::VarWrite(_, _, expr) => {
+            ast::Expression::Write(name, expr) => {
                 expr.codegen(ctxt, mutator)?;
                 ctxt.push_instr(Bytecode::Dup);
-                match self {
-                    ast::Expression::VarWrite(up_idx, idx, _) => match up_idx {
-                        0 => ctxt.push_instr(Bytecode::PopLocal(0, *idx as u8)),
-                        _ => ctxt.push_instr(Bytecode::PopLocal(*up_idx as u8, *idx as u8)),
+                match ctxt.find_var(name.as_str())? {
+                    FoundVar::Local(up_idx, idx) => match up_idx {
+                        0 => ctxt.push_instr(Bytecode::PopLocal(0, idx)),
+                        _ => ctxt.push_instr(Bytecode::PopLocal(up_idx, idx)),
                     },
-                    _ => unreachable!(),
+                    FoundVar::Argument(up_idx, idx) => ctxt.push_instr(Bytecode::PopArg(up_idx, idx)),
+                    FoundVar::Field(idx) => ctxt.push_instr(Bytecode::PopField(idx)),
                 }
-                Some(())
-            }
-            ast::Expression::GlobalWrite(name, expr) => match ctxt.find_field(name) {
-                Some(idx) => {
-                    expr.codegen(ctxt, mutator)?;
-                    ctxt.push_instr(Bytecode::Dup);
-                    ctxt.push_instr(Bytecode::PopField(idx as u8));
-                    Some(())
-                }
-                None => panic!("couldn't resolve a globalwrite (`{}`) to a field write", name),
-            },
-            ast::Expression::ArgWrite(up_idx, idx, expr) => {
-                expr.codegen(ctxt, mutator)?;
-                ctxt.push_instr(Bytecode::Dup);
-                ctxt.push_instr(Bytecode::PopArg(*up_idx as u8, *idx as u8));
                 Some(())
             }
             ast::Expression::Message(message) => {
@@ -478,7 +476,8 @@ impl MethodCodegen for ast::Expression {
                     }
                 };
 
-                let is_super_call = matches!(&message.receiver, _super if _super == &Expression::GlobalRead(String::from("super")));
+                // TODO: we should actually also check whether there's not a "super" variable in scope, right? That should be valid ST I think
+                let is_super_call = matches!(&message.receiver, _super if _super == &Expression::Read(String::from("super")));
 
                 message.receiver.codegen(ctxt, mutator)?;
 
@@ -524,7 +523,7 @@ impl MethodCodegen for ast::Expression {
             ast::Expression::Exit(expr, scope) => {
                 match scope {
                     0 => match expr.as_ref() {
-                        Expression::ArgRead(0, 0) => ctxt.push_instr(Bytecode::ReturnSelf),
+                        Expression::Read(s) if s == "self" => ctxt.push_instr(Bytecode::ReturnSelf),
                         _ => {
                             expr.codegen(ctxt, mutator)?;
                             ctxt.push_instr(Bytecode::ReturnLocal)
@@ -609,16 +608,17 @@ struct ClassGenCtxt<'a> {
 }
 
 impl GenCtxt for ClassGenCtxt<'_> {
+    fn find_var(&mut self, name: &str) -> Option<FoundVar> {
+        let sym = self.interner.intern(name);
+        self.fields.get_index_of(&sym).map(|idx| FoundVar::Field(idx as u8))
+    }
+
     fn intern_symbol(&mut self, name: &str) -> Interned {
         self.interner.intern(name)
     }
 
     fn get_scope(&self) -> usize {
         unreachable!("Asking for scope in a class generation context?")
-    }
-
-    fn find_field(&mut self, name: &str) -> Option<usize> {
-        self.fields.iter().position(|f_int| self.interner.lookup(*f_int) == name)
     }
 
     fn get_interner(&self) -> &Interner {
@@ -719,6 +719,18 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
             // },
             literals: IndexSet::new(),
             body: None,
+            args: {
+                let mut args = IndexSet::new();
+                args.insert(String::from("self"));
+                for arg in &defn.args {
+                    args.insert(arg.to_string());
+                }
+                args
+            },
+            locals: match &defn.body {
+                ast::MethodBody::Primitive => IndexSet::new(),
+                ast::MethodBody::Body { locals, .. } => locals.iter().cloned().collect(),
+            },
             locals_nbr: {
                 match &defn.body {
                     MethodBody::Primitive => 0,
@@ -729,16 +741,6 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                 match defn.signature.chars().next().unwrap() {
                     '~' | '&' | '|' | '*' | '/' | '\\' | '+' | '=' | '>' | '<' | ',' | '@' | '%' | '-' => 2,
                     _ => defn.signature.chars().filter(|c| *c == ':').count(),
-                }
-            },
-            #[cfg(feature = "frame-debug-info")]
-            debug_info: {
-                match &defn.body {
-                    MethodBody::Primitive => BlockDebugInfo {
-                        parameters: vec![],
-                        locals: vec![],
-                    },
-                    MethodBody::Body { debug_info, .. } => debug_info.clone(),
                 }
             },
         },
@@ -827,6 +829,15 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
         outer,
         args_nbr: defn.nbr_params,
         locals_nbr: defn.nbr_locals,
+        args: {
+            let mut args = IndexSet::new();
+            args.insert(String::from("#blockSelf"));
+            for arg in &defn.parameters {
+                args.insert(arg.to_string());
+            }
+            args
+        },
+        locals: defn.locals.iter().cloned().collect(),
         // dbg_info: defn.dbg_info,
         literals: IndexSet::new(),
         body: None,

@@ -86,7 +86,7 @@ impl PrimMessageInliner for AstMethodCompilerCtxt<'_> {
                     _ => AstExpression::NonLocalExit(Box::new(inline_expr), new_scope as u8),
                 }
             }
-            Expression::GlobalRead(a) => self.global_or_field_read_from_superclass(a.clone()),
+            Expression::GlobalRead(a) => self.global_read(a.clone()),
             Expression::GlobalWrite(name, expr) => {
                 if self.class.is_none() {
                     panic!(

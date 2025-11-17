@@ -36,6 +36,8 @@ pub struct ClassDef {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct MethodDef {
+    /// The method parameters/arguments.
+    pub args: Vec<String>,
     /// The method's signature (eg. `println`, `at:put:` or `==`).
     pub signature: String,
     /// The method's body.
@@ -57,12 +59,7 @@ pub enum MethodBody {
     /// A primitive (meant to be implemented by the VM itself).
     Primitive,
     /// An actual body for the method, with locals.
-    Body {
-        locals_nbr: usize,
-        body: Body,
-        #[cfg(feature = "block-debug-info")]
-        debug_info: BlockDebugInfo,
-    },
+    Body { locals: Vec<String>, locals_nbr: usize, body: Body },
 }
 
 /// Represents the contents of a body (within a term or block).
@@ -104,17 +101,9 @@ pub struct Body {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     /// A reference to a binding (eg. `counter`).
-    GlobalRead(String),
-    /// This does NOT exist: this is a field write which will be resolved by the AST/BC compilers, or it's an error.
-    GlobalWrite(String, Box<Expression>),
-    /// Read of an argument.
-    ArgRead(usize, usize),
-    /// Read of a var.
-    VarRead(usize, usize),
+    Read(String),
     /// An assignment to a binding (eg. `counter := 10`).
-    VarWrite(usize, usize, Box<Expression>),
-    /// An assignment to an argument.
-    ArgWrite(usize, usize, Box<Expression>),
+    Write(String, Box<Expression>),
     /// A message send (eg. `counter incrementBy: 5`).
     Message(Box<Message>),
     /// An exit operation (eg. `^counter`). Second argument is the scope level to differentiate local and nonlocal returns
@@ -205,22 +194,16 @@ pub struct BinaryOp {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Block {
-    /// Represents the parameters' names.
+    /// Represents the parameters' names. TODO remove
     pub nbr_params: usize,
     /// The names of the locals.
     pub nbr_locals: usize,
+    /// Represents the parameters' names.
+    pub parameters: Vec<String>,
+    /// The names of the locals.
+    pub locals: Vec<String>,
     /// Represents the block's body.
     pub body: Body,
-    #[cfg(feature = "block-debug-info")]
-    /// Debug info for the block: parameters and local variable names
-    pub dbg_info: BlockDebugInfo,
-}
-
-#[cfg(feature = "block-debug-info")]
-#[derive(Debug, Clone, PartialEq)]
-pub struct BlockDebugInfo {
-    pub parameters: Vec<String>,
-    pub locals: Vec<String>,
 }
 
 /// Represents a term.

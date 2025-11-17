@@ -9,8 +9,6 @@ use crate::universe::Universe;
 use crate::value::Value;
 use crate::vm_objects::class::Class;
 
-#[cfg(feature = "frame-debug-info")]
-use som_core::ast::BlockDebugInfo;
 use som_gc::gcref::Gc;
 
 use crate::vm_objects::block::BodyInlineCache;
@@ -39,8 +37,6 @@ pub struct MethodInfo {
     pub nbr_locals: u8,
     pub nbr_params: u8,
     pub max_stack_size: u8,
-    #[cfg(feature = "frame-debug-info")]
-    pub block_debug_info: BlockDebugInfo,
 }
 
 /// Represents a class method.

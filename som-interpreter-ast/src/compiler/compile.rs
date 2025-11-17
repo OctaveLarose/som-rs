@@ -1,4 +1,4 @@
-use super::inliner::PrimMessageInliner;
+//use super::inliner::PrimMessageInliner;
 use crate::ast::{
     AstBinaryDispatch, AstBlock, AstBody, AstDispatchNode, AstExpression, AstLiteral, AstMethodDef, AstNAryDispatch, AstSuperMessage,
     AstTernaryDispatch, AstUnaryDispatch,
@@ -13,6 +13,12 @@ use som_core::ast::{Expression, Literal, MethodBody};
 use som_core::interner::Interner;
 use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 use som_gc::gcref::Gc;
+
+pub(crate) enum FoundVar {
+    Local(u8, u8),
+    Argument(u8, u8),
+    Field(u8),
+}
 
 pub struct AstMethodCompilerCtxt<'a> {
     /// The class in which context we're compiling. Needed for resolving field accesses. Should always be Some() outside of a testing context.
@@ -54,6 +60,10 @@ impl AstScopeCtxt {
 }
 
 impl<'a> AstMethodCompilerCtxt<'a> {
+    fn find_var(&self, _name: &str) -> Option<FoundVar> {
+        todo!()
+    }
+
     pub fn new(gc_interface: &'a mut GCInterface, interner: &'a mut Interner) -> Self {
         Self {
             class: None,
@@ -261,21 +271,29 @@ impl<'a> AstMethodCompilerCtxt<'a> {
 
     pub fn parse_expression(&mut self, expr: &Expression) -> AstExpression {
         match expr.clone() {
-            Expression::GlobalRead(global_name) => self.global_or_field_read_from_superclass(global_name),
-            Expression::GlobalWrite(global_name, expr) => self.resolve_global_write_to_field_write(&global_name, expr.as_ref()),
-            Expression::VarRead(scope, idx) => AstExpression::NonLocalVarRead(scope as u8, idx as u8),
-            Expression::ArgRead(scope, idx) => AstExpression::ArgRead(scope as u8, idx as u8),
-            Expression::VarWrite(scope, idx, expr) => match scope {
-                0 => {
-                    let local_write_expr = AstExpression::LocalVarWrite(idx as u8, Box::new(self.parse_expression(expr.as_ref())));
-                    match self.maybe_make_inc_or_dec(&local_write_expr) {
-                        Some(inc_or_dec) => inc_or_dec,
-                        None => local_write_expr,
-                    }
-                }
-                _ => AstExpression::NonLocalVarWrite(scope as u8, idx as u8, Box::new(self.parse_expression(expr.as_ref()))),
+            Expression::Read(global_name) => match self.find_var(&global_name) {
+                Some(FoundVar::Local(scope, idx)) => AstExpression::NonLocalVarRead(scope as u8, idx as u8),
+                Some(FoundVar::Argument(scope, idx)) => AstExpression::ArgRead(scope as u8, idx as u8),
+                Some(FoundVar::Field(idx)) => AstExpression::FieldRead(idx),
+                None => self.global_read(global_name),
             },
-            Expression::ArgWrite(a, b, c) => AstExpression::ArgWrite(a as u8, b as u8, Box::new(self.parse_expression(c.as_ref()))),
+            Expression::Write(global_name, expr) => match self.find_var(&global_name) {
+                Some(FoundVar::Local(scope, idx)) => match scope {
+                    0 => {
+                        let local_write_expr = AstExpression::LocalVarWrite(idx as u8, Box::new(self.parse_expression(expr.as_ref())));
+                        match self.maybe_make_inc_or_dec(&local_write_expr) {
+                            Some(inc_or_dec) => inc_or_dec,
+                            None => local_write_expr,
+                        }
+                    }
+                    _ => AstExpression::NonLocalVarWrite(scope as u8, idx as u8, Box::new(self.parse_expression(expr.as_ref()))),
+                },
+                Some(FoundVar::Argument(scope, idx)) => {
+                    AstExpression::ArgWrite(scope as u8, idx as u8, Box::new(self.parse_expression(expr.as_ref())))
+                }
+                Some(FoundVar::Field(idx)) => AstExpression::FieldWrite(idx, Box::new(self.parse_expression(expr.as_ref()))),
+                _ => self.resolve_global_write(&global_name, &expr),
+            },
             Expression::Message(msg) => self.parse_message(msg.as_ref()),
             Expression::Exit(a, b) => match b {
                 0 => AstExpression::LocalExit(Box::new(self.parse_expression(a.as_ref()))),
@@ -350,10 +368,10 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         self.parse_message_with_func(msg, Self::parse_expression)
     }
 
-    pub fn parse_message_with_inlining(&mut self, msg: &ast::Message) -> AstExpression {
-        self.parse_message_with_func(msg, Self::parse_expression_with_inlining)
-    }
-
+    //pub fn parse_message_with_inlining(&mut self, msg: &ast::Message) -> AstExpression {
+    //    self.parse_message_with_func(msg, Self::parse_expression_with_inlining)
+    //}
+    //
     pub fn parse_message_with_func(
         &mut self,
         msg: &ast::Message,
@@ -366,17 +384,17 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             }
         };
 
-        #[cfg(not(feature = "inlining-disabled"))]
-        {
-            let maybe_inlined = self.inline_if_possible(msg);
-            if let Some(inlined_node) = maybe_inlined {
-                return AstExpression::InlinedCall(Box::new(inlined_node));
-            }
-        }
-
+        //#[cfg(not(feature = "inlining-disabled"))]
+        //{
+        //    let maybe_inlined = self.inline_if_possible(msg);
+        //    if let Some(inlined_node) = maybe_inlined {
+        //        return AstExpression::InlinedCall(Box::new(inlined_node));
+        //    }
+        //}
+        //
         let interned_signature = self.interner.intern(msg.signature.as_str());
 
-        if msg.receiver == Expression::GlobalRead(String::from("super")) {
+        if msg.receiver == Expression::Read(String::from("super")) {
             return AstExpression::SuperMessage(Box::new(AstSuperMessage {
                 super_class: self
                     .class
@@ -427,7 +445,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         }
     }
 
-    pub(crate) fn global_or_field_read_from_superclass(&mut self, name: String) -> AstExpression {
+    pub(crate) fn global_read(&mut self, name: String) -> AstExpression {
         if name.as_str() == "super" {
             return AstExpression::ArgRead((self.scopes.len() - 1) as u8, 0);
         }
@@ -442,7 +460,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         }
     }
 
-    fn resolve_global_write_to_field_write(&mut self, name: &String, expr: &Expression) -> AstExpression {
+    fn resolve_global_write(&mut self, name: &String, expr: &Expression) -> AstExpression {
         if self.class.is_none() {
             panic!(
                 "can't turn the GlobalWrite `{}` into a FieldWrite, and GlobalWrite shouldn't exist at runtime",

@@ -118,7 +118,7 @@ fn send_bytecodes() {
 
     let bytecodes = get_bytecodes_from_method(class_txt, "run");
 
-    expect_bytecode_sequence(&bytecodes, &[Push1, Send1(Interned(95))]);
+    expect_bytecode_sequence(&bytecodes, &[Push1, Send1(Interned(96))]);
 
     // we do a "+ 2" to not have the bytecode INC replace a Send2.
     expect_bytecode_sequence(&bytecodes, &[Push1, PushConstant(0), Send2(Interned(12))]);

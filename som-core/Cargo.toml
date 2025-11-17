@@ -9,6 +9,3 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 som-value = { path = "../som-value", version = "0.0.3" }
-
-[features]
-block-debug-info = []
