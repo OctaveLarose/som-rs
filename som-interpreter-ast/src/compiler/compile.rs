@@ -8,6 +8,7 @@ use crate::nodes::trivial_methods::{TrivialGetterMethod, TrivialGlobalMethod, Tr
 use crate::primitives::UNIMPLEM_PRIMITIVE;
 use crate::vm_objects::class::Class;
 use crate::vm_objects::method::MethodKind;
+use indexmap::IndexSet;
 use som_core::ast;
 use som_core::ast::{Expression, Literal, MethodBody};
 use som_core::interner::Interner;
@@ -35,15 +36,18 @@ pub struct AstMethodCompilerCtxt<'a> {
 pub(crate) struct AstScopeCtxt {
     nbr_args: usize,
     nbr_locals: usize,
-    pub is_getting_inlined: bool,
+    args: IndexSet<String>, // TODO IndexSet, matching BC
+    locals: IndexSet<String>,
 }
 
+#[allow(unused)]
 impl AstScopeCtxt {
-    pub fn init(nbr_args: usize, nbr_locals: usize, is_getting_inlined: bool) -> Self {
+    pub fn init(nbr_args: usize, nbr_locals: usize, locals: IndexSet<String>, args: IndexSet<String>) -> Self {
         Self {
             nbr_args,
             nbr_locals,
-            is_getting_inlined,
+            locals,
+            args,
         }
     }
 
@@ -54,14 +58,45 @@ impl AstScopeCtxt {
     pub fn add_nbr_locals(&mut self, nbr_to_add: usize) {
         self.nbr_locals += nbr_to_add;
     }
+
     pub fn get_nbr_args(&self) -> usize {
         self.nbr_args
+    }
+
+    pub fn get_arg(&self, name: &str) -> Option<usize> {
+        self.args.iter().position(|a| a == name)
+    }
+
+    pub fn get_local(&self, name: &str) -> Option<usize> {
+        self.args.iter().position(|a| a == name)
+    }
+
+    pub fn find_var(&self, name: &str, cur_scope: usize, scopes: &Vec<AstScopeCtxt>) -> Option<FoundVar> {
+        let name = match name {
+            "super" => "self",
+            name => name,
+        };
+        (self.locals.get_index_of(name))
+            .map(|idx| FoundVar::Local(0, idx as u8))
+            .or_else(|| (self.args.get_index_of(name)).map(|idx| FoundVar::Argument(0, idx as u8)))
+            .or_else(|| {
+                scopes.iter().nth_back(cur_scope + 1)?.find_var(name, cur_scope + 1, scopes).map(|found| match found {
+                    FoundVar::Local(up_idx, idx) => FoundVar::Local(up_idx + 1, idx),
+                    FoundVar::Argument(up_idx, idx) => FoundVar::Argument(up_idx + 1, idx),
+                    _ => unreachable!(),
+                })
+            })
     }
 }
 
 impl<'a> AstMethodCompilerCtxt<'a> {
-    fn find_var(&self, _name: &str) -> Option<FoundVar> {
-        todo!()
+    fn find_var(&self, name: &str) -> Option<FoundVar> {
+        if let Some(cls) = &self.class {
+            if let Some(found_field) = cls.field_names.iter().position(|n| n == name) {
+                return Some(FoundVar::Field(found_field as u8));
+            }
+        }
+        self.scopes.last()?.find_var(name, 0, &self.scopes)
     }
 
     pub fn new(gc_interface: &'a mut GCInterface, interner: &'a mut Interner) -> Self {
@@ -249,11 +284,22 @@ impl<'a> AstMethodCompilerCtxt<'a> {
             MethodBody::Primitive => {
                 unreachable!("unimplemented primitive")
             }
-            MethodBody::Body { locals_nbr, body, .. } => {
+            MethodBody::Body { locals_nbr, body, locals } => {
                 let args_nbr = method_def.signature.chars().filter(|e| *e == ':').count(); // not sure if needed
+
+                let mut locals_set: IndexSet<String> = IndexSet::new();
+                for local in locals {
+                    locals_set.insert(local.clone());
+                }
+
+                let mut args_set: IndexSet<String> = IndexSet::new();
+                args_set.insert("self".to_string());
+                for arg in &method_def.args {
+                    args_set.insert(arg.clone());
+                }
                 let mut ctxt = AstMethodCompilerCtxt {
                     class,
-                    scopes: vec![AstScopeCtxt::init(args_nbr, *locals_nbr, false)],
+                    scopes: vec![AstScopeCtxt::init(args_nbr, *locals_nbr, locals_set, args_set)],
                     gc_interface,
                     interner,
                 };
@@ -350,7 +396,17 @@ impl<'a> AstMethodCompilerCtxt<'a> {
     }
 
     pub fn parse_block(&mut self, blk: &ast::Block) -> AstBlock {
-        self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, false));
+        let mut locals_set: IndexSet<String> = IndexSet::new();
+        for local in &blk.locals {
+            locals_set.insert(local.clone());
+        }
+
+        let mut args_set: IndexSet<String> = IndexSet::new();
+        args_set.insert("#blockSelf".to_string());
+        for arg in &blk.parameters {
+            args_set.insert(arg.clone());
+        }
+        self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, locals_set, args_set)); // TODO: again, clones should be avoided!
 
         let body = self.parse_body(&blk.body);
         let bl = self.scopes.last().unwrap();
