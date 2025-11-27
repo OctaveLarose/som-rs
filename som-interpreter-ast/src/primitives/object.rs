@@ -38,7 +38,8 @@ pub static INSTANCE_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| {
 });
 pub static CLASS_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| Box::new([]));
 
-fn halt(_: Value) -> Result<Value, Error> {
+fn halt(_universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value, Error> {
+    stack.pop();
     println!("HALT"); // so a breakpoint can be put
     Ok(Value::NIL)
 }

@@ -413,7 +413,6 @@ impl Universe {
 
 fn set_super_class(class: &mut Gc<Class>, super_class: &Gc<Class>, metaclass_class: &Gc<Class>) {
     class.set_super_class(super_class);
-
     class.class().set_super_class(&super_class.class());
     class.class().set_class(metaclass_class);
 }

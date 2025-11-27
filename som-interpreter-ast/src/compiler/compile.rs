@@ -318,25 +318,26 @@ impl<'a> AstMethodCompilerCtxt<'a> {
     pub fn parse_expression(&mut self, expr: &Expression) -> AstExpression {
         match expr.clone() {
             Expression::Read(global_name) => match self.find_var(&global_name) {
-                Some(FoundVar::Local(scope, idx)) => AstExpression::NonLocalVarRead(scope as u8, idx as u8),
-                Some(FoundVar::Argument(scope, idx)) => AstExpression::ArgRead(scope as u8, idx as u8),
+                Some(FoundVar::Local(scope, idx)) => match scope {
+                    0 => AstExpression::LocalVarRead(idx),
+                    _ => AstExpression::NonLocalVarRead(scope, idx),
+                },
+                Some(FoundVar::Argument(scope, idx)) => AstExpression::ArgRead(scope, idx),
                 Some(FoundVar::Field(idx)) => AstExpression::FieldRead(idx),
                 None => self.global_read(global_name),
             },
             Expression::Write(global_name, expr) => match self.find_var(&global_name) {
                 Some(FoundVar::Local(scope, idx)) => match scope {
                     0 => {
-                        let local_write_expr = AstExpression::LocalVarWrite(idx as u8, Box::new(self.parse_expression(expr.as_ref())));
+                        let local_write_expr = AstExpression::LocalVarWrite(idx, Box::new(self.parse_expression(expr.as_ref())));
                         match self.maybe_make_inc_or_dec(&local_write_expr) {
                             Some(inc_or_dec) => inc_or_dec,
                             None => local_write_expr,
                         }
                     }
-                    _ => AstExpression::NonLocalVarWrite(scope as u8, idx as u8, Box::new(self.parse_expression(expr.as_ref()))),
+                    _ => AstExpression::NonLocalVarWrite(scope, idx, Box::new(self.parse_expression(expr.as_ref()))),
                 },
-                Some(FoundVar::Argument(scope, idx)) => {
-                    AstExpression::ArgWrite(scope as u8, idx as u8, Box::new(self.parse_expression(expr.as_ref())))
-                }
+                Some(FoundVar::Argument(scope, idx)) => AstExpression::ArgWrite(scope, idx, Box::new(self.parse_expression(expr.as_ref()))),
                 Some(FoundVar::Field(idx)) => AstExpression::FieldWrite(idx, Box::new(self.parse_expression(expr.as_ref()))),
                 _ => self.resolve_global_write(&global_name, &expr),
             },
@@ -396,7 +397,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
     }
 
     pub fn parse_block(&mut self, blk: &ast::Block) -> AstBlock {
-        let mut locals_set: IndexSet<String> = IndexSet::new();
+        let mut locals_set: IndexSet<String> = IndexSet::new(); // TODO: can we do better than allocating whole new IndexSets, for here and the method?..
         for local in &blk.locals {
             locals_set.insert(local.clone());
         }
@@ -406,7 +407,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
         for arg in &blk.parameters {
             args_set.insert(arg.clone());
         }
-        self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, locals_set, args_set)); // TODO: again, clones should be avoided!
+        self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, locals_set, args_set));
 
         let body = self.parse_body(&blk.body);
         let bl = self.scopes.last().unwrap();

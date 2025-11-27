@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, vec};
 
 use crate::compiler::compile::AstMethodCompilerCtxt;
 use crate::primitives;
@@ -61,22 +61,33 @@ impl Class {
         interner: &mut Interner,
     ) -> Result<Gc<Class>, String> {
         let static_locals = {
-            let mut static_locals = IndexMap::new();
-            for field in defn.static_locals.iter() {
-                if static_locals.insert(field.clone(), Value::NIL).is_some() {
-                    return Err(format!("{}: the field named '{}' is already defined in this class", defn.name, field,));
+            let mut static_locals = vec![];
+
+            if let Some(super_class) = &super_class {
+                // NB: only need to check the one superclass, and not walk the superclass tree, since the superclass already contains all the fields of its parents
+                for scls_field in &super_class.class.field_names {
+                    static_locals.push(scls_field.to_string())
                 }
+            }
+
+            for field in defn.static_locals.iter() {
+                static_locals.push(field.clone());
             }
             static_locals
         };
 
         let instance_locals = {
-            let mut instance_locals = IndexMap::new();
-            for field in defn.instance_locals.iter() {
-                if instance_locals.insert(field.clone(), Value::NIL).is_some() {
-                    return Err(format!("{}: the field named '{}' is already defined in this class", defn.name, field,));
+            let mut instance_locals = vec![];
+            if let Some(super_class) = &super_class {
+                for scls_field in &super_class.field_names {
+                    instance_locals.push(scls_field.to_string());
                 }
             }
+
+            for field in defn.instance_locals.iter() {
+                instance_locals.push(field.clone());
+            }
+
             instance_locals
         };
 
@@ -87,7 +98,7 @@ impl Class {
             class: Gc::default(),
             super_class: maybe_static_superclass,
             fields: vec![Value::NIL; static_locals.len()],
-            field_names: defn.static_locals,
+            field_names: static_locals,
             methods: IndexMap::new(),
             is_static: true,
         };
@@ -99,7 +110,7 @@ impl Class {
             class: static_class_gc_ptr.clone(),
             super_class,
             fields: vec![Value::NIL; instance_locals.len()],
-            field_names: defn.instance_locals,
+            field_names: instance_locals,
             methods: IndexMap::new(),
             is_static: false,
         };
@@ -198,13 +209,6 @@ impl Class {
 
     /// Set the superclass of this class (as a weak reference).
     pub fn set_super_class(&mut self, class: &Gc<Self>) {
-        // for local_name in class.borrow().field_names.iter().rev() {
-        //     self.field_names.insert(0, local_name.clone());
-        // }
-        for local in class.fields.iter().rev() {
-            self.fields.insert(0, *local);
-        }
-
         self.super_class = Some(class.clone());
     }
 

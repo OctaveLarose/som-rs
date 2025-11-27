@@ -198,7 +198,6 @@ fn something_jump_bug_popx() {
     ";
 
     let bytecodes = get_bytecodes_from_method(class_txt, "testIfTrueTrueResult");
-    dbg!(&bytecodes);
 
     let _bc_no_removal = &[
         PushGlobal(0),
