@@ -257,3 +257,38 @@ fn inlining_pyramid() {
     expect_bytecode_sequence(&bytecodes, expected_bc);
     expect_bytecode_sequence(&bytecodes2, expected_bc);
 }
+#[test]
+fn to_do_inlining_ok() {
+    let class_txt = "Test = ( run = (
+        | cnt |
+        cnt := 0.
+        1 to: 100 do: [ :i |
+            cnt := cnt + i.
+        ].
+        cnt println.
+    ))
+    ";
+
+    let bytecodes = get_bytecodes_from_method(class_txt, "run");
+
+    expect_bytecode_sequence(
+        &bytecodes,
+        &[
+            Push0,
+            PopLocal(0, 0),
+            Push1,
+            PushConstant(0),
+            Dup2,
+            JumpIfGreater(9),
+            Dup,
+            PopLocal(0, 1),
+            PushLocal(0),
+            PushLocal(1),
+            Send2(Interned(12)),
+            PopLocal(0, 0),
+            Inc,
+            JumpBackward(8),
+            Pop
+        ],
+    );
+}

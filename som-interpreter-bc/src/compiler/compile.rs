@@ -199,7 +199,10 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
     }
 
     fn get_cur_instr_idx(&self) -> usize {
-        self.body.as_ref().unwrap().iter().len()
+        match self.body.as_ref() {
+            Some(body) => body.len(),
+            None => 0,
+        }
     }
 
     fn backpatch_jump_to_current(&mut self, idx_to_backpatch: usize) {
@@ -665,7 +668,7 @@ impl MethodCodegen for ast::Expression {
                                 ctxt.push_instr(Bytecode::Pop);
                             }
 
-                            ctxt.push_instr(Bytecode::Pop);
+                            // ctxt.push_instr(Bytecode::Pop);
                             ctxt.push_instr(Bytecode::Inc);
                             ctxt.push_instr(Bytecode::JumpBackward((ctxt.get_cur_instr_idx() - jump_if_greater_idx) as u16));
 
