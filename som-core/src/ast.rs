@@ -131,6 +131,12 @@ pub enum Expression {
 pub enum Message {
     Regular(RegularMessage),
     IfInlined(IfInlinedMessage),
+    IfNilInlined(IfNilInlinedMessage),
+    IfTrueIfFalseInlined(IfTrueIfFalseInlinedMessage),
+    IfNilIfNotNilInlined(IfNilIfNotNilInlinedMessage),
+    WhileInlined(WhileInlinedMessage),
+    AndInlined(AndInlinedMessage),
+    OrInlined(OrInlinedMessage),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -148,6 +154,48 @@ pub struct IfInlinedMessage {
     pub expected_bool: bool,
     pub cond_expr: Expression,
     pub body_instrs: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfNilInlinedMessage {
+    pub expects_nil: bool,
+    pub cond_expr: Expression,
+    pub body_instrs: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfTrueIfFalseInlinedMessage {
+    pub expected_bool: bool,
+    pub cond_expr: Expression,
+    pub body_1_instrs: Vec<Expression>,
+    pub body_2_instrs: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfNilIfNotNilInlinedMessage {
+    pub expects_nil: bool,
+    pub cond_expr: Expression,
+    pub body_1_instrs: Vec<Expression>,
+    pub body_2_instrs: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WhileInlinedMessage {
+    pub expected_bool: bool,
+    pub cond_instrs: Vec<Expression>,
+    pub body_instrs: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AndInlinedMessage {
+    pub first: Expression,
+    pub second: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OrInlinedMessage {
+    pub first: Expression,
+    pub second: Vec<Expression>,
 }
 
 /// A message with "super" as the receiver, so the superclass.

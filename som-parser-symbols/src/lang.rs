@@ -1,3 +1,4 @@
+use crate::inliner::PrimMessageInliner as _;
 use crate::{AstGenCtxt, AstGenCtxtData, AstGenCtxtType, AstMethodGenCtxtType};
 use som_core::ast::*;
 use som_lexer::Token;
@@ -215,7 +216,7 @@ pub fn binary_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>>
 
 pub fn positional_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     move |input: &'a [Token], genctxt| {
-        let ((receiver, pairs), input, genctxt) = binary_send().and(many(keyword().and(binary_send()))).parse(input, genctxt)?;
+        let ((receiver, pairs), input, mut genctxt) = binary_send().and(many(keyword().and(binary_send()))).parse(input, genctxt)?;
 
         if pairs.is_empty() {
             Some((receiver, input, genctxt))
@@ -223,13 +224,13 @@ pub fn positional_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<
             let (signature, values) = pairs.into_iter().unzip();
             let msg = RegularMessage { receiver, signature, values };
 
-            //let msg = {
-            //    match genctxt.inline_if_possible(&msg) {
-            //        Some(inlined_msg) => inlined_msg,
-            //        None => Message::Regular(msg),
-            //    }
-            //};
-            let msg = Message::Regular(msg);
+            let msg = {
+                match genctxt.inline_if_possible(&msg) {
+                    Some(inlined_msg) => inlined_msg,
+                    None => Message::Regular(msg),
+                }
+            };
+            //let msg = Message::Regular(msg);
 
             Some((Expression::Message(Box::new(msg)), input, genctxt))
         }
