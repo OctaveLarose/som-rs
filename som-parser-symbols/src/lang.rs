@@ -1,11 +1,11 @@
+#[cfg(not(feature = "inlining-disabled"))]
+use crate::inliner::PrimMessageInliner;
 use crate::{AstGenCtxt, AstGenCtxtData, AstGenCtxtType, AstMethodGenCtxtType};
 use som_core::ast::*;
 use som_lexer::Token;
 use som_parser_core::combinators::*;
 use som_parser_core::Parser;
 use std::rc::Rc;
-#[cfg(not(feature = "inlining-disabled"))]
-use crate::inliner::PrimMessageInliner;
 
 macro_rules! opaque {
     ($expr:expr) => {{
@@ -126,19 +126,6 @@ pub fn identifier<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
         let (head, tail) = input.split_first()?;
         match head {
             Token::Identifier(value) => Some((value.clone(), tail, genctxt)),
-            _ => None,
-        }
-    }
-}
-
-pub fn super_class<'a>() -> impl Parser<String, &'a [Token], AstGenCtxt<'a>> {
-    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
-        let (head, tail) = input.split_first()?;
-        match head {
-            Token::Identifier(value) => {
-                genctxt.borrow_mut().super_class_name = Some(value.clone());
-                Some((value.clone(), tail, genctxt))
-            }
             _ => None,
         }
     }
@@ -365,7 +352,7 @@ pub fn positional_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGen
         let (pairs, input, genctxt) = some(keyword().and(identifier())).and_left(exact(Token::Equal)).parse(input, genctxt)?;
         let (signature, parameters): (String, Vec<String>) = pairs.into_iter().unzip();
 
-        genctxt.borrow_mut().name.clone_from(&signature);
+        // genctxt.borrow_mut().name.clone_from(&signature);5
         genctxt.borrow_mut().add_params(&parameters);
 
         let (body, input, genctxt) = primitive().or(method_body()).parse(input, genctxt)?;
@@ -429,9 +416,9 @@ pub fn class_def<'a>() -> impl Parser<ClassDef, &'a [Token], AstGenCtxt<'a>> {
     move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
         let (name, input, genctxt) = identifier().and_left(exact(Token::Equal)).parse(input, genctxt)?;
 
-        genctxt.borrow_mut().name = name.clone();
+        // genctxt.borrow_mut().name = name.clone();
 
-        optional(super_class())
+        optional(identifier())
             .and(between(
                 exact(Token::NewTerm),
                 default(class_locals()).and(many(instance_method_def())).and(default(

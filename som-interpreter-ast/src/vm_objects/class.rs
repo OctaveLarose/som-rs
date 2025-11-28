@@ -35,18 +35,12 @@ pub struct Class {
     pub field_names: Vec<String>,
     /// The class' methods/invokables.
     pub methods: IndexMap<Interned, Gc<Method>>,
-    /// Is this class a static one ?
-    pub is_static: bool,
 }
 
 // I don't test every field, but this should be good enough, AFAIK.
 impl PartialEq for Class {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-            && self.fields == other.fields
-            && self.field_names == other.field_names
-            && self.methods == other.methods
-            && self.is_static == other.is_static
+        self.name == other.name && self.fields == other.fields && self.field_names == other.field_names && self.methods == other.methods
     }
 }
 
@@ -100,7 +94,6 @@ impl Class {
             fields: vec![Value::NIL; static_locals.len()],
             field_names: static_locals,
             methods: IndexMap::new(),
-            is_static: true,
         };
 
         let mut static_class_gc_ptr = gc_interface.alloc(static_class, AllocSiteMarker::Class);
@@ -112,7 +105,6 @@ impl Class {
             fields: vec![Value::NIL; instance_locals.len()],
             field_names: instance_locals,
             methods: IndexMap::new(),
-            is_static: false,
         };
 
         let mut instance_class_gc_ptr = gc_interface.alloc(instance_class, AllocSiteMarker::Class);
@@ -249,20 +241,12 @@ impl Class {
     }
 
     pub fn get_nbr_fields(&self) -> usize {
-        let scls_nbr_fields = match self.super_class() {
-            Some(scls) => scls.get_nbr_fields(),
-            None => 0,
-        };
-        self.field_names.len() + scls_nbr_fields
+        self.field_names.len()
     }
 
     /// Used by the `fields` primitive. Could be made faster (strings get cloned, then put on the GC heap in the primitive), but it's also basically never used.
     pub fn get_all_field_names(&self) -> Vec<String> {
-        self.field_names
-            .iter()
-            .cloned()
-            .chain(self.super_class.as_ref().map(|scls| scls.get_all_field_names()).unwrap_or_default())
-            .collect()
+        self.field_names.clone()
     }
 }
 

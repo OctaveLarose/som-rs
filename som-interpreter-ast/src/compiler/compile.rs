@@ -533,8 +533,8 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                 }
                 ast::Message::ToDoInlined(to_do_inlined_message) => {
                     let accumulator_idx = match self.find_var(&to_do_inlined_message.accumulator_name) {
-                        Some(FoundVar::Local(0, a)) => {a as usize},
-                        invalid => panic!("to do inlining couldn't find a valid index for its accumulator: got {:?}", invalid)
+                        Some(FoundVar::Local(0, a)) => a as usize,
+                        invalid => panic!("to do inlining couldn't find a valid index for its accumulator: got {:?}", invalid),
                     };
 
                     let ast_inlined_node = ToDoInlinedNode {
@@ -543,7 +543,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                         body: AstBody {
                             exprs: to_do_inlined_message.body_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
                         },
-                        accumulator_idx
+                        accumulator_idx,
                     };
 
                     return AstExpression::InlinedCall(Box::new(crate::ast::InlinedNode::ToDoInlined(ast_inlined_node)));

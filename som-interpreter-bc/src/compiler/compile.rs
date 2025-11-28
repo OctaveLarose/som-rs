@@ -11,8 +11,6 @@ use som_value::interned::Interned;
 use std::cell::Cell;
 use std::str::FromStr;
 
-#[cfg(not(feature = "inlining-disabled"))]
-use crate::compiler::inliner::PrimMessageInliner;
 use crate::compiler::Literal;
 use crate::primitives;
 use crate::primitives::UNIMPLEM_PRIMITIVE;
@@ -28,6 +26,7 @@ use som_core::ast::{Expression, MethodBody};
 use som_core::bytecode::Bytecode;
 use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 
+#[derive(Debug)]
 pub(crate) enum FoundVar {
     Local(u8, u8),
     Argument(u8, u8),
@@ -472,19 +471,214 @@ impl MethodCodegen for ast::Expression {
                 let message = {
                     match &**message {
                         ast::Message::Regular(reg_msg) => reg_msg,
-                        _ => todo!("we made it to the BC parser itself!"),
+                        ast::Message::IfInlined(if_inlined) => {
+                            if_inlined.cond_expr.codegen(ctxt, mutator)?;
+                            let jump_idx = ctxt.get_cur_instr_idx();
+
+                            match if_inlined.expected_bool {
+                                true => ctxt.push_instr(Bytecode::JumpOnFalseTopNil(0)),
+                                false => ctxt.push_instr(Bytecode::JumpOnTrueTopNil(0)),
+                            }
+
+                            for expr in &if_inlined.body_instrs {
+                                expr.codegen(ctxt, mutator)?;
+                                ctxt.push_instr(Bytecode::Pop);
+                            }
+                            ctxt.pop_instr();
+
+                            ctxt.backpatch_jump_to_current(jump_idx);
+                            return Some(());
+                        }
+                        ast::Message::IfNilInlined(if_nil_inlined) => {
+                            if_nil_inlined.cond_expr.codegen(ctxt, mutator)?;
+                            let jump_idx = ctxt.get_cur_instr_idx();
+
+                            match if_nil_inlined.expects_nil {
+                                true => ctxt.push_instr(Bytecode::JumpOnNotNilTopTop(0)),
+                                false => ctxt.push_instr(Bytecode::JumpOnNilTopTop(0)),
+                            }
+
+                            for expr in &if_nil_inlined.body_instrs {
+                                expr.codegen(ctxt, mutator)?;
+                                ctxt.push_instr(Bytecode::Pop);
+                            }
+                            ctxt.pop_instr();
+
+                            ctxt.backpatch_jump_to_current(jump_idx);
+                            return Some(());
+                        }
+                        ast::Message::IfTrueIfFalseInlined(if_true_if_false) => {
+                            if_true_if_false.cond_expr.codegen(ctxt, mutator)?;
+
+                            let start_jump_idx = ctxt.get_cur_instr_idx();
+                            match if_true_if_false.expected_bool {
+                                true => ctxt.push_instr(Bytecode::JumpOnFalsePop(0)),
+                                false => ctxt.push_instr(Bytecode::JumpOnTruePop(0)),
+                            }
+
+                            for expr in &if_true_if_false.body_1_instrs {
+                                expr.codegen(ctxt, mutator)?;
+                                ctxt.push_instr(Bytecode::Pop);
+                            }
+                            ctxt.pop_instr();
+
+                            let middle_jump_idx = ctxt.get_cur_instr_idx();
+                            ctxt.push_instr(Bytecode::Jump(0));
+
+                            ctxt.backpatch_jump_to_current(start_jump_idx);
+
+                            for expr in &if_true_if_false.body_2_instrs {
+                                expr.codegen(ctxt, mutator)?;
+                                ctxt.push_instr(Bytecode::Pop);
+                            }
+                            ctxt.pop_instr();
+
+                            ctxt.backpatch_jump_to_current(middle_jump_idx);
+                            return Some(());
+                        }
+                        ast::Message::IfNilIfNotNilInlined(if_nil_if_not_nil) => {
+                            if_nil_if_not_nil.cond_expr.codegen(ctxt, mutator)?;
+
+                            let start_jump_idx = ctxt.get_cur_instr_idx();
+                            match if_nil_if_not_nil.expects_nil {
+                                true => ctxt.push_instr(Bytecode::JumpOnNotNilPop(0)),
+                                false => ctxt.push_instr(Bytecode::JumpOnNilPop(0)),
+                            }
+
+                            for expr in &if_nil_if_not_nil.body_1_instrs {
+                                expr.codegen(ctxt, mutator)?;
+                                ctxt.push_instr(Bytecode::Pop);
+                            }
+                            ctxt.pop_instr();
+
+                            let middle_jump_idx = ctxt.get_cur_instr_idx();
+                            ctxt.push_instr(Bytecode::Jump(0));
+
+                            ctxt.backpatch_jump_to_current(start_jump_idx);
+
+                            for expr in &if_nil_if_not_nil.body_2_instrs {
+                                expr.codegen(ctxt, mutator)?;
+                                ctxt.push_instr(Bytecode::Pop);
+                            }
+                            ctxt.pop_instr();
+
+                            ctxt.backpatch_jump_to_current(middle_jump_idx);
+                            return Some(());
+                        }
+                        ast::Message::AndInlined(and_inlined) => {
+                            and_inlined.first.codegen(ctxt, mutator)?;
+                            let skip_cond_jump_idx = ctxt.get_cur_instr_idx();
+
+                            ctxt.push_instr(Bytecode::JumpOnFalsePop(0));
+
+                            for expr in &and_inlined.second {
+                                expr.codegen(ctxt, mutator)?;
+                                ctxt.push_instr(Bytecode::Pop);
+                            }
+                            ctxt.pop_instr();
+
+                            let skip_return_true_idx = ctxt.get_cur_instr_idx();
+                            ctxt.push_instr(Bytecode::Jump(0));
+
+                            ctxt.backpatch_jump_to_current(skip_cond_jump_idx);
+
+                            let false_idx = ctxt.get_interner().reverse_lookup("false").unwrap_or_else(|| ctxt.intern_symbol("false"));
+                            let idx = ctxt.push_literal(Literal::Symbol(false_idx));
+                            ctxt.push_instr(Bytecode::PushGlobal(idx as u8));
+
+                            ctxt.backpatch_jump_to_current(skip_return_true_idx);
+                            return Some(());
+                        }
+                        ast::Message::OrInlined(or_inlined) => {
+                            or_inlined.first.codegen(ctxt, mutator)?;
+                            let skip_cond_jump_idx = ctxt.get_cur_instr_idx();
+
+                            ctxt.push_instr(Bytecode::JumpOnTruePop(0));
+
+                            for expr in &or_inlined.second {
+                                expr.codegen(ctxt, mutator)?;
+                                ctxt.push_instr(Bytecode::Pop);
+                            }
+                            ctxt.pop_instr();
+
+                            let skip_return_true_idx = ctxt.get_cur_instr_idx();
+                            ctxt.push_instr(Bytecode::Jump(0));
+
+                            ctxt.backpatch_jump_to_current(skip_cond_jump_idx);
+
+                            let true_idx = ctxt.get_interner().reverse_lookup("true").unwrap_or_else(|| ctxt.intern_symbol("true"));
+                            let idx = ctxt.push_literal(Literal::Symbol(true_idx));
+                            ctxt.push_instr(Bytecode::PushGlobal(idx as u8));
+
+                            ctxt.backpatch_jump_to_current(skip_return_true_idx);
+                            return Some(());
+                        }
+                        ast::Message::WhileInlined(while_inlined) => {
+                            let idx_pre_condition = ctxt.get_cur_instr_idx();
+
+                            let splitted = while_inlined.cond_instrs.split_last();
+                            if let Some((last, rest)) = splitted {
+                                for expr in rest {
+                                    expr.codegen(ctxt, mutator)?;
+                                    ctxt.push_instr(Bytecode::Pop);
+                                }
+                                last.codegen(ctxt, mutator)?;
+                            }
+
+                            let cond_jump_idx = ctxt.get_cur_instr_idx();
+                            match while_inlined.expected_bool {
+                                true => ctxt.push_instr(Bytecode::JumpOnFalsePop(0)),
+                                false => ctxt.push_instr(Bytecode::JumpOnTruePop(0)),
+                            }
+
+                            for expr in &while_inlined.body_instrs {
+                                expr.codegen(ctxt, mutator)?;
+                                ctxt.push_instr(Bytecode::Pop);
+                            }
+
+                            ctxt.push_instr(Bytecode::JumpBackward((ctxt.get_cur_instr_idx() - idx_pre_condition) as u16));
+                            ctxt.backpatch_jump_to_current(cond_jump_idx);
+
+                            ctxt.push_instr(Bytecode::PushNil);
+
+                            return Some(());
+                        }
+                        ast::Message::ToDoInlined(to_do_inlined) => {
+                            to_do_inlined.start_expr.codegen(ctxt, mutator)?;
+                            to_do_inlined.end_expr.codegen(ctxt, mutator)?;
+
+                            let idx_loop_accumulator = match ctxt.find_var(&to_do_inlined.accumulator_name) {
+                                Some(FoundVar::Local(0, a)) => a,
+                                invalid => panic!("to do inlining couldn't find a valid index for its accumulator: got {:?}", invalid),
+                            };
+
+                            ctxt.push_instr(Bytecode::Dup2);
+
+                            let jump_if_greater_idx = ctxt.get_cur_instr_idx();
+                            ctxt.push_instr(Bytecode::JumpIfGreater(0));
+
+                            ctxt.push_instr(Bytecode::Dup);
+                            ctxt.push_instr(Bytecode::PopLocal(0, idx_loop_accumulator));
+
+                            for expr in &to_do_inlined.body_instrs {
+                                expr.codegen(ctxt, mutator)?;
+                                ctxt.push_instr(Bytecode::Pop);
+                            }
+
+                            ctxt.push_instr(Bytecode::Pop);
+                            ctxt.push_instr(Bytecode::Inc);
+                            ctxt.push_instr(Bytecode::JumpBackward((ctxt.get_cur_instr_idx() - jump_if_greater_idx) as u16));
+
+                            ctxt.backpatch_jump_to_current(jump_if_greater_idx);
+
+                            return Some(());
+                        }
                     }
                 };
 
-                // TODO: we should actually also check whether there's not a "super" variable in scope, right? That should be valid ST I think
                 let is_super_call = matches!(&message.receiver, _super if _super == &Expression::Read(String::from("super")));
 
                 message.receiver.codegen(ctxt, mutator)?;
-
-                #[cfg(not(feature = "inlining-disabled"))]
-                if message.inline_if_possible(ctxt, mutator).is_some() {
-                    return Some(());
-                }
 
                 if (message.signature == "+" || message.signature == "-")
                     && !is_super_call

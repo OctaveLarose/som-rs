@@ -136,7 +136,7 @@ pub enum Message {
     IfNilIfNotNilInlined(IfNilIfNotNilInlinedMsg),
     WhileInlined(WhileInlinedMsg),
     AndInlined(AndInlinedMsg),
-    OrInlined(OrInlinedMsg),
+    OrInlined(OrInlinedMsg), // TODO: combine and and or into a single node.
     ToDoInlined(ToDoInlinedMsg),
 }
 
@@ -204,13 +204,13 @@ pub struct ToDoInlinedMsg {
     pub start_expr: Expression,
     pub end_expr: Expression,
     pub body_instrs: Vec<Expression>,
-    pub accumulator_name: String
+    pub accumulator_name: String,
 }
 
 /// A message with "super" as the receiver, so the superclass.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SuperMessage {
-    /// The object to which the message is sent to. TODO should not do a super call, but cache the class, really.
+    /// The object to which the message is sent to.
     pub receiver_name: String,
     /// Do we access the static or instance methods of the superclass?
     pub is_static_class_call: bool,

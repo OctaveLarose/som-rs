@@ -32,35 +32,22 @@ pub enum AstGenCtxtType {
 // #[derive(Debug)]
 pub struct AstGenCtxtData<'a> {
     kind: AstGenCtxtType,
-    name: String, // used for debugging
-    super_class_name: Option<String>,
+    // name: String, // used for debugging
     local_names: Vec<String>,
     param_names: Vec<String>,
-    current_scope: usize,
-    _is_getting_inlined: bool,
     outer_ctxt: Option<AstGenCtxt<'a>>,
 }
 
 pub type AstGenCtxt<'a> = Rc<RefCell<AstGenCtxtData<'a>>>;
 
-//#[derive(Debug, PartialEq)]
-//enum FoundVar {
-//    Local(usize, usize),
-//    Argument(usize, usize),
-//    // Field(usize),
-//}
-
 impl AstGenCtxtData<'_> {
     pub fn init() -> Self {
         AstGenCtxtData {
             kind: AstGenCtxtType::Class,
-            name: "NO NAME".to_string(),
-            super_class_name: None,
+            // name: "NO NAME".to_string(),
             local_names: vec![],
             param_names: vec![],
-            current_scope: 0,
             outer_ctxt: None,
-            _is_getting_inlined: false,
         }
     }
 }
@@ -69,23 +56,20 @@ impl<'a> AstGenCtxtData<'a> {
     pub fn new_ctxt_from(outer: AstGenCtxt, kind: AstGenCtxtType) -> AstGenCtxt {
         Rc::new(RefCell::new(AstGenCtxtData {
             kind,
-            name: "NO NAME".to_string(),
-            super_class_name: outer.borrow().super_class_name.clone(),
+            // name: "NO NAME".to_string(),
             local_names: vec![],
             param_names: vec![],
-            current_scope: outer.borrow().current_scope + 1,
-            _is_getting_inlined: false,
             outer_ctxt: Some(Rc::clone(&outer)),
         }))
     }
 
     // for debugging
-    pub fn get_class_name(&self) -> String {
-        match &self.kind {
-            AstGenCtxtType::Class => self.name.clone(),
-            _ => self.outer_ctxt.as_ref().unwrap().borrow_mut().get_class_name(),
-        }
-    }
+    // pub fn get_class_name(&self) -> String {
+    //     match &self.kind {
+    //         AstGenCtxtType::Class => self.name.clone(),
+    //         _ => self.outer_ctxt.as_ref().unwrap().borrow_mut().get_class_name(),
+    //     }
+    // }
 
     pub fn get_outer(&mut self) -> AstGenCtxt<'a> {
         let outer = self.outer_ctxt.as_ref().unwrap();
@@ -100,14 +84,6 @@ impl<'a> AstGenCtxtData<'a> {
     pub fn add_params(&mut self, parameters: &[String]) {
         debug_assert_ne!(self.kind, AstGenCtxtType::Class);
         self.param_names.extend(parameters.iter().cloned());
-    }
-
-    pub fn get_method_scope_rec(&self, method_scope: usize) -> usize {
-        match &self.kind {
-            AstGenCtxtType::Class => method_scope - 1, // functionally unreachable branch. maybe reachable in the REPL, when we're technically outside a method, maybe? not sure.
-            AstGenCtxtType::Method(_) => method_scope,
-            AstGenCtxtType::Block => self.outer_ctxt.as_ref().unwrap().borrow().get_method_scope_rec(method_scope + 1),
-        }
     }
 }
 
