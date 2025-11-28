@@ -209,10 +209,6 @@ pub fn binary_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>>
                 values: vec![rhs],
             };
             Expression::Message(Box::new(Message::Regular(msg)))
-            //match genctxt.inline_if_possible(msg) {
-            //    Some(inlined_msg) => inlined_msg,
-            //    None => Expression::Message(Box::new(Message::Regular(msg))),
-            //}
         })
     })
 }
@@ -305,8 +301,7 @@ pub fn term<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
 pub fn exit<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
         let (expr, input, genctxt) = exact(Token::Exit).and_right(statement()).parse(input, Rc::clone(&genctxt))?;
-        let cur_scope = genctxt.borrow().get_method_scope();
-        Some((Expression::Exit(Box::new(expr), cur_scope), input, genctxt))
+        Some((Expression::Exit(Box::new(expr)), input, genctxt))
     }
 }
 

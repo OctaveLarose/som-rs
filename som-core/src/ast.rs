@@ -106,8 +106,8 @@ pub enum Expression {
     Write(String, Box<Expression>),
     /// A message send (eg. `counter incrementBy: 5`).
     Message(Box<Message>),
-    /// An exit operation (eg. `^counter`). Second argument is the scope level to differentiate local and nonlocal returns
-    Exit(Box<Expression>, usize),
+    /// An exit operation (eg. `^counter`).
+    Exit(Box<Expression>),
     /// A literal (eg. `'foo'`, `10`, `#foo`, ...).
     Literal(Literal),
     /// A block (eg. `[ :value | counter incrementBy: value ]`).

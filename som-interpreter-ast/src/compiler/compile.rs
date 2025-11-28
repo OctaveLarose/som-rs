@@ -342,10 +342,14 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                 _ => self.resolve_global_write(&global_name, &expr),
             },
             Expression::Message(msg) => self.parse_message(msg.as_ref()),
-            Expression::Exit(a, b) => match b {
-                0 => AstExpression::LocalExit(Box::new(self.parse_expression(a.as_ref()))),
-                _ => AstExpression::NonLocalExit(Box::new(self.parse_expression(a.as_ref())), b as u8),
-            },
+            Expression::Exit(expr) => {
+                let scope = self.scopes.len() - 1;
+
+                match scope {
+                    0 => AstExpression::LocalExit(Box::new(self.parse_expression(expr.as_ref()))),
+                    _ => AstExpression::NonLocalExit(Box::new(self.parse_expression(expr.as_ref())), scope as u8),
+                }
+            }
             Expression::Literal(a) => {
                 match &a {
                     // this is to handle a weird corner case where "-2147483648" is considered to be a bigint by the lexer and then parser, when it's in fact just barely in i32 range

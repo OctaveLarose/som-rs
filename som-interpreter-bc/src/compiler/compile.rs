@@ -520,7 +520,9 @@ impl MethodCodegen for ast::Expression {
 
                 Some(())
             }
-            ast::Expression::Exit(expr, scope) => {
+            ast::Expression::Exit(expr) => {
+                let scope = ctxt.get_scope();
+
                 match scope {
                     0 => match expr.as_ref() {
                         Expression::Read(s) if s == "self" => ctxt.push_instr(Bytecode::ReturnSelf),
@@ -531,7 +533,7 @@ impl MethodCodegen for ast::Expression {
                     },
                     _ => {
                         expr.codegen(ctxt, mutator)?;
-                        ctxt.push_instr(Bytecode::ReturnNonLocal(*scope as u8));
+                        ctxt.push_instr(Bytecode::ReturnNonLocal(scope as u8));
                     }
                 };
 
