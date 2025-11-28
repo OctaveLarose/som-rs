@@ -130,13 +130,14 @@ pub enum Expression {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Regular(RegularMessage),
-    IfInlined(IfInlinedMessage),
-    IfNilInlined(IfNilInlinedMessage),
-    IfTrueIfFalseInlined(IfTrueIfFalseInlinedMessage),
-    IfNilIfNotNilInlined(IfNilIfNotNilInlinedMessage),
-    WhileInlined(WhileInlinedMessage),
-    AndInlined(AndInlinedMessage),
-    OrInlined(OrInlinedMessage),
+    IfInlined(IfInlinedMsg),
+    IfNilInlined(IfNilInlinedMsg),
+    IfTrueIfFalseInlined(IfTrueIfFalseInlinedMsg),
+    IfNilIfNotNilInlined(IfNilIfNotNilInlinedMsg),
+    WhileInlined(WhileInlinedMsg),
+    AndInlined(AndInlinedMsg),
+    OrInlined(OrInlinedMsg),
+    ToDoInlined(ToDoInlinedMsg),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -150,21 +151,21 @@ pub struct RegularMessage {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct IfInlinedMessage {
+pub struct IfInlinedMsg {
     pub expected_bool: bool,
     pub cond_expr: Expression,
     pub body_instrs: Vec<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct IfNilInlinedMessage {
+pub struct IfNilInlinedMsg {
     pub expects_nil: bool,
     pub cond_expr: Expression,
     pub body_instrs: Vec<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct IfTrueIfFalseInlinedMessage {
+pub struct IfTrueIfFalseInlinedMsg {
     pub expected_bool: bool,
     pub cond_expr: Expression,
     pub body_1_instrs: Vec<Expression>,
@@ -172,7 +173,7 @@ pub struct IfTrueIfFalseInlinedMessage {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct IfNilIfNotNilInlinedMessage {
+pub struct IfNilIfNotNilInlinedMsg {
     pub expects_nil: bool,
     pub cond_expr: Expression,
     pub body_1_instrs: Vec<Expression>,
@@ -180,22 +181,30 @@ pub struct IfNilIfNotNilInlinedMessage {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct WhileInlinedMessage {
+pub struct WhileInlinedMsg {
     pub expected_bool: bool,
     pub cond_instrs: Vec<Expression>,
     pub body_instrs: Vec<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct AndInlinedMessage {
+pub struct AndInlinedMsg {
     pub first: Expression,
     pub second: Vec<Expression>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct OrInlinedMessage {
+pub struct OrInlinedMsg {
     pub first: Expression,
     pub second: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToDoInlinedMsg {
+    pub start_expr: Expression,
+    pub end_expr: Expression,
+    pub body_instrs: Vec<Expression>,
+    pub accumulator_name: String
 }
 
 /// A message with "super" as the receiver, so the superclass.

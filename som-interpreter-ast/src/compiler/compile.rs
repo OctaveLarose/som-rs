@@ -10,6 +10,7 @@ use crate::nodes::inlined::if_nil_if_not_nil_inlined_node::IfNilIfNotNilInlinedN
 use crate::nodes::inlined::if_nil_inlined_node::IfNilInlinedNode;
 use crate::nodes::inlined::if_true_if_false_inlined_node::IfTrueIfFalseInlinedNode;
 use crate::nodes::inlined::or_inlined_node::OrInlinedNode;
+use crate::nodes::inlined::to_do_inlined_node::ToDoInlinedNode;
 use crate::nodes::inlined::while_inlined_node::WhileInlinedNode;
 use crate::nodes::trivial_methods::{TrivialGetterMethod, TrivialGlobalMethod, TrivialLiteralMethod, TrivialSetterMethod};
 use crate::primitives::UNIMPLEM_PRIMITIVE;
@@ -22,6 +23,7 @@ use som_core::interner::Interner;
 use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 use som_gc::gcref::Gc;
 
+#[derive(Debug)]
 pub(crate) enum FoundVar {
     Local(u8, u8),
     Argument(u8, u8),
@@ -333,21 +335,23 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                 Some(FoundVar::Field(idx)) => AstExpression::FieldRead(idx),
                 None => self.global_read(global_name),
             },
-            Expression::Write(global_name, expr) => match self.find_var(&global_name) {
-                Some(FoundVar::Local(scope, idx)) => match scope {
-                    0 => {
-                        let local_write_expr = AstExpression::LocalVarWrite(idx, Box::new(self.parse_expression(expr.as_ref())));
-                        match self.maybe_make_inc_or_dec(&local_write_expr) {
-                            Some(inc_or_dec) => inc_or_dec,
-                            None => local_write_expr,
+            Expression::Write(global_name, expr) => {
+                // if global_name == "tmp" {
+                //     dbg!("bp");
+                // }
+                match self.find_var(&global_name) {
+                    Some(FoundVar::Local(scope, idx)) => match scope {
+                        0 => {
+                            let local_write_expr = AstExpression::LocalVarWrite(idx, Box::new(self.parse_expression(expr.as_ref())));
+                            self.maybe_make_inc_or_dec(&local_write_expr).unwrap_or(local_write_expr)
                         }
-                    }
-                    _ => AstExpression::NonLocalVarWrite(scope, idx, Box::new(self.parse_expression(expr.as_ref()))),
-                },
-                Some(FoundVar::Argument(scope, idx)) => AstExpression::ArgWrite(scope, idx, Box::new(self.parse_expression(expr.as_ref()))),
-                Some(FoundVar::Field(idx)) => AstExpression::FieldWrite(idx, Box::new(self.parse_expression(expr.as_ref()))),
-                _ => self.resolve_global_write(&global_name, &expr),
-            },
+                        _ => AstExpression::NonLocalVarWrite(scope, idx, Box::new(self.parse_expression(expr.as_ref()))),
+                    },
+                    Some(FoundVar::Argument(scope, idx)) => AstExpression::ArgWrite(scope, idx, Box::new(self.parse_expression(expr.as_ref()))),
+                    Some(FoundVar::Field(idx)) => AstExpression::FieldWrite(idx, Box::new(self.parse_expression(expr.as_ref()))),
+                    _ => self.resolve_global_write(&global_name, &expr),
+                }
+            }
             Expression::Message(msg) => self.parse_message(msg.as_ref()),
             Expression::Exit(expr) => {
                 let scope = self.scopes.len() - 1;
@@ -526,6 +530,23 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     };
 
                     return AstExpression::InlinedCall(Box::new(crate::ast::InlinedNode::OrInlined(ast_inlined_node)));
+                }
+                ast::Message::ToDoInlined(to_do_inlined_message) => {
+                    let accumulator_idx = match self.find_var(&to_do_inlined_message.accumulator_name) {
+                        Some(FoundVar::Local(0, a)) => {a as usize},
+                        invalid => panic!("to do inlining couldn't find a valid index for its accumulator: got {:?}", invalid)
+                    };
+
+                    let ast_inlined_node = ToDoInlinedNode {
+                        start: expr_parsing_func(self, &to_do_inlined_message.start_expr),
+                        end: expr_parsing_func(self, &to_do_inlined_message.end_expr),
+                        body: AstBody {
+                            exprs: to_do_inlined_message.body_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                        },
+                        accumulator_idx
+                    };
+
+                    return AstExpression::InlinedCall(Box::new(crate::ast::InlinedNode::ToDoInlined(ast_inlined_node)));
                 }
             }
         };

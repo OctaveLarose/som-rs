@@ -102,71 +102,12 @@ impl<'a> AstGenCtxtData<'a> {
         self.param_names.extend(parameters.iter().cloned());
     }
 
-    pub fn get_local(&self, name: &String) -> Option<usize> {
-        self.local_names.iter().position(|local| local == name)
-    }
-
-    pub fn get_param(&self, name: &String) -> Option<usize> {
-        self.param_names.iter().position(|local| *local == *name)
-    }
-
-    //fn find_var(&self, name: &String) -> Option<FoundVar> {
-    //    self.get_local(name)
-    //        .map(|idx| FoundVar::Local(0, idx))
-    //        .or_else(|| self.get_param(name).map(|idx| FoundVar::Argument(0, idx)))
-    //        .or_else(|| {
-    //            // check whether it's defined in an outer scope block as a local or arg...
-    //            match &self.outer_ctxt.as_ref() {
-    //                None => None,
-    //                Some(outer) => outer.borrow().find_var(name).map(|found| match found {
-    //                    FoundVar::Local(up_idx, idx) => FoundVar::Local(up_idx + 1, idx),
-    //                    FoundVar::Argument(up_idx, idx) => FoundVar::Argument(up_idx + 1, idx),
-    //                    // FoundVar::Field(idx) => FoundVar::Field(idx),
-    //                }),
-    //            }
-    //        })
-    //}
-    //
-    //fn get_var_read(&self, name: &String) -> Expression {
-    //    if name == "self" {
-    //        return Expression::ArgRead(self.get_method_scope(), 0);
-    //    }
-    //
-    //    match self.find_var(name) {
-    //        None => Expression::GlobalRead(name.clone()),
-    //        Some(v) => {
-    //            match v {
-    //                FoundVar::Local(up_idx, idx) => Expression::VarRead(up_idx, idx),
-    //                FoundVar::Argument(up_idx, idx) => Expression::ArgRead(up_idx, idx + 1),
-    //                // FoundVar::Field(idx) => Expression::FieldRead(idx)
-    //            }
-    //        }
-    //    }
-    //}
-    //
-    //fn get_var_write(&self, name: &String, expr: Box<Expression>) -> Expression {
-    //    match self.find_var(name) {
-    //        None => Expression::GlobalWrite(name.clone(), expr),
-    //        Some(v) => {
-    //            match v {
-    //                FoundVar::Local(up_idx, idx) => Expression::VarWrite(up_idx, idx, expr),
-    //                FoundVar::Argument(up_idx, idx) => Expression::ArgWrite(up_idx, idx + 1, expr), // + 1 to adjust for self
-    //                                                                                                // FoundVar::Field(idx) => Expression::FieldWrite(idx, expr)
-    //            }
-    //        }
-    //    }
-    //}
-    //
     pub fn get_method_scope_rec(&self, method_scope: usize) -> usize {
         match &self.kind {
             AstGenCtxtType::Class => method_scope - 1, // functionally unreachable branch. maybe reachable in the REPL, when we're technically outside a method, maybe? not sure.
             AstGenCtxtType::Method(_) => method_scope,
             AstGenCtxtType::Block => self.outer_ctxt.as_ref().unwrap().borrow().get_method_scope_rec(method_scope + 1),
         }
-    }
-
-    pub fn get_method_scope(&self) -> usize {
-        self.get_method_scope_rec(0)
     }
 }
 

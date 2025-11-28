@@ -1,10 +1,11 @@
-use crate::inliner::PrimMessageInliner as _;
 use crate::{AstGenCtxt, AstGenCtxtData, AstGenCtxtType, AstMethodGenCtxtType};
 use som_core::ast::*;
 use som_lexer::Token;
 use som_parser_core::combinators::*;
 use som_parser_core::Parser;
 use std::rc::Rc;
+#[cfg(not(feature = "inlining-disabled"))]
+use crate::inliner::PrimMessageInliner;
 
 macro_rules! opaque {
     ($expr:expr) => {{
@@ -216,6 +217,7 @@ pub fn binary_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>>
 
 pub fn positional_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
     move |input: &'a [Token], genctxt| {
+        #[allow(unused_mut)] // if inlining is disabled, there's no need for the genctxt to be mutable.
         let ((receiver, pairs), input, mut genctxt) = binary_send().and(many(keyword().and(binary_send()))).parse(input, genctxt)?;
 
         if pairs.is_empty() {
@@ -224,13 +226,16 @@ pub fn positional_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<
             let (signature, values) = pairs.into_iter().unzip();
             let msg = RegularMessage { receiver, signature, values };
 
+            #[cfg(not(feature = "inlining-disabled"))]
             let msg = {
                 match genctxt.inline_if_possible(&msg) {
                     Some(inlined_msg) => inlined_msg,
                     None => Message::Regular(msg),
                 }
             };
-            //let msg = Message::Regular(msg);
+
+            #[cfg(feature = "inlining-disabled")]
+            let msg = Message::Regular(msg);
 
             Some((Expression::Message(Box::new(msg)), input, genctxt))
         }
@@ -274,10 +279,13 @@ pub fn block<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
 
         let new_genctxt = AstGenCtxtData::new_ctxt_from(genctxt, AstGenCtxtType::Block);
 
-        let (((parameters, locals), body), input, genctxt) = default(parameters()).and(default(locals())).and(body()).parse(input, new_genctxt)?;
+        let (((_parameters, _locals), body), input, genctxt) = default(parameters()).and(default(locals())).and(body()).parse(input, new_genctxt)?;
         // we unwrap here at the risk of panicking since if it fails we would want to adjust the scope - but atm we just panic instead of recovering
 
         let (_, input, genctxt) = exact(Token::EndBlock).parse(input, genctxt)?;
+
+        let parameters = genctxt.borrow().param_names.clone();
+        let locals = genctxt.borrow().local_names.clone();
 
         let new_genctxt = genctxt.borrow_mut().get_outer();
 
@@ -330,11 +338,18 @@ pub fn primitive<'a>() -> impl Parser<MethodBody, &'a [Token], AstGenCtxt<'a>> {
 }
 
 pub fn method_body<'a>() -> impl Parser<MethodBody, &'a [Token], AstGenCtxt<'a>> {
-    between(exact(Token::NewTerm), default(locals()).and(body()), exact(Token::EndTerm)).map(|(locals, body)| MethodBody::Body {
-        locals_nbr: locals.len(),
-        locals,
-        body,
-    })
+    move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
+        let ((_locals, body), input, genctxt) =
+            between(exact(Token::NewTerm), default(locals()).and(body()), exact(Token::EndTerm)).parse(input, genctxt)?;
+
+        let method_body = MethodBody::Body {
+            locals_nbr: genctxt.borrow().local_names.len(),
+            locals: genctxt.borrow().local_names.clone(),
+            body,
+        };
+
+        Some((method_body, input, genctxt))
+    }
 }
 
 pub fn unary_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGenCtxt<'a>> {
