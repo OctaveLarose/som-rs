@@ -97,22 +97,27 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
     fn try_inline_if_true_if_false(&mut self, mut msg: ast::RegularMessage, expected_bool: bool) -> Message {
         // With a special case for the Fibonacci benchmark.
         // This code could easily be made more generalized/modular, have some blocks/expressions be considered "inlinable", but this special-casing is less dev time... TODO, generalize a bit.
-        let (body_blk_1, body_blk_2) = match msg.values.get_disjoint_mut([0, 1]) {
-            Ok([Expression::Block(blk), Expression::Block(blk2)]) => (blk, blk2),
-            Ok([Expression::Literal(ast::Literal::Integer(1)), Expression::Block(blk)]) => (
-                &mut ast::Block {
-                    parameters: vec![],
-                    locals: vec![],
-                    body: som_core::ast::Body {
-                        exprs: vec![Expression::Literal(ast::Literal::Integer(1))],
-                        full_stopped: false,
+        let (body_blk_1, body_blk_2) = {
+            let (left, right) = msg.values.split_at_mut(1); // NOTE: I wanna use `get_disjoint_mut` instead but that's only for more recent Rust versions.
+
+            match (&mut left[0], &mut right[0]) {
+                (Expression::Block(blk), Expression::Block(blk2)) => (blk, blk2),
+                (Expression::Literal(ast::Literal::Integer(1)), Expression::Block(blk)) => (
+                    &mut ast::Block {
+                        parameters: vec![],
+                        locals: vec![],
+                        body: som_core::ast::Body {
+                            exprs: vec![Expression::Literal(ast::Literal::Integer(1))],
+                            full_stopped: false,
+                        },
+                        nbr_params: 0,
+                        nbr_locals: 0,
                     },
-                    nbr_params: 0,
-                    nbr_locals: 0,
-                },
-                blk,
-            ),
-            _ => return Message::Regular(msg),
+                    blk,
+                ),
+
+                _ => return Message::Regular(msg),
+            }
         };
 
         for blk_local in &body_blk_2.locals {
@@ -145,10 +150,13 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
     }
 
     fn try_inline_if_nil_if_not_nil(&mut self, mut msg: ast::RegularMessage, expects_nil: bool) -> Message {
-        //let (body_blk_1, body_blk_2) = match (msg.values.first(), msg.values.get(1)) {
-        let (body_blk_1, body_blk_2) = match msg.values.get_disjoint_mut([0, 1]) {
-            Ok([Expression::Block(blk), Expression::Block(blk2)]) => (blk, blk2),
-            _ => return Message::Regular(msg),
+        let (body_blk_1, body_blk_2) = {
+            let (left, right) = msg.values.split_at_mut(1);
+
+            match (&mut left[0], &mut right[0]) {
+                (Expression::Block(blk), Expression::Block(blk2)) => (blk, blk2),
+                _ => return Message::Regular(msg),
+            }
         };
 
         for blk_local in &body_blk_2.locals {
@@ -251,12 +259,16 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
     }
 
     fn try_inline_to_do(&mut self, mut msg: ast::RegularMessage) -> Message {
-        let (start_expr, end_expr, body_blk) = match (&mut msg.receiver, msg.values.get_disjoint_mut([0, 1])) {
-            (Expression::Block(_), _) | (_, Ok([Expression::Block(_), _])) => {
-                todo!("to:do: inlining: those cases should be handled (may be trivial)")
+        let (start_expr, end_expr, body_blk) = {
+            let (left, right) = msg.values.split_at_mut(1);
+
+            match (&mut msg.receiver, (&mut left[0], &mut right[0])) {
+                (Expression::Block(_), _) | (_, (Expression::Block(_), _)) => {
+                    todo!("to:do: inlining: those cases should be handled (may be trivial)")
+                }
+                (a, (b, Expression::Block(blk))) => (a, b, blk),
+                _ => return Message::Regular(msg),
             }
-            (a, Ok([b, Expression::Block(blk)])) => (a, b, blk),
-            _ => return Message::Regular(msg),
         };
 
         let accumulator_name = body_blk.parameters.first().unwrap_or_else(|| panic!("inlining to:do:, but found no accumulator argument?")).clone();
