@@ -2,7 +2,7 @@ use crate::AstGenCtxt;
 use som_core::ast::{self, Message};
 use som_core::ast::{Expression, ToDoInlinedMsg};
 
-//#[allow(unused)] // if inlining is disabled, a lot of them go completely unused.
+#[allow(unused)] // if inlining is disabled, a lot of them go completely unused.
 pub(crate) trait PrimMessageInliner {
     fn inline_if_possible(&mut self, msg: ast::RegularMessage) -> Message;
     fn inline_block_context(&mut self, blk: &mut ast::Block) -> bool;
@@ -262,7 +262,7 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
         let accumulator_name = body_blk.parameters.first().unwrap_or_else(|| panic!("inlining to:do:, but found no accumulator argument?")).clone();
 
         if !self.inline_block_context(body_blk) {
-            return Message::Regular(msg)
+            return Message::Regular(msg);
         }
 
         let to_do_inlined_node = ToDoInlinedMsg {

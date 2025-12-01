@@ -288,7 +288,7 @@ fn to_do_inlining_ok() {
             PopLocal(0, 0),
             Inc,
             JumpBackward(8),
-            Pop
+            Pop,
         ],
     );
 }

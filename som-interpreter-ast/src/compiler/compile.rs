@@ -45,7 +45,7 @@ pub struct AstMethodCompilerCtxt<'a> {
 pub(crate) struct AstScopeCtxt {
     nbr_args: usize,
     nbr_locals: usize,
-    args: IndexSet<String>, // TODO IndexSet, matching BC
+    args: IndexSet<String>,
     locals: IndexSet<String>,
 }
 
@@ -100,12 +100,15 @@ impl AstScopeCtxt {
 
 impl<'a> AstMethodCompilerCtxt<'a> {
     fn find_var(&self, name: &str) -> Option<FoundVar> {
+        if let Some(found_var) = self.scopes.last()?.find_var(name, 0, &self.scopes) {
+            return Some(found_var);
+        }
         if let Some(cls) = &self.class {
             if let Some(found_field) = cls.field_names.iter().position(|n| n == name) {
                 return Some(FoundVar::Field(found_field as u8));
             }
         }
-        self.scopes.last()?.find_var(name, 0, &self.scopes)
+        None
     }
 
     pub fn new(gc_interface: &'a mut GCInterface, interner: &'a mut Interner) -> Self {
