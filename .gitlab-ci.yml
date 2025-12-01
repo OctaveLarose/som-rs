@@ -11,6 +11,7 @@ build-and-test-interpreters:
   stage: build-test
   tags: [yuria2]
   script:
+    - rustup default 1.83.0
     - cargo clean
     - cargo build --release --features=som-gc/semispace
     - cargo clippy

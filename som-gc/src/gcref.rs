@@ -25,7 +25,7 @@ macro_rules! debug_assert_valid_semispace_ptr_value {
                 if slice.get_true_size() >= 65535 {
                     // pass
                 } else {
-                    assert!(slice.ptr.is_pointer_to_valid_space(), "Pointer to invalid space.");
+                    assert!(slice.ptr.is_pointer_to_valid_space(), "Pointer to slice in invalid space.");
                 }
             } else if let Some(ptr) = $value.0.as_something::<Gc<()>>() {
                 assert!(ptr.is_pointer_to_valid_space(), "Pointer to invalid space.");
@@ -165,9 +165,15 @@ impl<T> Gc<T> {
             return true;
         }
 
+        let leftmost_digit = leftmost_digit(self.ptr as usize);
+
+        if leftmost_digit == 8 {
+            return true; // assume it's large object storage. This feels hack-ish, but I guess this whole function is a bit of a hack..
+        }
+
         match gc_interface.get_nbr_collections() % 2 == 0 {
-            true => leftmost_digit(self.ptr as usize) == 2,
-            false => leftmost_digit(self.ptr as usize) == 4,
+            true => leftmost_digit == 2,
+            false => leftmost_digit == 4,
         }
     }
 
