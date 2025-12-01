@@ -76,6 +76,19 @@ impl<'a> AstGenCtxtData<'a> {
         Rc::clone(outer)
     }
 
+    pub fn has_local(&self, name: &String) -> bool {
+        if self.kind == AstGenCtxtType::Class {
+            false
+        } else if self.local_names.iter().any(|local| local == name) {
+            true
+        } else {
+            match &self.outer_ctxt {
+                Some(outer) => outer.borrow().has_local(name),
+                None => false,
+            }
+        }
+    }
+
     pub fn add_locals(&mut self, new_locals_names: &[String]) {
         debug_assert_ne!(self.kind, AstGenCtxtType::Class);
         self.local_names.extend(new_locals_names.iter().cloned());

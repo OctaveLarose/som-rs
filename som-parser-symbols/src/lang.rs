@@ -214,12 +214,7 @@ pub fn positional_send<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<
             let msg = RegularMessage { receiver, signature, values };
 
             #[cfg(not(feature = "inlining-disabled"))]
-            let msg = {
-                match genctxt.inline_if_possible(&msg) {
-                    Some(inlined_msg) => inlined_msg,
-                    None => Message::Regular(msg),
-                }
-            };
+            let msg = genctxt.inline_if_possible(msg);
 
             #[cfg(feature = "inlining-disabled")]
             let msg = Message::Regular(msg);

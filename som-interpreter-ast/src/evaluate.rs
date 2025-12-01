@@ -51,7 +51,7 @@ impl Evaluate for AstExpression {
                 } else if let Some(mut big_int) = local_val.as_big_integer::<Gc<BigInt>>() {
                     *big_int += 1;
                 } else {
-                    panic!("Invalid type in Inc")
+                    panic!("Invalid type in Inc: {:?}", local_val)
                 }
                 Return::Local(*local_val)
             }
@@ -64,7 +64,7 @@ impl Evaluate for AstExpression {
                 } else if let Some(mut big_int) = local_val.as_big_integer::<Gc<BigInt>>() {
                     *big_int -= 1;
                 } else {
-                    panic!("Invalid type in Dec")
+                    panic!("Invalid type in Dec: {:?}", local_val)
                 }
                 Return::Local(*local_val)
             }
