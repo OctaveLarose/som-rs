@@ -2,17 +2,25 @@ use crate::AstGenCtxt;
 use som_core::ast::{self, Message};
 use som_core::ast::{Expression, ToDoInlinedMsg};
 
+// TODO: this inlining has an important shortcoming: if there's any kind of possible shadowing issue due to us merging scopes, we don't inline.
+// This isn't a problem in our benchmarks and in most code, but it's pretty nasty that we don't handle it.
+// It's not that hard to fix, just need to engineer `inline_block_context` to rename variables if they turn out to shadow that of a previous scope,
+// and rewrite the block accordingly.
+//
+// I've just not done it because I'd rather go work on other stuff, and it's my project and I do whatever I want.
+// ...but it should be fixed though.
+
 #[allow(unused)] // if inlining is disabled, a lot of them go completely unused.
 pub(crate) trait PrimMessageInliner {
     fn inline_if_possible(&mut self, msg: ast::RegularMessage) -> Message;
-    fn inline_block_context(&mut self, blk: &mut ast::Block) -> bool;
+    fn inline_block_context(&mut self, blk: &mut ast::Block);
+    fn block_shadows_some_outer_scope(&self, blk: &ast::Block) -> bool;
     fn try_inline_if_true_or_if_false(&mut self, msg: ast::RegularMessage, expected_bool: bool) -> Message;
     fn try_inline_if_true_if_false(&mut self, msg: ast::RegularMessage, expected_bool: bool) -> Message;
     fn try_inline_if_nil_or_if_not_nil(&mut self, msg: ast::RegularMessage, expected_bool: bool) -> Message;
     fn try_inline_if_nil_if_not_nil(&mut self, msg: ast::RegularMessage, expected_bool: bool) -> Message;
     fn try_inline_while(&mut self, msg: ast::RegularMessage, expected_bool: bool) -> Message;
-    fn try_inline_or(&mut self, msg: ast::RegularMessage) -> Message;
-    fn try_inline_and(&mut self, msg: ast::RegularMessage) -> Message;
+    fn try_inline_and_or(&mut self, msg: ast::RegularMessage, is_and: bool) -> Message;
     fn try_inline_to_do(&mut self, msg: ast::RegularMessage) -> Message;
 }
 
@@ -29,31 +37,33 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
             "ifNotNil:ifNil:" => self.try_inline_if_nil_if_not_nil(msg, false),
             "whileTrue:" => self.try_inline_while(msg, true),
             "whileFalse:" => self.try_inline_while(msg, false),
-            "or:" | "||" => self.try_inline_or(msg),
-            "and:" | "&&" => self.try_inline_and(msg),
+            "and:" | "&&" => self.try_inline_and_or(msg, true),
+            "or:" | "||" => self.try_inline_and_or(msg, false),
             "to:do:" => self.try_inline_to_do(msg),
             _ => Message::Regular(msg),
         }
     }
 
-    // HACK: should not return bool! We should just handle shadowing, and never fail.
-    fn inline_block_context(&mut self, blk: &mut ast::Block) -> bool {
+    fn block_shadows_some_outer_scope(&self, blk: &ast::Block) -> bool {
         for blk_local in &blk.locals {
             if self.borrow().has_local(blk_local) {
-                return false;
+                return true;
             }
         }
 
         for blk_arg in &blk.parameters {
             if self.borrow().has_local(blk_arg) {
-                return false;
+                return true;
             }
         }
 
+        false
+    }
+
+    // HACK: should not return bool! We should just handle shadowing, and never fail.
+    fn inline_block_context(&mut self, blk: &mut ast::Block) {
         self.borrow_mut().add_locals(&blk.locals);
         self.borrow_mut().add_locals(&blk.parameters);
-
-        true
     }
 
     fn try_inline_if_true_or_if_false(&mut self, mut msg: ast::RegularMessage, expected_bool: bool) -> Message {
@@ -62,9 +72,11 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
             _ => return Message::Regular(msg),
         };
 
-        if !self.inline_block_context(body_blk) {
+        if self.block_shadows_some_outer_scope(body_blk) {
             return Message::Regular(msg);
         }
+
+        self.inline_block_context(body_blk);
 
         let if_inlined_msg = ast::IfInlinedMsg {
             expected_bool,
@@ -81,9 +93,11 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
             _ => return Message::Regular(msg),
         };
 
-        if !self.inline_block_context(body_blk) {
+        if self.block_shadows_some_outer_scope(body_blk) {
             return Message::Regular(msg);
         }
+
+        self.inline_block_context(body_blk);
 
         let if_inlined_msg = ast::IfNilInlinedMsg {
             expects_nil: expected_bool,
@@ -131,13 +145,12 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
             }
         }
 
-        if !self.inline_block_context(body_blk_1) {
+        if self.block_shadows_some_outer_scope(body_blk_1) || self.block_shadows_some_outer_scope(body_blk_2) {
             return Message::Regular(msg);
         }
 
-        if !self.inline_block_context(body_blk_2) {
-            return Message::Regular(msg);
-        }
+        self.inline_block_context(body_blk_1);
+        self.inline_block_context(body_blk_2);
 
         let if_true_if_false_inlined_node = ast::IfTrueIfFalseInlinedMsg {
             expected_bool,
@@ -159,24 +172,12 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
             }
         };
 
-        for blk_local in &body_blk_2.locals {
-            if self.borrow().has_local(blk_local) {
-                return Message::Regular(msg);
-            }
-        }
-        for blk_arg in &body_blk_2.parameters {
-            if self.borrow().has_local(blk_arg) {
-                return Message::Regular(msg);
-            }
-        }
-
-        if !self.inline_block_context(body_blk_1) {
+        if self.block_shadows_some_outer_scope(body_blk_1) || self.block_shadows_some_outer_scope(body_blk_2) {
             return Message::Regular(msg);
         }
 
-        if !self.inline_block_context(body_blk_2) {
-            return Message::Regular(msg);
-        }
+        self.inline_block_context(body_blk_1);
+        self.inline_block_context(body_blk_2);
 
         let if_true_if_false_inlined_node = ast::IfNilIfNotNilInlinedMsg {
             expects_nil,
@@ -194,24 +195,12 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
             _ => return Message::Regular(msg),
         };
 
-        for blk_local in &body_blk.locals {
-            if self.borrow().has_local(blk_local) {
-                return Message::Regular(msg);
-            }
-        }
-        for blk_arg in &body_blk.parameters {
-            if self.borrow().has_local(blk_arg) {
-                return Message::Regular(msg);
-            }
-        }
-
-        if !self.inline_block_context(cond_blk) {
+        if self.block_shadows_some_outer_scope(cond_blk) || self.block_shadows_some_outer_scope(body_blk) {
             return Message::Regular(msg);
         }
 
-        if !self.inline_block_context(body_blk) {
-            return Message::Regular(msg);
-        }
+        self.inline_block_context(cond_blk);
+        self.inline_block_context(body_blk);
 
         let while_inlined_node = ast::WhileInlinedMsg {
             expected_bool,
@@ -222,40 +211,25 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
         Message::WhileInlined(while_inlined_node)
     }
 
-    fn try_inline_or(&mut self, mut msg: ast::RegularMessage) -> Message {
+    fn try_inline_and_or(&mut self, mut msg: ast::RegularMessage, is_and: bool) -> Message {
         let snd_blk = match msg.values.first_mut() {
             Some(Expression::Block(blk)) => blk,
             _ => return Message::Regular(msg),
         };
 
-        if !self.inline_block_context(snd_blk) {
+        if self.block_shadows_some_outer_scope(snd_blk) {
             return Message::Regular(msg);
         }
 
-        let or_inlined_node = ast::OrInlinedMsg {
+        self.inline_block_context(snd_blk);
+
+        let or_inlined_node = ast::AndOrInlinedMsg {
+            is_and,
             first: msg.receiver,
             second: std::mem::take(&mut snd_blk.body.exprs),
         };
 
-        Message::OrInlined(or_inlined_node)
-    }
-
-    fn try_inline_and(&mut self, mut msg: ast::RegularMessage) -> Message {
-        let snd_blk = match msg.values.first_mut() {
-            Some(Expression::Block(blk)) => blk,
-            _ => return Message::Regular(msg),
-        };
-
-        if !self.inline_block_context(snd_blk) {
-            return Message::Regular(msg);
-        }
-
-        let and_inlined_node = ast::AndInlinedMsg {
-            first: msg.receiver,
-            second: std::mem::take(&mut snd_blk.body.exprs),
-        };
-
-        Message::AndInlined(and_inlined_node)
+        Message::AndOrInlined(or_inlined_node)
     }
 
     fn try_inline_to_do(&mut self, mut msg: ast::RegularMessage) -> Message {
@@ -273,9 +247,11 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
 
         let accumulator_name = body_blk.parameters.first().unwrap_or_else(|| panic!("inlining to:do:, but found no accumulator argument?")).clone();
 
-        if !self.inline_block_context(body_blk) {
+        if self.block_shadows_some_outer_scope(body_blk) {
             return Message::Regular(msg);
         }
+
+        self.inline_block_context(body_blk);
 
         let to_do_inlined_node = ToDoInlinedMsg {
             start_expr: start_expr.clone(),

@@ -40,6 +40,7 @@ pub(crate) trait GenCtxt {
     fn get_interner(&self) -> &Interner;
 }
 
+#[allow(unused)] // Some of them were needed when we did BC-level inlining for a while. They're unused now. Maybe remove.
 pub(crate) trait InnerGenCtxt: GenCtxt {
     fn as_gen_ctxt(&mut self) -> &mut dyn GenCtxt;
     fn push_instr(&mut self, instr: Bytecode);
@@ -568,11 +569,14 @@ impl MethodCodegen for ast::Expression {
                             ctxt.backpatch_jump_to_current(middle_jump_idx);
                             return Some(());
                         }
-                        ast::Message::AndInlined(and_inlined) => {
+                        ast::Message::AndOrInlined(and_inlined) => {
                             and_inlined.first.codegen(ctxt, mutator)?;
                             let skip_cond_jump_idx = ctxt.get_cur_instr_idx();
 
-                            ctxt.push_instr(Bytecode::JumpOnFalsePop(0));
+                            match and_inlined.is_and {
+                                true => ctxt.push_instr(Bytecode::JumpOnFalsePop(0)),
+                                false => ctxt.push_instr(Bytecode::JumpOnTruePop(0)),
+                            }
 
                             for expr in &and_inlined.second {
                                 expr.codegen(ctxt, mutator)?;
@@ -585,32 +589,13 @@ impl MethodCodegen for ast::Expression {
 
                             ctxt.backpatch_jump_to_current(skip_cond_jump_idx);
 
-                            let false_idx = ctxt.get_interner().reverse_lookup("false").unwrap_or_else(|| ctxt.intern_symbol("false"));
-                            let idx = ctxt.push_literal(Literal::Symbol(false_idx));
-                            ctxt.push_instr(Bytecode::PushGlobal(idx as u8));
-
-                            ctxt.backpatch_jump_to_current(skip_return_true_idx);
-                            return Some(());
-                        }
-                        ast::Message::OrInlined(or_inlined) => {
-                            or_inlined.first.codegen(ctxt, mutator)?;
-                            let skip_cond_jump_idx = ctxt.get_cur_instr_idx();
-
-                            ctxt.push_instr(Bytecode::JumpOnTruePop(0));
-
-                            for expr in &or_inlined.second {
-                                expr.codegen(ctxt, mutator)?;
-                                ctxt.push_instr(Bytecode::Pop);
-                            }
-                            ctxt.pop_instr();
-
-                            let skip_return_true_idx = ctxt.get_cur_instr_idx();
-                            ctxt.push_instr(Bytecode::Jump(0));
-
-                            ctxt.backpatch_jump_to_current(skip_cond_jump_idx);
-
-                            let true_idx = ctxt.get_interner().reverse_lookup("true").unwrap_or_else(|| ctxt.intern_symbol("true"));
-                            let idx = ctxt.push_literal(Literal::Symbol(true_idx));
+                            let literal_idx = {
+                                match and_inlined.is_and {
+                                    true => ctxt.get_interner().reverse_lookup("false").unwrap_or_else(|| ctxt.intern_symbol("false")),
+                                    false => ctxt.get_interner().reverse_lookup("true").unwrap_or_else(|| ctxt.intern_symbol("true")),
+                                }
+                            };
+                            let idx = ctxt.push_literal(Literal::Symbol(literal_idx));
                             ctxt.push_instr(Bytecode::PushGlobal(idx as u8));
 
                             ctxt.backpatch_jump_to_current(skip_return_true_idx);
@@ -668,7 +653,6 @@ impl MethodCodegen for ast::Expression {
                                 ctxt.push_instr(Bytecode::Pop);
                             }
 
-                            // ctxt.push_instr(Bytecode::Pop);
                             ctxt.push_instr(Bytecode::Inc);
                             ctxt.push_instr(Bytecode::JumpBackward((ctxt.get_cur_instr_idx() - jump_if_greater_idx) as u16));
 

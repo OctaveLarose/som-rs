@@ -18,9 +18,6 @@ use std::hash::{Hash, Hasher};
 /// Facilities to compile code.
 pub mod compile;
 
-/// Inlining some calls to a select few builtin functions for sizeable perf gains.
-mod inliner;
-
 #[derive(Debug, Clone)]
 pub enum Literal {
     Symbol(Interned),

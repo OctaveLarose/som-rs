@@ -135,8 +135,7 @@ pub enum Message {
     IfTrueIfFalseInlined(IfTrueIfFalseInlinedMsg),
     IfNilIfNotNilInlined(IfNilIfNotNilInlinedMsg),
     WhileInlined(WhileInlinedMsg),
-    AndInlined(AndInlinedMsg),
-    OrInlined(OrInlinedMsg), // TODO: combine and and or into a single node.
+    AndOrInlined(AndOrInlinedMsg),
     ToDoInlined(ToDoInlinedMsg),
 }
 
@@ -188,13 +187,8 @@ pub struct WhileInlinedMsg {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct AndInlinedMsg {
-    pub first: Expression,
-    pub second: Vec<Expression>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct OrInlinedMsg {
+pub struct AndOrInlinedMsg {
+    pub is_and: bool,
     pub first: Expression,
     pub second: Vec<Expression>,
 }

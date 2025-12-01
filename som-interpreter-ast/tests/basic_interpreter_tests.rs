@@ -1,7 +1,7 @@
 use rstest::{fixture, rstest};
 use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_gc::gcref::Gc;
-use som_interpreter_ast::compiler::compile::AstMethodCompilerCtxt;
+use som_interpreter_ast::compiler::AstMethodCompilerCtxt;
 use som_interpreter_ast::invokable::Return;
 use som_interpreter_ast::universe::{GlobalValueStack, Universe};
 use som_interpreter_ast::value::Value;

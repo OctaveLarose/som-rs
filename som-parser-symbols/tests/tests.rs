@@ -85,9 +85,9 @@ fn block_test() {
     );
 }
 
-#[ignore] // HACK: not functional because parser makes sure not to add locals to a class when inlining, but there's no class defined here
+#[cfg(not(feature = "inlining-disabled"))]
 #[test]
-fn expression_test_2() {
+fn expression_test_inlining() {
     let tokens: Vec<Token> = Lexer::new("( 3 == 3 ) ifTrue: [ 'this is correct' println. ] ifFalse: [ 'oh no' println ]")
         .skip_whitespace(true)
         .collect();
@@ -100,44 +100,24 @@ fn expression_test_2() {
 
     assert_eq!(
         expression,
-        Expression::Message(Box::new(Message::Regular(RegularMessage {
-            receiver: Expression::Message(Box::new(Message::Regular(RegularMessage {
+        Expression::Message(Box::new(Message::IfTrueIfFalseInlined(IfTrueIfFalseInlinedMsg {
+            expected_bool: true,
+            cond_expr: Expression::Message(Box::new(Message::Regular(RegularMessage {
                 signature: String::from("=="),
                 receiver: Expression::Literal(Literal::Integer(3)),
                 values: vec![Expression::Literal(Literal::Integer(3))],
             }))),
-            signature: String::from("ifTrue:ifFalse:"),
-            values: vec![
-                Expression::Block(Block {
-                    nbr_params: 0,
-                    nbr_locals: 0,
-                    locals: vec![],
-                    parameters: vec![],
-                    body: Body {
-                        exprs: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
-                            receiver: Expression::Literal(Literal::String(String::from("this is correct"))),
-                            signature: String::from("println"),
-                            values: vec![],
-                        })))],
-                        full_stopped: true,
-                    }
-                }),
-                Expression::Block(Block {
-                    nbr_params: 0,
-                    nbr_locals: 0,
-                    locals: vec![],
-                    parameters: vec![],
-                    body: Body {
-                        exprs: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
-                            receiver: Expression::Literal(Literal::String(String::from("oh no"))),
-                            signature: String::from("println"),
-                            values: vec![],
-                        })))],
-                        full_stopped: false,
-                    }
-                }),
-            ]
-        })),)
+            body_1_instrs: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
+                receiver: Expression::Literal(Literal::String(String::from("this is correct"))),
+                signature: String::from("println"),
+                values: vec![],
+            })))],
+            body_2_instrs: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
+                receiver: Expression::Literal(Literal::String(String::from("oh no"))),
+                signature: String::from("println"),
+                values: vec![],
+            })))],
+        })))
     );
 }
 

@@ -440,27 +440,15 @@ impl<'a> AstMethodCompilerCtxt<'a> {
     }
 
     pub fn parse_message(&mut self, msg: &ast::Message) -> AstExpression {
-        self.parse_message_with_func(msg, Self::parse_expression)
-    }
-
-    //pub fn parse_message_with_inlining(&mut self, msg: &ast::Message) -> AstExpression {
-    //    self.parse_message_with_func(msg, Self::parse_expression_with_inlining)
-    //}
-    //
-    pub fn parse_message_with_func(
-        &mut self,
-        msg: &ast::Message,
-        expr_parsing_func: fn(&mut AstMethodCompilerCtxt<'a>, &Expression) -> AstExpression,
-    ) -> AstExpression {
         let msg = {
             match msg {
                 ast::Message::Regular(reg_msg) => reg_msg,
                 ast::Message::IfInlined(if_inlined_msg) => {
                     let ast_inlined_node = IfInlinedNode {
                         expected_bool: if_inlined_msg.expected_bool,
-                        cond_expr: expr_parsing_func(self, &if_inlined_msg.cond_expr),
+                        cond_expr: self.parse_expression(&if_inlined_msg.cond_expr),
                         body_instrs: AstBody {
-                            exprs: if_inlined_msg.body_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                            exprs: if_inlined_msg.body_instrs.iter().map(|e| self.parse_expression(e)).collect(),
                         },
                     };
                     return AstExpression::InlinedCall(Box::new(crate::ast::InlinedNode::IfInlined(ast_inlined_node)));
@@ -468,21 +456,21 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                 ast::Message::IfNilInlined(if_nil_inlined_message) => {
                     let ast_inlined_node = IfNilInlinedNode {
                         expects_nil: if_nil_inlined_message.expects_nil,
-                        cond_expr: expr_parsing_func(self, &if_nil_inlined_message.cond_expr),
+                        cond_expr: self.parse_expression(&if_nil_inlined_message.cond_expr),
                         body_instrs: AstBody {
-                            exprs: if_nil_inlined_message.body_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                            exprs: if_nil_inlined_message.body_instrs.iter().map(|e| self.parse_expression(e)).collect(),
                         },
                     };
                     return AstExpression::InlinedCall(Box::new(crate::ast::InlinedNode::IfNilInlined(ast_inlined_node)));
                 }
                 ast::Message::IfTrueIfFalseInlined(if_true_if_false_inlined_message) => {
                     let ast_inlined_node = IfTrueIfFalseInlinedNode {
-                        cond_expr: expr_parsing_func(self, &if_true_if_false_inlined_message.cond_expr),
+                        cond_expr: self.parse_expression(&if_true_if_false_inlined_message.cond_expr),
                         body_1_instrs: AstBody {
-                            exprs: if_true_if_false_inlined_message.body_1_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                            exprs: if_true_if_false_inlined_message.body_1_instrs.iter().map(|e| self.parse_expression(e)).collect(),
                         },
                         body_2_instrs: AstBody {
-                            exprs: if_true_if_false_inlined_message.body_2_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                            exprs: if_true_if_false_inlined_message.body_2_instrs.iter().map(|e| self.parse_expression(e)).collect(),
                         },
                         expected_bool: if_true_if_false_inlined_message.expected_bool,
                     };
@@ -490,12 +478,12 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                 }
                 ast::Message::IfNilIfNotNilInlined(if_nil_if_not_nil_inlined_message) => {
                     let ast_inlined_node = IfNilIfNotNilInlinedNode {
-                        cond_expr: expr_parsing_func(self, &if_nil_if_not_nil_inlined_message.cond_expr),
+                        cond_expr: self.parse_expression(&if_nil_if_not_nil_inlined_message.cond_expr),
                         body_1_instrs: AstBody {
-                            exprs: if_nil_if_not_nil_inlined_message.body_1_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                            exprs: if_nil_if_not_nil_inlined_message.body_1_instrs.iter().map(|e| self.parse_expression(e)).collect(),
                         },
                         body_2_instrs: AstBody {
-                            exprs: if_nil_if_not_nil_inlined_message.body_2_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                            exprs: if_nil_if_not_nil_inlined_message.body_2_instrs.iter().map(|e| self.parse_expression(e)).collect(),
                         },
                         expects_nil: if_nil_if_not_nil_inlined_message.expects_nil,
                     };
@@ -505,35 +493,37 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     let ast_inlined_node = WhileInlinedNode {
                         expected_bool: while_inlined_message.expected_bool,
                         cond_instrs: AstBody {
-                            exprs: while_inlined_message.cond_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                            exprs: while_inlined_message.cond_instrs.iter().map(|e| self.parse_expression(e)).collect(),
                         },
                         body_instrs: AstBody {
-                            exprs: while_inlined_message.body_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                            exprs: while_inlined_message.body_instrs.iter().map(|e| self.parse_expression(e)).collect(),
                         },
                     };
 
                     return AstExpression::InlinedCall(Box::new(crate::ast::InlinedNode::WhileInlined(ast_inlined_node)));
                 }
-                ast::Message::AndInlined(and_inlined_message) => {
-                    let ast_inlined_node = AndInlinedNode {
-                        first: expr_parsing_func(self, &and_inlined_message.first),
-                        second: AstBody {
-                            exprs: and_inlined_message.second.iter().map(|e| expr_parsing_func(self, e)).collect(),
-                        },
-                    };
+                ast::Message::AndOrInlined(and_or_inlined_message) => match and_or_inlined_message.is_and {
+                    true => {
+                        let ast_inlined_node = AndInlinedNode {
+                            first: self.parse_expression(&and_or_inlined_message.first),
+                            second: AstBody {
+                                exprs: and_or_inlined_message.second.iter().map(|e| self.parse_expression(e)).collect(),
+                            },
+                        };
 
-                    return AstExpression::InlinedCall(Box::new(crate::ast::InlinedNode::AndInlined(ast_inlined_node)));
-                }
-                ast::Message::OrInlined(or_inlined_message) => {
-                    let ast_inlined_node = OrInlinedNode {
-                        first: expr_parsing_func(self, &or_inlined_message.first),
-                        second: AstBody {
-                            exprs: or_inlined_message.second.iter().map(|e| expr_parsing_func(self, e)).collect(),
-                        },
-                    };
+                        return AstExpression::InlinedCall(Box::new(crate::ast::InlinedNode::AndInlined(ast_inlined_node)));
+                    }
+                    false => {
+                        let ast_inlined_node = OrInlinedNode {
+                            first: self.parse_expression(&and_or_inlined_message.first),
+                            second: AstBody {
+                                exprs: and_or_inlined_message.second.iter().map(|e| self.parse_expression(e)).collect(),
+                            },
+                        };
 
-                    return AstExpression::InlinedCall(Box::new(crate::ast::InlinedNode::OrInlined(ast_inlined_node)));
-                }
+                        return AstExpression::InlinedCall(Box::new(crate::ast::InlinedNode::OrInlined(ast_inlined_node)));
+                    }
+                },
                 ast::Message::ToDoInlined(to_do_inlined_message) => {
                     let accumulator_idx = match self.find_var(&to_do_inlined_message.accumulator_name) {
                         Some(FoundVar::Local(0, a)) => a as usize,
@@ -541,10 +531,10 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     };
 
                     let ast_inlined_node = ToDoInlinedNode {
-                        start: expr_parsing_func(self, &to_do_inlined_message.start_expr),
-                        end: expr_parsing_func(self, &to_do_inlined_message.end_expr),
+                        start: self.parse_expression(&to_do_inlined_message.start_expr),
+                        end: self.parse_expression(&to_do_inlined_message.end_expr),
                         body: AstBody {
-                            exprs: to_do_inlined_message.body_instrs.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                            exprs: to_do_inlined_message.body_instrs.iter().map(|e| self.parse_expression(e)).collect(),
                         },
                         accumulator_idx,
                     };
@@ -566,11 +556,11 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     .clone()
                     .unwrap_or_else(|| panic!("no super class set, even though the method has a super call?")),
                 signature: interned_signature,
-                values: msg.values.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                values: msg.values.iter().map(|e| self.parse_expression(e)).collect(),
             }));
         }
 
-        let receiver = expr_parsing_func(self, &msg.receiver);
+        let receiver = self.parse_expression(&msg.receiver);
         match msg.values.len() {
             0 => AstExpression::UnaryDispatch(Box::new(AstUnaryDispatch {
                 dispatch_node: AstDispatchNode {
@@ -585,7 +575,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     signature: interned_signature,
                     inline_cache: None,
                 },
-                arg: expr_parsing_func(self, msg.values.first().unwrap()),
+                arg: self.parse_expression(msg.values.first().unwrap()),
             })),
             2 => AstExpression::TernaryDispatch(Box::new(AstTernaryDispatch {
                 dispatch_node: AstDispatchNode {
@@ -593,8 +583,8 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     signature: interned_signature,
                     inline_cache: None,
                 },
-                arg1: expr_parsing_func(self, msg.values.first().unwrap()),
-                arg2: expr_parsing_func(self, msg.values.get(1).unwrap()),
+                arg1: self.parse_expression(msg.values.first().unwrap()),
+                arg2: self.parse_expression(msg.values.get(1).unwrap()),
             })),
             _ => AstExpression::NAryDispatch(Box::new(AstNAryDispatch {
                 dispatch_node: AstDispatchNode {
@@ -602,7 +592,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     signature: interned_signature,
                     inline_cache: None,
                 },
-                values: msg.values.iter().map(|e| expr_parsing_func(self, e)).collect(),
+                values: msg.values.iter().map(|e| self.parse_expression(e)).collect(),
             })),
         }
     }

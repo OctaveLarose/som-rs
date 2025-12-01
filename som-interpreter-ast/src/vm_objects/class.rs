@@ -1,6 +1,6 @@
 use std::{fmt, vec};
 
-use crate::compiler::compile::AstMethodCompilerCtxt;
+use crate::compiler::AstMethodCompilerCtxt;
 use crate::primitives;
 use crate::value::Value;
 use crate::vm_objects::method::{Method, MethodKind};

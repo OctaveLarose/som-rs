@@ -33,7 +33,7 @@ pub enum AstGenCtxtType {
 pub struct AstGenCtxtData<'a> {
     kind: AstGenCtxtType,
     // name: String, // used for debugging
-    local_names: Vec<String>,
+    local_names: Vec<String>, // TODO: IndexSet instead for better performance, and pass directly to AST/BC compilers.
     param_names: Vec<String>,
     outer_ctxt: Option<AstGenCtxt<'a>>,
 }
@@ -90,12 +90,12 @@ impl<'a> AstGenCtxtData<'a> {
     }
 
     pub fn add_locals(&mut self, new_locals_names: &[String]) {
-        debug_assert_ne!(self.kind, AstGenCtxtType::Class);
+        debug_assert!(new_locals_names.is_empty() || self.kind != AstGenCtxtType::Class);
         self.local_names.extend(new_locals_names.iter().cloned());
     }
 
     pub fn add_params(&mut self, parameters: &[String]) {
-        debug_assert_ne!(self.kind, AstGenCtxtType::Class);
+        debug_assert!(parameters.is_empty() || self.kind != AstGenCtxtType::Class);
         self.param_names.extend(parameters.iter().cloned());
     }
 }
