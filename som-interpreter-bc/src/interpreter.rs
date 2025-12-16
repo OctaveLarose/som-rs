@@ -301,24 +301,21 @@ impl Interpreter {
                 Bytecode::PushBlock(idx) => {
                     // TODO: clean up that code! use unsafecell instead of black_box also
                     let _timing = profiler_maybe_start!("PUSH_BLOCK");
-                    let literal = {
-                        let current_frame = self.get_current_frame();
-                        current_frame.lookup_constant(idx as usize).clone()
-                    };
 
-                    let mut block = match literal {
-                        Literal::Block(blk) => {
-                            let mut new_blk =
-                                universe.gc_interface.request_memory_for_type::<Block>(std::mem::size_of::<Block>(), AllocSiteMarker::RuntimeBlock);
-                            *new_blk = (*blk).clone();
-                            new_blk
-                        }
-                        _ => panic!("PushBlock expected a block, but got another invalid literal"),
-                    };
+                    // allocating ahead of time in case it triggers GC.
+                    let mut new_blk =
+                        universe.gc_interface.request_memory_for_type::<Block>(std::mem::size_of::<Block>(), AllocSiteMarker::RuntimeBlock);
 
                     let mut current_frame = self.get_current_frame();
-                    block.frame.replace(current_frame.clone());
-                    current_frame.stack_push(Value::Block(block));
+                    match current_frame.lookup_constant(idx as usize) {
+                        Literal::Block(blk) => {
+                            *new_blk = (**blk).clone();
+                        }
+                        _ => panic!("PushBlock expected a block, but got another invalid literal"),
+                    }
+
+                    new_blk.frame.replace(current_frame.clone());
+                    current_frame.stack_push(Value::Block(new_blk));
 
                     profiler_maybe_stop!(_timing);
                 }
