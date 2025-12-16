@@ -50,6 +50,7 @@ pub struct GCInterface {
     is_collecting: bool,
     start_the_world_count: usize,
     total_gc_time: Duration,
+    max_heap_size: usize,
 
     #[cfg(feature = "track-allocations")]
     pub total_program_repr_size: u128, // public as a hack
@@ -96,6 +97,7 @@ impl GCInterface {
             alloc_bump_ptr: BumpPointer::default(),
             start_the_world_count: 0,
             total_gc_time: Duration::new(0, 0),
+            max_heap_size: heap_size,
 
             #[cfg(feature = "track-allocations")]
             total_program_repr_size: 0,
@@ -204,6 +206,10 @@ impl GCInterface {
         self.total_gc_time.as_millis()
     }
 
+    pub fn get_max_heap_size(&self) -> usize {
+        self.max_heap_size
+    }
+
     /// Whether or not we're currently performing GC.
     /// Might be redundant with `is_world_stopped`, to be honest.
     pub fn is_currently_collecting(&self) -> bool {
@@ -223,10 +229,28 @@ impl GCInterface {
 
         let time_pre_gc = Instant::now();
 
-        let result = cvar.wait_timeout_while(is_world_stopped.lock().unwrap(), Duration::from_secs(15), |pending| *pending).unwrap();
+        let result = cvar.wait_timeout_while(is_world_stopped.lock().unwrap(), Duration::from_secs(60), |pending| *pending).unwrap();
         if result.1.timed_out() {
             panic!("GC timed out: highly likely to be a crash in a GC thread.")
         }
+
+        // memset old heap
+        // #[cfg(debug_assertions)]
+        // {
+        //     let old_heap_start: *mut u8 = match self.get_nbr_collections() {
+        //         nbr_collections if nbr_collections % 2 == 1 => 0x20000000000 as *mut u8,
+        //         _ => 0x40000000000 as *mut u8,
+        //     };
+        //
+        //     let size_semi_heap: usize = self.get_max_heap_size() / 2;
+        //
+        //     unsafe {
+        //         std::ptr::write_bytes(old_heap_start, 0xEF, size_semi_heap);
+        //         //let count = size_semi_heap / 4;
+        //         //let slice = std::slice::from_raw_parts_mut(old_heap_start as *mut u32, count);
+        //         //slice.fill(0xDEADBEEF);
+        //     }
+        // }
 
         debug!("block_for_gc: world no longer stopped.");
         self.is_collecting = false;
@@ -418,8 +442,12 @@ impl SOMAllocator for GCInterface {
         // Release builds must not assume this value is unchanging: it can, that's the point of the check later on.
         std::hint::black_box(&self.start_the_world_count);
 
+        //dbg!(&size);
         let addr = unsafe { &mut (*self.default_allocator) }.alloc(size, GC_ALIGN, GC_OFFSET);
         std::sync::atomic::fence(std::sync::atomic::Ordering::Release);
+
+        //dbg!(&addr);
+        //dbg!("");
 
         #[cfg(debug_assertions)]
         if self.start_the_world_count > _gc_watcher {
@@ -476,8 +504,8 @@ impl SOMAllocator for GCInterface {
         // slices can be big enough to warrant using large object storage.
         let header_addr = {
             match size <= crate::mmtk().get_plan().constraints().max_non_los_default_alloc_bytes {
-                true => self.request_bytes(size + OBJECT_REF_OFFSET, alloc_origin_marker),
-                false => self.request_bytes_los(size + OBJECT_REF_OFFSET, alloc_origin_marker),
+                _ => self.request_bytes(size + OBJECT_REF_OFFSET, alloc_origin_marker),
+                // false => self.request_bytes_los(size + OBJECT_REF_OFFSET, alloc_origin_marker),
             }
         };
 

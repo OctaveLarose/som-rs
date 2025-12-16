@@ -49,9 +49,9 @@ impl ObjectModel<SOMVM> for VMObjectModel {
         let from_header = unsafe { ObjectReference::from_raw_address_unchecked(Self::ref_to_object_start(from)) };
 
         // > 65535
-        if bytes >= crate::mmtk().get_plan().constraints().max_non_los_default_alloc_bytes {
-            panic!("we tried to copy an object that should be in LOS? (addr: {:?})", from);
-        }
+        // if bytes >= crate::mmtk().get_plan().constraints().max_non_los_default_alloc_bytes {
+        //     panic!("we tried to copy an object that should be in LOS? (addr: {:?})", from);
+        // }
 
         let header_dst = copy_context.alloc_copy(from_header, bytes, align, offset, semantics);
         debug_assert!(!header_dst.is_zero());

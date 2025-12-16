@@ -60,8 +60,6 @@ pub struct Interpreter {
     pub bytecode_idx: u16,
     /// The current frame.
     pub current_frame: UnsafeCell<Gc<Frame>>,
-    /// Pointer to the frame's bytecodes, to not have to read them from the frame directly
-    pub current_bytecodes: *const Vec<Bytecode>,
     /// GC can trigger when the interpreter wants to allocate a new frame.
     /// We're then in a situation where we've looked up a `Method` (which is how we knew we were dealing with a non-primitive, and so that we had to create a frame)
     /// So this method can't be stored on the Rust stack, or GC would miss it. Therefore: we keep it reachable there.
@@ -74,7 +72,6 @@ impl Interpreter {
         Self {
             start_time: Instant::now(),
             bytecode_idx: 0,
-            current_bytecodes: base_frame.get_bytecode_ptr(),
             current_frame: UnsafeCell::from(base_frame),
             frame_method_root: Gc::default(),
             frame_args_root: None,
@@ -114,7 +111,6 @@ impl Interpreter {
         prev_frame.remove_n_last_elements(nbr_args);
 
         self.bytecode_idx = 0;
-        self.current_bytecodes = frame_ptr.get_bytecode_ptr();
         self.current_frame = UnsafeCell::from(frame_ptr.clone());
         frame_ptr
     }
@@ -145,7 +141,6 @@ impl Interpreter {
         );
 
         self.bytecode_idx = 0;
-        self.current_bytecodes = frame_ptr.get_bytecode_ptr();
         self.current_frame = UnsafeCell::from(frame_ptr.clone());
         self.frame_args_root = None;
 
@@ -156,7 +151,6 @@ impl Interpreter {
     pub fn push_block_frame(&mut self, nbr_args: usize, mutator: &mut GCInterface) -> Gc<Frame> {
         let frame_ptr = Frame::alloc_from_block(nbr_args, self.get_current_frame_mut(), mutator);
         self.bytecode_idx = 0;
-        self.current_bytecodes = frame_ptr.get_bytecode_ptr();
         self.current_frame = UnsafeCell::from(frame_ptr.clone());
         frame_ptr
     }
@@ -169,7 +163,6 @@ impl Interpreter {
             true => {}
             false => {
                 self.bytecode_idx = new_current_frame.bytecode_idx;
-                self.current_bytecodes = new_current_frame.get_bytecode_ptr();
             }
         }
     }
@@ -181,7 +174,6 @@ impl Interpreter {
             true => {}
             false => {
                 self.bytecode_idx = new_current_frame.bytecode_idx;
-                self.current_bytecodes = new_current_frame.get_bytecode_ptr();
             }
         }
     }
@@ -189,7 +181,7 @@ impl Interpreter {
     pub fn run(&mut self, universe: &mut Universe) -> Option<Value> {
         loop {
             // Actually safe, there's always a reference to the current bytecodes. Need unsafe because we want to store a ref for quick access in perf-critical code
-            let bytecode = *(unsafe { (*self.current_bytecodes).get_unchecked(self.bytecode_idx as usize) });
+            let bytecode = *(unsafe { (*self.get_current_frame().get_bytecode_ptr()).get_unchecked(self.bytecode_idx as usize) });
 
             // unsafe {
             //     dbg!(&(*self.current_frame.get()).current_context.class(universe).name);
@@ -307,20 +299,27 @@ impl Interpreter {
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::PushBlock(idx) => {
+                    // TODO: clean up that code! use unsafecell instead of black_box also
                     let _timing = profiler_maybe_start!("PUSH_BLOCK");
-                    let current_frame = self.get_current_frame();
-                    let literal = current_frame.lookup_constant(idx as usize);
+                    let literal = {
+                        let current_frame = self.get_current_frame();
+                        current_frame.lookup_constant(idx as usize).clone()
+                    };
+
                     let mut block = match literal {
                         Literal::Block(blk) => {
                             let mut new_blk =
                                 universe.gc_interface.request_memory_for_type::<Block>(std::mem::size_of::<Block>(), AllocSiteMarker::RuntimeBlock);
-                            *new_blk = (**blk).clone();
+                            *new_blk = (*blk).clone();
                             new_blk
                         }
                         _ => panic!("PushBlock expected a block, but got another invalid literal"),
                     };
-                    block.frame.replace(self.get_current_frame());
-                    self.get_current_frame().stack_push(Value::Block(block));
+
+                    let mut current_frame = self.get_current_frame();
+                    block.frame.replace(current_frame.clone());
+                    current_frame.stack_push(Value::Block(block));
+
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::PushConstant(idx) => {

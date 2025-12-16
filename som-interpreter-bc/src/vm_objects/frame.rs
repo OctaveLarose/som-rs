@@ -160,7 +160,7 @@ impl Frame {
     }
 
     #[inline(always)]
-    pub fn get_bytecode_ptr(&self) -> *const Vec<Bytecode> {
+    pub fn get_bytecode_ptr(&self) -> &Vec<Bytecode> {
         &self.current_context.get_env().body
     }
 
