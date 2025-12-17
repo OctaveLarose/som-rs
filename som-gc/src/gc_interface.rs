@@ -262,11 +262,6 @@ impl GCInterface {
         F: FnMut(&'static mut Mutator<SOMVM>),
     {
         debug!("stop_all_mutators called");
-
-        //while !AtomicBool::load(&IS_WORLD_STOPPED, Ordering::SeqCst) {
-        //    // wait for world to be properly stopped (might not be needed)
-        //}
-
         mutator_visitor(self.mutator.as_mut())
     }
 
@@ -324,7 +319,7 @@ pub trait SOMAllocator {
     where
         T: HasTypeInfoForGC;
     fn request_bytes(&mut self, size: usize, _alloc_origin_marker: AllocSiteMarker) -> Address;
-    fn request_bytes_for_slice(&mut self, slice_size: usize, alloc_origin_marker: AllocSiteMarker) -> Address;
+    fn request_memory_for_slice_type(&mut self, slice_size: usize, alloc_origin_marker: AllocSiteMarker) -> Address;
     fn request_bytes_los(&mut self, size: usize, _alloc_origin_marker: AllocSiteMarker) -> Address;
 
     // #[deprecated(note="use alloc_with_marker instead")]
@@ -381,7 +376,7 @@ impl SOMAllocator for GCInterface {
     /// Allocating a Vec<i32> is fine, allocating a Vec<Value> is fine if they're all Integer values.
     /// Not unforced by the Rust type system atm, but we could make some nice traits for this. Just afraid that this would add unnecessary complexity.
     fn alloc_safe_slice<T: SupportedSliceType + std::fmt::Debug>(&mut self, obj: &[T], alloc_origin_marker: AllocSiteMarker) -> GcSlice<T> {
-        let header_addr = self.request_bytes_for_slice(std::mem::size_of_val(obj), alloc_origin_marker);
+        let header_addr = self.request_memory_for_slice_type(std::mem::size_of_val(obj), alloc_origin_marker);
         self.write_slice_to_addr(header_addr, obj)
     }
 
@@ -390,7 +385,7 @@ impl SOMAllocator for GCInterface {
     /// slice likely to be invalid.
     /// Now every uses should be replaced with alloc_safe_slice, or with `request_mem_for_slice` + `write_slice_to_addr`
     fn alloc_slice<T: SupportedSliceType + std::fmt::Debug>(&mut self, obj: &[T], alloc_origin_marker: AllocSiteMarker) -> GcSlice<T> {
-        let header_addr = self.request_bytes_for_slice(std::mem::size_of_val(obj), alloc_origin_marker);
+        let header_addr = self.request_memory_for_slice_type(std::mem::size_of_val(obj), alloc_origin_marker);
         self.write_slice_to_addr(header_addr, obj)
     }
 
@@ -477,7 +472,9 @@ impl SOMAllocator for GCInterface {
         crate::api::mmtk_alloc(&mut self.mutator, size, GC_ALIGN, GC_OFFSET, AllocationSemantics::Los)
     }
 
-    /// TODO doc + should likely deduce the size from the type
+    /// Requests memory for a type T, given the size of the type, and returns a pointer to a newly allocated T.
+    /// FEAT: should perhaps deduce the size from the type, but some types lie about their real size (e.g. Frames). Though perhaps
+    /// there's a way to use Sized here, and make frames be !Sized.
     fn request_memory_for_type<T: HasTypeInfoForGC>(&mut self, type_size: usize, alloc_origin_marker: AllocSiteMarker) -> Gc<T> {
         let mut bytes = self.request_bytes(type_size + OBJECT_REF_OFFSET, alloc_origin_marker);
         unsafe {
@@ -487,7 +484,8 @@ impl SOMAllocator for GCInterface {
         }
     }
 
-    fn request_bytes_for_slice(&mut self, slice_size: usize, alloc_origin_marker: AllocSiteMarker) -> Address {
+    /// Requests memory for a slice type T, given the size of the type, and returns a pointer to a newly allocated slice T.
+    fn request_memory_for_slice_type(&mut self, slice_size: usize, alloc_origin_marker: AllocSiteMarker) -> Address {
         let mut size = {
             match slice_size {
                 v if v < MIN_OBJECT_SIZE => MIN_OBJECT_SIZE,

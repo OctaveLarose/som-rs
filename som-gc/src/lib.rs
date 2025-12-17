@@ -4,7 +4,6 @@ extern crate mmtk;
 
 use mmtk::vm::VMBinding;
 use mmtk::MMTK;
-use std::cell::OnceCell;
 use std::sync::OnceLock;
 
 pub mod active_plan;
@@ -59,5 +58,5 @@ fn mmtk() -> &'static MMTK<SOMVM> {
     MMTK_SINGLETON.get().unwrap()
 }
 
-pub(crate) static mut MUTATOR_WRAPPER: OnceCell<&mut GCInterface> = OnceCell::new();
-pub static MMTK_TO_VM_INTERFACE: OnceLock<MMTKtoVMCallbacks> = OnceLock::new();
+pub(crate) static mut MUTATOR_WRAPPER: OnceLock<&mut GCInterface> = OnceLock::new();
+pub(crate) static MMTK_TO_VM_INTERFACE: OnceLock<MMTKtoVMCallbacks> = OnceLock::new();

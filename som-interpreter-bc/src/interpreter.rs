@@ -167,7 +167,14 @@ impl Interpreter {
     }
 
     pub fn pop_n_frames(&mut self, n: u8) {
-        let new_current_frame = &Frame::nth_frame_back_through_frame_list(&self.get_current_frame(), n + 1);
+        let mut new_current_frame = self.get_current_frame();
+        for _ in 0..n {
+            new_current_frame = new_current_frame.prev_frame.clone();
+            if new_current_frame.is_empty() {
+                panic!("found an empty target frame while walking the frame stack somehow");
+            }
+        }
+
         self.current_frame = UnsafeCell::from(new_current_frame.clone());
         match new_current_frame.is_empty() {
             true => {}

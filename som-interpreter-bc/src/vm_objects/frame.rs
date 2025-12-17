@@ -30,12 +30,10 @@ pub struct Frame {
     /// Bytecode index.
     pub bytecode_idx: u16,
 
-    /// Stack pointer/index. Points to the NEXT element that can be written to the stack;
-    /// Alternatively, can be seen as number of elements on the stack
+    /// Stack pointer/index. Points to the NEXT element that can be written to the stack. Alternatively, can be seen as number of elements on the stack
     pub stack_ptr: u8,
 
-    /// It's also stored in the current context, but we keep it here for faster access since we
-    /// need it to calculate the offset to local variables
+    /// It's also stored in the current context, but we keep it here for faster access since we need it to calculate the offset to local variables
     pub nbr_args: u8,
 
     /// Needed for similar reasons as the number of arguments, for easier access to args and locals.
@@ -50,8 +48,7 @@ pub struct Frame {
 impl Frame {
     /// Allocates a frame for a block.
     /// We assume that the block is on the stack of the previous frame, as is the case when calling
-    /// the primitive functions that create new blocks. We do this to make sure it's reachable
-    /// during GC.
+    /// the primitive functions that create new blocks. We do this to make sure it's reachable during GC.
     pub fn alloc_from_block(nbr_args: usize, prev_frame: &mut Gc<Frame>, gc_interface: &mut GCInterface) -> Gc<Frame> {
         std::hint::black_box(&prev_frame);
 
@@ -103,6 +100,8 @@ impl Frame {
         frame_ptr
     }
 
+    /// Initializes a frame with all its expected values, given a pointer to a Frame.
+    /// Recurring logic for all functions that allocate frames.
     pub(crate) fn init_frame_post_alloc(mut frame: Gc<Frame>, args: &[Value], stack_size: usize, prev_frame: Gc<Frame>) {
         unsafe {
             frame.stack_ptr = 0;
@@ -120,7 +119,7 @@ impl Frame {
                 *locals_ptr.add(idx as usize) = Value::NIL;
             }
 
-            frame.prev_frame = prev_frame; // because GC can have moved the previous frame!
+            frame.prev_frame = prev_frame;
         }
     }
 
@@ -139,7 +138,7 @@ impl Frame {
         }
     }
 
-    // Creates a frame from a block. Meant to only be called by the alloc_from_method function
+    // Creates a frame from a method. Called from methods that allocate different method frames
     pub(crate) fn from_method(method: Gc<Method>) -> Self {
         Self {
             prev_frame: Gc::default(),
@@ -181,7 +180,7 @@ impl Frame {
 
     #[inline(always)]
     pub fn get_nbr_args(&self) -> u8 {
-        self.current_context.get_env().nbr_params + 1
+        self.current_context.get_env().nbr_params + 1 // + 1 to account for self.
     }
 
     #[inline(always)]
@@ -203,14 +202,15 @@ impl Frame {
 
     /// Get the holder for this current method.
     pub(crate) fn get_method_holder(&self) -> Gc<Class> {
-        // TODO: just self.current_context.holder instead? most likely.
-        match self.lookup_argument(0).as_block() {
-            Some(b) => {
-                let block_frame = b.frame.as_ref().unwrap();
-                block_frame.get_method_holder()
-            }
-            None => self.current_context.holder().clone(),
-        }
+        self.current_context.holder().clone()
+        // old logic below - not sure why that was ever needed?
+        //match self.lookup_argument(0).as_block() {
+        //    Some(b) => {
+        //        let block_frame = b.frame.as_ref().unwrap();
+        //        block_frame.get_method_holder()
+        //    }
+        //    None => self.current_context.holder().clone(),
+        //}
     }
 
     /// Search for a local binding.
@@ -259,38 +259,22 @@ impl Frame {
         self.current_context.get_env().literals.get(idx).unwrap()
     }
 
+    /// Returns the nth frame back in the frame list, given n and the current frame.
+    /// Walks the frame list not using the back pointer `prev_frame`, but by looking up the previous frame associated with each block.
     pub fn nth_frame_back(current_frame: &Gc<Frame>, n: u8) -> Gc<Frame> {
         if n == 0 {
             return current_frame.clone();
         }
 
-        let mut target_frame: Gc<Frame> = match current_frame.lookup_argument(0).as_block() {
-            Some(block) => block.frame.as_ref().unwrap().clone(),
-            None => panic!(
-                "attempting to access a non local var/arg from a method instead of a block: self wasn't blockself but {:?}.",
-                current_frame.lookup_argument(0)
-            ),
-        };
-        for _ in 1..n {
+        let mut target_frame: Gc<Frame> = current_frame.clone();
+        for _ in 0..n {
             target_frame = match &target_frame.lookup_argument(0).as_block() {
-                Some(block) => {
-                    block.frame.as_ref().unwrap().clone()
-                }
-                None => panic!("attempting to access a non local var/arg from a method instead of a block (but the original frame we were in was a block): self wasn't blockself but {:?}.", current_frame.lookup_argument(0))
+                Some(block) => block.frame.as_ref().unwrap().clone(),
+                None => panic!(
+                    "attempting to access a non local var/arg from a method instead of a block: self wasn't blockself but {:?}.",
+                    current_frame.lookup_argument(0)
+                ),
             };
-        }
-        target_frame
-    }
-
-    /// nth_frame_back but through prev_frame ptr. TODO: clarify why different implems are needed
-    pub fn nth_frame_back_through_frame_list(current_frame: &Gc<Frame>, n: u8) -> Gc<Frame> {
-        debug_assert_ne!(n, 0);
-        let mut target_frame = current_frame.clone();
-        for _ in 1..n {
-            target_frame = target_frame.prev_frame.clone();
-            if target_frame.is_empty() {
-                panic!("empty target frame");
-            }
         }
         target_frame
     }
@@ -325,7 +309,7 @@ impl Frame {
             self.current_context.get_env().max_stack_size,
             self
         );
-        // debug_assert!(self.stack_ptr < self.current_context.get_env().max_stack_size);
+        debug_assert!(self.stack_ptr < self.current_context.get_env().max_stack_size);
         unsafe {
             *self.nth_stack_mut(self.stack_ptr) = value;
             self.stack_ptr += 1;
@@ -359,9 +343,8 @@ impl Frame {
         unsafe { self.nth_stack(self.stack_ptr - (n as u8 + 1)) }
     }
 
-    // TODO: should not be a static ref.
     #[inline(always)]
-    pub fn stack_n_last_elements(&self, n: usize) -> &'static [Value] {
+    pub fn stack_n_last_elements(&self, n: usize) -> &[Value] {
         unsafe {
             let slice_ptr = self.nth_stack(self.stack_ptr - n as u8);
             std::slice::from_raw_parts(slice_ptr, n)
@@ -375,6 +358,7 @@ impl Frame {
     }
 
     /// Gets the total number of elements on the stack. Only used for debugging.
+    #[cfg(test)]
     pub fn stack_len(&self) -> usize {
         self.stack_ptr as usize
     }

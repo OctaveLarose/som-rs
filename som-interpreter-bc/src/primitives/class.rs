@@ -65,7 +65,7 @@ fn methods(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValue
     let cls: Gc<Class> = interp.get_current_frame().stack_last().as_class().unwrap();
     std::hint::black_box(&cls); // paranoia, in case the compiler gets ideas about reusing that variable
     let slice_size = cls.methods.len() * size_of::<Value>();
-    let slice_addr = universe.gc_interface.request_bytes_for_slice(slice_size, AllocSiteMarker::VecValue);
+    let slice_addr = universe.gc_interface.request_memory_for_slice_type(slice_size, AllocSiteMarker::VecValue);
 
     pop_args_from_stack!(interp, receiver => Gc<Class>);
     let methods: Vec<Value> = receiver.methods.values().cloned().map(Value::Invokable).collect();
