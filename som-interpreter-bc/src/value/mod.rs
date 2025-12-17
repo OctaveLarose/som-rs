@@ -16,4 +16,4 @@ mod value_ptr;
 #[repr(transparent)]
 pub struct Value(pub BaseValue);
 
-// TODO: we should be able to switch between Value (nanboxed) and ValueEnum at will. That used to be the case, but I broke those changes. TODO restore
+// TODO: we should be able to switch between Value (nanboxed) and ValueEnum at will. That used to be the case, but I broke those changes. Need to restore

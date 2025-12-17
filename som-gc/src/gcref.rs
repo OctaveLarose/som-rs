@@ -158,7 +158,7 @@ impl<T> Gc<T> {
             number as u8
         }
 
-        let gc_interface = unsafe { &**crate::MUTATOR_WRAPPER.get().unwrap() };
+        let gc_interface = unsafe { &**crate::VM_TO_MMTK_INTERFACE.get().unwrap() };
 
         // if we're collecting, we're handling both new and old pointers, so we just say they're all valid for simplicity.
         if gc_interface.is_currently_collecting() {

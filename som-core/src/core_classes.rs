@@ -49,7 +49,7 @@ pub struct CoreClasses<ClassPtr> {
 
 impl<ClassPtr: Clone> CoreClasses<ClassPtr> {
     /// Loads core classes given a closure that returns a pointer to a class.
-    /// TODO: also take a closure to set_class and set_super_class to do the rest of the hooking up.
+    /// FEAT: also take a closure to set_class and set_super_class to do the rest of the hooking up.
     pub fn from_load_cls_fn<F>(mut load_system_cls: F) -> Self
     where
         F: FnMut(&str, Option<&ClassPtr>) -> ClassPtr,

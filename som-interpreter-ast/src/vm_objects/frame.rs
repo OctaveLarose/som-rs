@@ -74,7 +74,7 @@ impl Frame {
         frame_ptr
     }
 
-    /// TODO: doc, and unify better with other function.
+    /// Same as normal frame allocation function, but for a special case. See function `eval_block_with_frame_no_pop`
     pub fn alloc_new_frame_no_pop(nbr_locals: u8, nbr_args: usize, universe: &mut Universe, value_stack: &mut GlobalValueStack) -> Gc<Self> {
         let frame = Self {
             prev_frame: Gc::default(),
@@ -94,7 +94,9 @@ impl Frame {
                 locals_addr = locals_addr.wrapping_add(1);
             }
 
+            // Only intended difference with normal frame allocation function: borrowing instead of draining.
             let args = value_stack.borrow_n_last(nbr_args);
+
             std::slice::from_raw_parts_mut(frame_args_ptr!(frame_ptr), nbr_args).copy_from_slice(args);
 
             frame_ptr.prev_frame = universe.current_frame.clone();
@@ -164,7 +166,6 @@ impl FrameAccess for Gc<Frame> {
 
     #[inline(always)]
     fn assign_arg(&mut self, idx: u8, value: Value) {
-        // TODO: shouldn't assignments take refs?
         unsafe {
             let arg_ptr = frame_args_ptr!(self).add(idx as usize);
             *arg_ptr = value

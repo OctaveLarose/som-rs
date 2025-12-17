@@ -6,7 +6,7 @@ use crate::gcref::Gc;
 use crate::gcslice::GcSlice;
 use crate::object_model::OBJECT_REF_OFFSET;
 use crate::slot::SOMSlot;
-use crate::{MMTK_SINGLETON, MMTK_TO_VM_INTERFACE, MUTATOR_WRAPPER, SOMVM};
+use crate::{MMTK_SINGLETON, MMTK_TO_VM_INTERFACE, SOMVM, VM_TO_MMTK_INTERFACE};
 use core::mem::size_of;
 use log::debug;
 use mmtk::util::alloc::Allocator;
@@ -36,7 +36,6 @@ static GC_OFFSET: usize = 0;
 static GC_ALIGN: usize = 8;
 // static GC_SEMANTICS: AllocationSemantics = AllocationSemantics::Default;
 
-/// TODO rename, maybe MutatorWrapper
 pub struct GCInterface {
     mutator: Box<Mutator<SOMVM>>,
     #[cfg(feature = "marksweep")]
@@ -114,10 +113,10 @@ impl GCInterface {
             // TODO: which makes me realize that this function's structure is subpar. Why do we return a NEW GCInterface at all, then?
             // The universe should likely use a reference to the OnceCell, or something... That'd be better.
 
-            if MUTATOR_WRAPPER.get().is_none() {
+            if VM_TO_MMTK_INTERFACE.get().is_none() {
                 // very unsafe, very ugly: we duplicate a mutable reference to the GC interface ptr. need to avoid by implementing above idea
                 let dup_ptr = &mut *(gc_interface_ptr as *mut GCInterface);
-                MUTATOR_WRAPPER.set(dup_ptr).unwrap_or_else(|_| panic!("couldn't set mutator wrapper?"));
+                VM_TO_MMTK_INTERFACE.set(dup_ptr).unwrap_or_else(|_| panic!("couldn't set mutator wrapper?"));
             }
 
             if MMTK_TO_VM_INTERFACE.get().is_none() {

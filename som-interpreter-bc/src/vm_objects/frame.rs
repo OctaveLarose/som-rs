@@ -215,9 +215,6 @@ impl Frame {
 
     /// Search for a local binding.
     /// This function, and its friends, is kinda ugly. That's what you get for using self-referential pointers.
-    /// NOTE: fetching locals like this instead of storing a pointer in the frame to locals and arguments respectively, is a very minor slowdown.
-    /// But moving GC and self-referential pointers led to some ugly bugs..
-    /// I think storing self-referential pointers into `UnsafeCell`s might be enough to fix things though - TODO.
     #[inline(always)]
     pub fn lookup_local(&self, idx: usize) -> &Value {
         unsafe {

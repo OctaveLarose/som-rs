@@ -58,7 +58,7 @@ pub enum AstExpression {
     Block(Gc<AstBlock>),
     /// Call to an inlined method node (no dispatching like a message would)
     InlinedCall(Box<InlinedNode>),
-    // TODO: we might want a SEQUENCENODE of some kind. instead of relying on AstBody at all, actually.
+    // FEAT: we might want a SEQUENCENODE of some kind, instead of relying on AstBody. Not sure that'd be beneficial but hey.
 }
 
 #[derive(Debug, Clone, PartialEq)]

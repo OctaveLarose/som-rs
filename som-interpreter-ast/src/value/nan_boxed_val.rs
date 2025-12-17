@@ -191,7 +191,7 @@ impl Value {
             }
             STRING_TAG => self.as_string::<Gc<String>>().unwrap().to_string(),
             ARRAY_TAG => {
-                // TODO: I think we can do better here (less allocations).
+                // Original ToDo comment from Nicolas: I think we can do better here (less allocations).
                 let strings: Vec<String> = self.as_array().unwrap().iter().map(|value| value.to_string(universe)).collect();
                 format!("#({})", strings.join(" "))
             }

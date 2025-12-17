@@ -1,4 +1,4 @@
-use crate::{mmtk, MUTATOR_WRAPPER, SOMVM};
+use crate::{mmtk, SOMVM, VM_TO_MMTK_INTERFACE};
 use mmtk::util::opaque_pointer::*;
 use mmtk::util::Address;
 use mmtk::util::VMWorkerThread;
@@ -15,19 +15,19 @@ impl Collection<SOMVM> for VMCollection {
         F: FnMut(&'static mut Mutator<SOMVM>),
     {
         unsafe {
-            (**(MUTATOR_WRAPPER.get_mut().unwrap())).stop_all_mutators(mutator_visitor);
+            (**(VM_TO_MMTK_INTERFACE.get_mut().unwrap())).stop_all_mutators(mutator_visitor);
         }
     }
 
     fn resume_mutators(_tls: VMWorkerThread) {
         unsafe {
-            (**(MUTATOR_WRAPPER.get_mut().unwrap())).resume_mutators();
+            (**(VM_TO_MMTK_INTERFACE.get_mut().unwrap())).resume_mutators();
         }
     }
 
     fn block_for_gc(tls: VMMutatorThread) {
         unsafe {
-            (**(MUTATOR_WRAPPER.get_mut().unwrap())).block_for_gc(tls);
+            (**(VM_TO_MMTK_INTERFACE.get_mut().unwrap())).block_for_gc(tls);
         }
     }
 

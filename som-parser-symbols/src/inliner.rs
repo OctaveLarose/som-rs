@@ -110,7 +110,8 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
 
     fn try_inline_if_true_if_false(&mut self, mut msg: ast::RegularMessage, expected_bool: bool) -> Message {
         // With a special case for the Fibonacci benchmark.
-        // This code could easily be made more generalized/modular, have some blocks/expressions be considered "inlinable", but this special-casing is less dev time... TODO, generalize a bit.
+        // This code could easily be made more generalized/modular, have some blocks/expressions be considered "inlinable", but this special-casing is less dev time...
+        // FEAT: actually generalize that code, which feels like a rabbit hole.
         let (body_blk_1, body_blk_2) = {
             let (left, right) = msg.values.split_at_mut(1); // NOTE: I wanna use `get_disjoint_mut` instead but that's only for more recent Rust versions.
 

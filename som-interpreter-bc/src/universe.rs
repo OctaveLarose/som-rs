@@ -1,5 +1,5 @@
 use crate::compiler::compile::compile_class;
-use crate::gc::{get_callbacks_for_gc, VecValue};
+use crate::gc::VecValue;
 use crate::interpreter::Interpreter;
 use crate::value::Value;
 use crate::vm_objects::block::Block;
@@ -48,15 +48,14 @@ impl Universe {
         let mut interner = Interner::with_capacity(200);
         let mut globals = vec![];
 
-        let gc_interface = GCInterface::init(heap_size, get_callbacks_for_gc());
+        let gc_interface = GCInterface::init(heap_size, crate::gc::get_callbacks_for_gc());
 
-        // TODO: really, we should take and set the superclass, like the AST does.
         let mut core: CoreClasses<Gc<Class>> = CoreClasses::from_load_cls_fn(|name: &str, _super_cls: Option<&Gc<Class>>| {
             Self::load_system_class(&mut interner, classpath.as_slice(), name, gc_interface).unwrap()
         });
 
-        core.object_class.class().set_class(&core.metaclass_class);
         core.object_class.class().set_super_class(&core.class_class);
+        core.object_class.class().set_class(&core.metaclass_class);
         set_super_class(&mut core.class_class, &core.object_class, &core.metaclass_class);
         set_super_class(&mut core.metaclass_class.clone(), &core.class_class, &core.metaclass_class);
         set_super_class(&mut core.nil_class, &core.object_class, &core.metaclass_class);
@@ -84,8 +83,7 @@ impl Universe {
         globals.push((interner.intern("false"), Value::Boolean(false)));
         globals.push((interner.intern("nil"), Value::NIL));
 
-        // NB: allocating Instances usually requires making space for the fields. But System has none so it's ok.
-        // TODO make that clearer by making instances only creatable from a method of theirs that always initializes the fields
+        // NB: allocating Instances usually requires manually specifying extra space for the fields, but System has none so the following code is fine.
         let system_instance = Value::Instance(gc_interface.alloc(Instance::from_class(core.system_class()), AllocSiteMarker::Instance));
 
         globals.push((interner.intern("system"), system_instance));

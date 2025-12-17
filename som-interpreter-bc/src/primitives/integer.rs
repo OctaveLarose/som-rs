@@ -500,7 +500,7 @@ fn shift_left(interp: &mut Interpreter, universe: &mut Universe) -> Result<Value
 
     // SOM's test suite are (loosely) checking that bit-shifting operations are:
     // - logical shifts rather than arithmetic shifts
-    // - performed using 32-bit integers TODO in nicolas' code, but not right now
+    // - performed using 32-bit integers (TODO: in nicolas' code, but not right now)
     //
     // Since our unboxed integers are signed 32-bit integers (`i64`), we need to:
     // - perform integer promotion to an unsigned 64-bit integer (`u64`)

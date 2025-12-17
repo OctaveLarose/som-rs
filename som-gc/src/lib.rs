@@ -58,5 +58,5 @@ fn mmtk() -> &'static MMTK<SOMVM> {
     MMTK_SINGLETON.get().unwrap()
 }
 
-pub(crate) static mut MUTATOR_WRAPPER: OnceLock<&mut GCInterface> = OnceLock::new();
+pub(crate) static mut VM_TO_MMTK_INTERFACE: OnceLock<&mut GCInterface> = OnceLock::new();
 pub(crate) static MMTK_TO_VM_INTERFACE: OnceLock<MMTKtoVMCallbacks> = OnceLock::new();

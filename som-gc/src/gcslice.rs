@@ -6,12 +6,9 @@ use mmtk::util::Address;
 /// Special GC ref that stores a list.
 /// It's really just a `Vec<T>` replacement (though immutable), where Rust manages none of the memory itself.
 /// Used because finalization might be a slowdown if we stored references to `Vec`s on the heap?
-///
-/// TODO: there should be NO NEED for a PhantomPinned field since Gc<T> is already !Unpin.
-/// But I'm paranoid. Will remove later when VM fully sound, it's zero cost anyway.
 pub struct GcSlice<T> {
     pub ptr: Gc<T>,
-    _phantom: PhantomPinned,
+    _phantom: PhantomPinned, // NB: not sure that's needed at all since Gc<T> is already !Unpin.
 }
 
 impl<T> Clone for GcSlice<T> {

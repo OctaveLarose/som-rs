@@ -58,7 +58,8 @@ pub(crate) trait InnerGenCtxt: GenCtxt {
 }
 
 /// Calculates the maximum stack size possible. For each frame, this allows us to allocate a stack of precisely the maximum possible size it needs.
-/// TODO opt: it's possible our estimate is overly conservative. Reducing the max stack size reduces time spent allocating, and could maybe be a worthwhile optimization.
+/// FEAT: it's possible our estimate is overly conservative. Reducing the max stack size reduces time spent allocating, and could maybe be a worthwhile optimization.
+/// TODO: at least, there should be a few tests down there in this file checking it.
 pub(crate) fn get_max_stack_size(body: &[Bytecode], interner: &Interner) -> u8 {
     let mut abstract_stack_size = 0;
     let mut max_stack_size_observed: u8 = 0;
