@@ -225,7 +225,6 @@ impl Universe {
     /// Call `doesNotUnderstand:` on the given value, if it is defined.
     #[allow(unreachable_code, unused_variables)]
     pub fn does_not_understand(&mut self, interpreter: &mut Interpreter, value: Value, symbol: Interned, args: Vec<Value>) -> Option<()> {
-        // dbg!(&interpreter.stack);
         // panic!("does not understand: {:?}, called on {:?}", self.interner.lookup(symbol), &value);
 
         let method_name = self.intern_symbol("doesNotUnderstand:arguments:");
@@ -257,7 +256,6 @@ impl Universe {
         let method = value.lookup_method(self, method_name)?;
 
         interpreter.get_current_frame().bytecode_idx = interpreter.bytecode_idx;
-        //eprintln!("--- Invoking {:?}", &method.signature());
         interpreter.push_method_frame_with_args(method, vec![value, Value::Symbol(name)], self.gc_interface);
 
         Some(())

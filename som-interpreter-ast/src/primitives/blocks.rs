@@ -22,10 +22,7 @@ pub mod block1 {
     }
 
     fn restart(_: Value) -> Result<Return, Error> {
-        #[cfg(feature = "inlining-disabled")]
-        return Ok(Return::Restart);
-        #[cfg(not(feature = "inlining-disabled"))]
-        panic!("calling restart even though inlining is enabled. we don't support this")
+        Ok(Return::Restart)
     }
 
     /// Search for an instance primitive matching the given signature.

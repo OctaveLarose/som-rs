@@ -391,7 +391,6 @@ impl Universe {
         let unknown_global_result = method.invoke(self, value_stack, 2);
         match unknown_global_result {
             Return::Local(value) | Return::NonLocal(value, _) => Some(Return::Local(value)),
-            #[cfg(feature = "inlining-disabled")]
             Return::Restart => panic!("(from 'System>>#unknownGlobal:') incorrectly asked for a restart"),
         }
     }

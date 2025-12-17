@@ -37,9 +37,6 @@ fn main() -> anyhow::Result<()> {
 fn run() -> anyhow::Result<()> {
     let opts: CLIOptions = CLIOptions::parse();
 
-    //dbg!(size_of::<Method>());
-    //std::process::exit(0);
-
     if opts.disassemble {
         return disassemble_class(opts);
     }

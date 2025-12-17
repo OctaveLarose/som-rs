@@ -255,10 +255,10 @@ unsafe fn visit_value<'a>(val: &Value, slot_visitor: &'a mut (dyn SlotVisitor<SO
         if let Some(slice) = val.as_array() {
             // large object storage means no copying needed, but we still check the values stored
             // if slice.get_true_size() >= 65535 {
-                for val in slice.iter() {
-                    visit_value(val, slot_visitor)
-                }
-                // return;
+            for val in slice.iter() {
+                visit_value(val, slot_visitor)
+            }
+            // return;
             // }
         }
         slot_visitor.visit_slot(SOMSlot::from(val.as_mut_ptr()))
@@ -273,10 +273,10 @@ unsafe fn visit_value_maybe_process(val: &Value, to_process: &mut Vec<SOMSlot>) 
         if let Some(slice) = val.as_array() {
             // large object storage means no copying needed, but we still check the values stored
             // if slice.get_true_size() >= 65535 {
-                for val2 in slice.iter() {
-                    visit_value_maybe_process(val2, to_process);
-                }
-                // return;
+            for val2 in slice.iter() {
+                visit_value_maybe_process(val2, to_process);
+            }
+            // return;
             // }
         }
         to_process.push(SOMSlot::from(val.as_mut_ptr()))

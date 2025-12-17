@@ -338,23 +338,18 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                 Some(FoundVar::Field(idx)) => AstExpression::FieldRead(idx),
                 None => self.global_read(global_name),
             },
-            Expression::Write(global_name, expr) => {
-                // if global_name == "tmp" {
-                //     dbg!("bp");
-                // }
-                match self.find_var(&global_name) {
-                    Some(FoundVar::Local(scope, idx)) => match scope {
-                        0 => {
-                            let local_write_expr = AstExpression::LocalVarWrite(idx, Box::new(self.parse_expression(expr.as_ref())));
-                            self.maybe_make_inc_or_dec(&local_write_expr).unwrap_or(local_write_expr)
-                        }
-                        _ => AstExpression::NonLocalVarWrite(scope, idx, Box::new(self.parse_expression(expr.as_ref()))),
-                    },
-                    Some(FoundVar::Argument(scope, idx)) => AstExpression::ArgWrite(scope, idx, Box::new(self.parse_expression(expr.as_ref()))),
-                    Some(FoundVar::Field(idx)) => AstExpression::FieldWrite(idx, Box::new(self.parse_expression(expr.as_ref()))),
-                    _ => self.resolve_global_write(&global_name, &expr),
-                }
-            }
+            Expression::Write(global_name, expr) => match self.find_var(&global_name) {
+                Some(FoundVar::Local(scope, idx)) => match scope {
+                    0 => {
+                        let local_write_expr = AstExpression::LocalVarWrite(idx, Box::new(self.parse_expression(expr.as_ref())));
+                        self.maybe_make_inc_or_dec(&local_write_expr).unwrap_or(local_write_expr)
+                    }
+                    _ => AstExpression::NonLocalVarWrite(scope, idx, Box::new(self.parse_expression(expr.as_ref()))),
+                },
+                Some(FoundVar::Argument(scope, idx)) => AstExpression::ArgWrite(scope, idx, Box::new(self.parse_expression(expr.as_ref()))),
+                Some(FoundVar::Field(idx)) => AstExpression::FieldWrite(idx, Box::new(self.parse_expression(expr.as_ref()))),
+                _ => self.resolve_global_write(&global_name, &expr),
+            },
             Expression::Message(msg) => self.parse_message(msg.as_ref()),
             Expression::Exit(expr) => {
                 let scope = self.scopes.len() - 1;

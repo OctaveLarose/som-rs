@@ -73,8 +73,7 @@ pub fn interactive(universe: &mut Universe, verbose: bool) -> Result<(), Error> 
             match method.invoke(universe, &mut value_stack, 2) {
                 Return::Local(v) => v,
                 Return::NonLocal(v, _) => v,
-                #[cfg(feature = "inlining-disabled")]
-                Return::Restart => todo!(),
+                Return::Restart => panic!("restart called in shell. What is the intended behavior here?"),
             }
         };
 

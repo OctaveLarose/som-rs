@@ -14,9 +14,7 @@ pub struct TrivialLiteralMethod {
 impl TrivialLiteralMethod {
     pub fn invoke(&self, universe: &mut Universe, interpreter: &mut Interpreter) {
         let value_from_literal = value_from_literal(&self.literal, universe.gc_interface);
-        // dbg!(&value_from_literal);
         interpreter.get_current_frame().stack_push(value_from_literal);
-        // dbg!(interpreter.current_frame);
     }
 }
 

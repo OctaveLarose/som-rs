@@ -1021,7 +1021,6 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
             args
         },
         locals: defn.locals.iter().cloned().collect(),
-        // dbg_info: defn.dbg_info,
         literals: IndexSet::new(),
         body: None,
         #[cfg(feature = "frame-debug-info")]

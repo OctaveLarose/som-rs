@@ -14,7 +14,6 @@ pub enum Return {
     /// A non-local return, the value is for the parent of the referenced stack frame.
     /// Not well named: as opposed to in our other interpreters, here NonLocal means "any return that exits the scope", so it can be a regular, "local" return (by going back one frame).
     NonLocal(Value, Gc<Frame>),
-    #[cfg(feature = "inlining-disabled")]
     /// A request to restart execution from the top of the closest body.
     Restart,
 }

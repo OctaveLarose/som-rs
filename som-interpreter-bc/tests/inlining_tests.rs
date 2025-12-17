@@ -213,7 +213,6 @@ fn or_and_no_block_inlining_ok() {
     ";
 
     let bytecodes = get_bytecodes_from_method(class_txt, "run");
-    dbg!(&bytecodes);
     expect_bytecode_sequence(
         &bytecodes,
         &[PushGlobal(0), JumpOnTruePop(3), PushGlobal(1), Jump(2), PushGlobal(0), ReturnLocal],

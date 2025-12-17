@@ -161,17 +161,6 @@ impl Invoke for Gc<Method> {
                     interpreter.get_current_frame().stack_push(arg)
                 }
                 func(interpreter, universe, nbr_args).unwrap_or_else(|_| panic!("invoking func {} failed", &self.signature()));
-
-                // let ret = interpreter.current_frame.stack_pop();
-                // for _ in 0..(nbr_args + 1) {
-                //     interpreter.current_frame.stack_pop();
-                // }
-                // interpreter.current_frame.stack_push(ret);
-
-                // dbg!(&interpreter.current_frame.stack_last());
-                // dbg!(&interpreter.current_frame.stack_nth_back(1));
-                // dbg!(&interpreter.current_frame.stack_nth_back(2));
-                // dbg!(&interpreter.current_frame.stack_nth_back(3));
             }
             Method::TrivialGlobal(met, _) => met.invoke(universe, interpreter),
             Method::TrivialLiteral(met, _) => met.invoke(universe, interpreter),

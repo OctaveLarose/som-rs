@@ -442,12 +442,8 @@ impl SOMAllocator for GCInterface {
         // Release builds must not assume this value is unchanging: it can, that's the point of the check later on.
         std::hint::black_box(&self.start_the_world_count);
 
-        //dbg!(&size);
         let addr = unsafe { &mut (*self.default_allocator) }.alloc(size, GC_ALIGN, GC_OFFSET);
         std::sync::atomic::fence(std::sync::atomic::Ordering::Release);
-
-        //dbg!(&addr);
-        //dbg!("");
 
         #[cfg(debug_assertions)]
         if self.start_the_world_count > _gc_watcher {
@@ -501,15 +497,15 @@ impl SOMAllocator for GCInterface {
 
         size += std::mem::size_of::<usize>(); // size stored at the start
 
-        // slices can be big enough to warrant using large object storage.
-        let header_addr = {
-            match size <= crate::mmtk().get_plan().constraints().max_non_los_default_alloc_bytes {
-                _ => self.request_bytes(size + OBJECT_REF_OFFSET, alloc_origin_marker),
-                // false => self.request_bytes_los(size + OBJECT_REF_OFFSET, alloc_origin_marker),
-            }
-        };
+        // when LOS is enabled, slices can be big enough to warrant using large object storage.
+        //let header_addr = {
+        //    match size <= crate::mmtk().get_plan().constraints().max_non_los_default_alloc_bytes {
+        //        true => self.request_bytes(size + OBJECT_REF_OFFSET, alloc_origin_marker),
+        //        false => self.request_bytes_los(size + OBJECT_REF_OFFSET, alloc_origin_marker),
+        //    }
+        //};
 
-        header_addr
+        self.request_bytes(size + OBJECT_REF_OFFSET, alloc_origin_marker)
     }
 }
 

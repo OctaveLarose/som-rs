@@ -201,10 +201,8 @@ impl AstDispatchNode {
                 debug_assert_valid_semispace_ptr!(method);
 
                 if *cached_rcvr_ptr == receiver.class(universe) {
-                    // dbg!("cache hit");
                     return method.invoke(universe, value_stack, nbr_args);
                 } else {
-                    // dbg!("cache miss");
                     receiver.lookup_method(universe, self.signature)
                 }
             }
@@ -339,21 +337,6 @@ impl Evaluate for AstMethodDef {
         // Not sure how to better solve that one, to be honest.
         let current_frame = unsafe { &*(&universe.current_frame as *const Gc<Frame>) };
 
-        #[cfg(not(feature = "inlining-disabled"))]
-        match self.body.evaluate(universe, value_stack) {
-            Return::NonLocal(value, frame) => {
-                debug_assert_valid_semispace_ptr!(frame);
-                debug_assert_valid_semispace_ptr!(current_frame);
-                if *current_frame == frame {
-                    Return::Local(value)
-                } else {
-                    Return::NonLocal(value, frame)
-                }
-            }
-            Return::Local(_) => Return::Local(current_frame.get_self()),
-        }
-
-        #[cfg(feature = "inlining-disabled")]
         loop {
             match self.body.evaluate(universe, value_stack) {
                 Return::NonLocal(value, frame) => {

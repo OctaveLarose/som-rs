@@ -159,9 +159,7 @@ fn time(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Value, 
 
 // this function is unusable after my recent changes to the frame. needs to be fixed when a compilation flag for frame debug info is enabled
 fn print_stack_trace(_: Value) -> Result<bool, Error> {
-    // const SIGNATURE: &str = "System>>#printStackTrace";
-
-    dbg!("printStackTrace is broken (on purpose). It can be fixed and reenabled with a debug flag, though.");
+    eprintln!("printStackTrace is broken (on purpose). It can be fixed and reenabled with a debug flag, though.");
     /*
             for frame in &universe.frames {
             // let class = frame.borrow().get_method_holder(universe);

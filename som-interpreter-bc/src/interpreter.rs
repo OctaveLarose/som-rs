@@ -156,7 +156,6 @@ impl Interpreter {
     }
 
     pub fn pop_frame(&mut self) {
-        // dbg!(self.get_current_frame().prev_frame.ptr);
         let new_current_frame = &self.get_current_frame().prev_frame;
         self.current_frame = UnsafeCell::from(new_current_frame.clone());
         match new_current_frame.is_empty() {
@@ -181,15 +180,8 @@ impl Interpreter {
     pub fn run(&mut self, universe: &mut Universe) -> Option<Value> {
         loop {
             // Actually safe, there's always a reference to the current bytecodes. Need unsafe because we want to store a ref for quick access in perf-critical code
-            let bytecode = *(unsafe { (*self.get_current_frame().get_bytecode_ptr()).get_unchecked(self.bytecode_idx as usize) });
-
-            // unsafe {
-            //     dbg!(&(*self.current_frame.get()).current_context.class(universe).name);
-            // }
+            let bytecode = *(unsafe { self.get_current_frame().get_bytecode_ptr().get_unchecked(self.bytecode_idx as usize) });
             self.bytecode_idx += 1;
-
-            //dbg!(&self.get_current_frame());
-            //dbg!(&bytecode);
 
             // for the optional profiler macros not to be reported as warnings
             #[allow(clippy::let_unit_value)]
@@ -411,11 +403,8 @@ impl Interpreter {
                     };
 
                     let method = {
-                        // let method_with_holder = $frame.borrow().get_holding_method();
                         let holder = self.get_current_frame().get_method_holder();
-                        //dbg!(&holder);
                         let super_class = holder.super_class().unwrap();
-                        //dbg!(&super_class);
                         resolve_method(self.current_frame.get_mut(), &super_class, symbol, self.bytecode_idx)
                     };
                     do_send(self, universe, method, symbol, nb_params);
@@ -657,7 +646,6 @@ impl Interpreter {
                 Method::Primitive(func, _met_info) => {
                     //eprintln!("--- Invoking prim {:?} (in {:?})", &_met_info.signature, &_met_info.holder.name);
 
-                    // dbg!(interpreter.current_frame);
                     func(interpreter, universe, nb_params + 1)
                         .with_context(|| anyhow::anyhow!("error calling primitive `{}`", universe.lookup_symbol(symbol)))
                         .unwrap();
