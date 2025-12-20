@@ -1,9 +1,12 @@
 use crate::ast::AstMethodDef;
+use crate::gc::{visit_expr, visit_literal, visit_value, AstObjMagicId};
 use crate::nodes::trivial_methods::{TrivialGetterMethod, TrivialGlobalMethod, TrivialLiteralMethod, TrivialSetterMethod};
 use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
 use crate::vm_objects::class::Class;
+use som_gc::gc_interface::GcType;
 use som_gc::gcref::Gc;
+use som_gc::slot::SOMSlot;
 use std::fmt::{Debug, Formatter};
 
 /// The kind of a class method.
@@ -93,5 +96,30 @@ impl Method {
     /// Whether this invokable is a primitive.
     pub fn is_primitive(&self) -> bool {
         self.kind.is_primitive()
+    }
+}
+
+impl GcType for Method {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::Method as u8
+    }
+
+    fn scan_object(method: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
+        visit_slot_fn(SOMSlot::from(&method.holder));
+
+        match &method.kind {
+            MethodKind::Defined(method_def) => {
+                for expr in &method_def.body.exprs {
+                    visit_expr(expr, visit_slot_fn)
+                }
+            }
+            MethodKind::TrivialLiteral(trivial_lit) => visit_literal(&trivial_lit.literal, visit_slot_fn),
+            MethodKind::TrivialGlobal(trivial_global) => {
+                if let Some(cached_entry) = trivial_global.global_name.cached_entry.as_ref() {
+                    visit_value(cached_entry, visit_slot_fn)
+                }
+            }
+            MethodKind::Primitive(_) | MethodKind::TrivialGetter(_) | MethodKind::TrivialSetter(_) => {}
+        }
     }
 }

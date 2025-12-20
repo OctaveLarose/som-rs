@@ -85,10 +85,10 @@ pub struct MMTKtoVMCallbacks {
     pub scan_object: fn(ObjectReference, &mut dyn SlotVisitor<SOMSlot>),
     /// Get the VM roots.
     pub get_roots_in_mutator_thread: fn(&mut Mutator<SOMVM>) -> Vec<SOMSlot>,
-    /// Adapt an object after being copied elsewhere (not really at the moment needed except in one case)
-    pub adapt_post_copy: fn(ObjectReference, ObjectReference),
     /// Get the size of the object. Needed when copying it
     pub get_object_size: fn(ObjectReference) -> usize,
+    // /// Adapt an object after being copied elsewhere (no longer needed at the moment)
+    //pub adapt_post_copy: fn(ObjectReference, ObjectReference),
 }
 
 impl GCInterface {
@@ -309,7 +309,7 @@ impl<T> SliceConstraint for T where T: SupportedSliceType + std::fmt::Debug {}
 pub trait SOMAllocator {
     fn request_memory_for_type<T>(&mut self, type_size: usize, alloc_origin_marker: AllocSiteMarker) -> Gc<T>
     where
-        T: HasTypeInfoForGC;
+        T: GcType;
     fn request_bytes(&mut self, size: usize, _alloc_origin_marker: AllocSiteMarker) -> Address;
     fn request_memory_for_slice_type(&mut self, slice_size: usize, alloc_origin_marker: AllocSiteMarker) -> Address;
     fn request_bytes_los(&mut self, size: usize, _alloc_origin_marker: AllocSiteMarker) -> Address;
@@ -317,10 +317,10 @@ pub trait SOMAllocator {
     // #[deprecated(note="use alloc_with_marker instead")]
     fn alloc<T>(&mut self, obj: T, alloc_origin_marker: AllocSiteMarker) -> Gc<T>
     where
-        T: HasTypeInfoForGC;
+        T: GcType;
     fn alloc_with_size<T>(&mut self, obj: T, size: usize, alloc_origin_marker: AllocSiteMarker) -> Gc<T>
     where
-        T: HasTypeInfoForGC;
+        T: GcType;
 
     // Methods for allocating slices.
     fn alloc_safe_slice<T>(&mut self, obj: &[T], alloc_origin_marker: AllocSiteMarker) -> GcSlice<T>
@@ -339,12 +339,12 @@ pub trait SOMAllocator {
 impl SOMAllocator for GCInterface {
     /// Allocates a type on the heap and returns a pointer to it.
     /// Considers that the provided object's size can be trivially inferred with a `size_of` call (which isn't the case for all of our objects, e.g. frames)
-    fn alloc<T: HasTypeInfoForGC>(&mut self, obj: T, alloc_origin_marker: AllocSiteMarker) -> Gc<T> {
+    fn alloc<T: GcType>(&mut self, obj: T, alloc_origin_marker: AllocSiteMarker) -> Gc<T> {
         self.alloc_with_size(obj, size_of::<T>(), alloc_origin_marker)
     }
 
     /// Allocates a type, but with a given size.
-    fn alloc_with_size<T: HasTypeInfoForGC>(&mut self, obj: T, size: usize, alloc_origin_marker: AllocSiteMarker) -> Gc<T> {
+    fn alloc_with_size<T: GcType>(&mut self, obj: T, size: usize, alloc_origin_marker: AllocSiteMarker) -> Gc<T> {
         debug_assert!(size >= MIN_OBJECT_SIZE);
 
         // adding VM header size (type info) to amount we allocate
@@ -467,7 +467,7 @@ impl SOMAllocator for GCInterface {
     /// Requests memory for a type T, given the size of the type, and returns a pointer to a newly allocated T.
     /// FEAT: should perhaps deduce the size from the type, but some types lie about their real size (e.g. Frames). Though perhaps
     /// there's a way to use Sized here, and make frames be !Sized.
-    fn request_memory_for_type<T: HasTypeInfoForGC>(&mut self, type_size: usize, alloc_origin_marker: AllocSiteMarker) -> Gc<T> {
+    fn request_memory_for_type<T: GcType>(&mut self, type_size: usize, alloc_origin_marker: AllocSiteMarker) -> Gc<T> {
         let mut bytes = self.request_bytes(type_size + OBJECT_REF_OFFSET, alloc_origin_marker);
         unsafe {
             *bytes.as_mut_ref::<u8>() = T::get_magic_gc_id();
@@ -503,22 +503,30 @@ impl SOMAllocator for GCInterface {
 
 /// Implements a per-type magic number.
 /// GC needs to access type info from raw ObjectReference types, so data that gets put on the GC heap has an associated type ID that gets put in a per-allocation header.
-pub trait HasTypeInfoForGC {
+pub trait GcType
+where
+    Self: Sized,
+{
     fn get_magic_gc_id() -> u8;
+    fn scan_object(_self: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot));
 }
 
 pub const STRING_MAGIC_ID: u8 = 10;
 pub const BIGINT_MAGIC_ID: u8 = 11;
 
-impl HasTypeInfoForGC for String {
+impl GcType for String {
     fn get_magic_gc_id() -> u8 {
         STRING_MAGIC_ID
     }
+
+    fn scan_object(_self: Gc<Self>, _visit_slot_fn: &mut dyn FnMut(SOMSlot)) {}
 }
-impl HasTypeInfoForGC for BigInt {
+impl GcType for BigInt {
     fn get_magic_gc_id() -> u8 {
         BIGINT_MAGIC_ID
     }
+
+    fn scan_object(_self: Gc<Self>, _scan_fn: &mut dyn FnMut(SOMSlot)) {}
 }
 
 //impl<T> HasTypeInfoForGC for GCSlice<T> {
@@ -528,11 +536,17 @@ impl HasTypeInfoForGC for BigInt {
 //}
 
 pub trait SupportedSliceType {
-    fn get_magic_gc_slice_id() -> u8;
+    fn get_magic_gc_slice_id() -> u8
+    where
+        Self: Sized;
 }
 
-impl<T: SupportedSliceType> HasTypeInfoForGC for GcSlice<T> {
+impl<T: SupportedSliceType> GcType for GcSlice<T> {
     fn get_magic_gc_id() -> u8 {
         T::get_magic_gc_slice_id()
+    }
+
+    fn scan_object(_self: Gc<Self>, _scan_fn: &mut dyn FnMut(SOMSlot)) {
+        todo!()
     }
 }

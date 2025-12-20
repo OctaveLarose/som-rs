@@ -1,14 +1,16 @@
 use std::{fmt, vec};
 
 use crate::compiler::AstMethodCompilerCtxt;
+use crate::gc::{visit_value, AstObjMagicId};
 use crate::primitives;
 use crate::value::Value;
 use crate::vm_objects::method::{Method, MethodKind};
 use indexmap::IndexMap;
 use som_core::ast::ClassDef;
 use som_core::interner::Interner;
-use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
+use som_gc::gc_interface::{AllocSiteMarker, GCInterface, GcType, SOMAllocator};
 use som_gc::gcref::Gc;
+use som_gc::slot::SOMSlot;
 use som_value::interned::Interned;
 
 // /// A reference that may be either weak or owned/strong.
@@ -259,5 +261,27 @@ impl fmt::Debug for Class {
             // .field("class", &self.class)
             // .field("super_class", &self.super_class)
             .finish()
+    }
+}
+
+impl GcType for Class {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::Class as u8
+    }
+
+    fn scan_object(class: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
+        visit_slot_fn(SOMSlot::from(&class.class));
+
+        if let Some(scls) = class.super_class.as_ref() {
+            visit_slot_fn(SOMSlot::from(scls));
+        }
+
+        for (_, method_ref) in class.methods.iter() {
+            visit_slot_fn(SOMSlot::from(method_ref))
+        }
+
+        for field_ref in class.fields.iter() {
+            visit_value(field_ref, visit_slot_fn)
+        }
     }
 }

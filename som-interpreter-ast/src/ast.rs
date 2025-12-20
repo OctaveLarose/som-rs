@@ -1,3 +1,4 @@
+use crate::gc::{visit_expr, AstObjMagicId};
 use crate::nodes::global_read::GlobalNode;
 use crate::nodes::inlined::and_inlined_node::AndInlinedNode;
 use crate::nodes::inlined::if_inlined_node::IfInlinedNode;
@@ -11,8 +12,10 @@ use crate::vm_objects::class::Class;
 use crate::vm_objects::method::Method;
 use indenter::indented;
 use num_bigint::BigInt;
+use som_gc::gc_interface::GcType;
 use som_gc::gcref::Gc;
 use som_gc::gcslice::GcSlice;
+use som_gc::slot::SOMSlot;
 use som_value::interned::Interned;
 use std::fmt::Write;
 use std::fmt::{Debug, Display, Formatter};
@@ -141,6 +144,18 @@ pub struct AstMethodDef {
     pub locals_nbr: u8,
 }
 
+// ---- GC stuff ----
+impl GcType for AstBlock {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::AstBlock as u8
+    }
+
+    fn scan_object(ast_block: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
+        for expr in &ast_block.body.exprs {
+            visit_expr(expr, visit_slot_fn)
+        }
+    }
+}
 // ----------------
 
 impl Display for AstMethodDef {
@@ -170,7 +185,7 @@ impl Display for AstBlock {
     }
 }
 
-// probably not using the indenter lib as one should? though it works. I've given it as little effort as possible.
+// probably not using the indenter lib as one should? though it works. I've not given it much effort
 impl Display for AstExpression {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

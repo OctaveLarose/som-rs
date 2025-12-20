@@ -1,12 +1,14 @@
 use crate::compiler::Literal;
+use crate::gc::{visit_value, BCObjMagicId};
 use crate::value::Value;
 use crate::vm_objects::block::{Block, CacheEntry};
 use crate::vm_objects::class::Class;
 use crate::vm_objects::method::Method;
 use core::mem::size_of;
 use som_core::bytecode::Bytecode;
-use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
+use som_gc::gc_interface::{AllocSiteMarker, GCInterface, GcType, SOMAllocator};
 use som_gc::gcref::Gc;
+use som_gc::slot::SOMSlot;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::ops::DerefMut;
@@ -414,5 +416,34 @@ impl Debug for Frame {
             })
             .field("stack", &stack_printer(self))
             .finish()
+    }
+}
+
+impl GcType for Frame {
+    fn get_magic_gc_id() -> u8 {
+        BCObjMagicId::Frame as u8
+    }
+
+    fn scan_object(frame: Gc<Self>, visit_fn: &mut dyn FnMut(SOMSlot)) {
+        if !frame.prev_frame.is_empty() {
+            visit_fn(SOMSlot::from(&frame.prev_frame));
+        }
+
+        visit_fn(SOMSlot::from(&frame.current_context));
+
+        for i in 0..frame.get_nbr_locals() {
+            let val: &Value = frame.lookup_local(i as usize);
+            visit_value(val, visit_fn)
+        }
+
+        for i in 0..frame.get_nbr_args() {
+            let val: &Value = frame.lookup_argument(i as usize);
+            visit_value(val, visit_fn)
+        }
+
+        let stack_iter = FrameStackIter::from(&*frame);
+        for stack_item in stack_iter.into_iter() {
+            visit_value(stack_item, visit_fn);
+        }
     }
 }

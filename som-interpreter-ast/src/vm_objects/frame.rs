@@ -1,10 +1,12 @@
+use crate::gc::{visit_value, AstObjMagicId};
 use crate::universe::{GlobalValueStack, Universe};
 use crate::value::Value;
 use core::mem::size_of;
 #[cfg(debug_assertions)]
 use som_gc::debug_assert_valid_semispace_ptr;
-use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
+use som_gc::gc_interface::{AllocSiteMarker, GcType, SOMAllocator};
 use som_gc::gcref::Gc;
+use som_gc::slot::SOMSlot;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 
@@ -225,5 +227,27 @@ impl FrameAccess for Gc<Frame> {
 impl Debug for Frame {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Frame").field("nbr_args", &self.nbr_args).field("nbr_locals", &self.nbr_locals).finish()
+    }
+}
+
+impl GcType for Frame {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::Frame as u8
+    }
+
+    fn scan_object(frame: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
+        if !frame.prev_frame.is_empty() {
+            visit_slot_fn(SOMSlot::from(&frame.prev_frame));
+        }
+
+        for i in 0..frame.nbr_locals {
+            let val: &Value = frame.lookup_local(i);
+            visit_value(val, visit_slot_fn)
+        }
+
+        for i in 0..frame.nbr_args {
+            let val: &Value = frame.lookup_argument(i);
+            visit_value(val, visit_slot_fn)
+        }
     }
 }

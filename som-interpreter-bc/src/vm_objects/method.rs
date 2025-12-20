@@ -1,8 +1,11 @@
 use som_core::bytecode::Bytecode;
+use som_gc::gc_interface::GcType;
+use som_gc::slot::SOMSlot;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 
 use crate::compiler::Literal;
+use crate::gc::{visit_literal, visit_value, BCObjMagicId};
 use crate::interpreter::Interpreter;
 use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
@@ -13,6 +16,8 @@ use som_gc::gcref::Gc;
 
 use crate::vm_objects::block::BodyInlineCache;
 use crate::vm_objects::trivial_methods::{TrivialGetterMethod, TrivialGlobalMethod, TrivialLiteralMethod, TrivialSetterMethod};
+
+use super::block::CacheEntry;
 
 /// The minimum for every kind of method: a signature and a holder.
 #[derive(Debug, Clone)]
@@ -166,6 +171,46 @@ impl Invoke for Gc<Method> {
             Method::TrivialLiteral(met, _) => met.invoke(universe, interpreter),
             Method::TrivialGetter(met, _) => met.invoke(universe, interpreter),
             Method::TrivialSetter(met, _) => met.invoke(universe, interpreter),
+        }
+    }
+}
+
+impl GcType for Method {
+    fn get_magic_gc_id() -> u8 {
+        BCObjMagicId::Method as u8
+    }
+
+    fn scan_object(method: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
+        match &*method {
+            Method::Defined(method) => {
+                visit_slot_fn(SOMSlot::from(&method.base_method_info.holder));
+
+                for cache_entry in method.inline_cache.iter().flatten() {
+                    match cache_entry {
+                        CacheEntry::Send(cls_ptr, method_ptr) => {
+                            visit_slot_fn(SOMSlot::from(cls_ptr));
+                            visit_slot_fn(SOMSlot::from(method_ptr));
+                        }
+                        CacheEntry::Global(val) => {
+                            visit_value(val, visit_slot_fn);
+                        }
+                    }
+                }
+
+                for lit in &method.literals {
+                    visit_literal(lit, visit_slot_fn)
+                }
+            }
+            Method::Primitive(_, met_info)
+            | Method::TrivialGlobal(_, met_info)
+            | Method::TrivialGetter(_, met_info)
+            | Method::TrivialSetter(_, met_info) => {
+                visit_slot_fn(SOMSlot::from(&met_info.holder));
+            }
+            Method::TrivialLiteral(trivial_lit, met_info) => {
+                visit_literal(&trivial_lit.literal, visit_slot_fn);
+                visit_slot_fn(SOMSlot::from(&met_info.holder));
+            }
         }
     }
 }

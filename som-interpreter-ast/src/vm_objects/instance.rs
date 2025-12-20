@@ -1,6 +1,9 @@
+use crate::gc::{visit_value, AstObjMagicId};
 use crate::value::Value;
 use crate::vm_objects::class::Class;
+use som_gc::gc_interface::GcType;
 use som_gc::gcref::Gc;
+use som_gc::slot::SOMSlot;
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -65,5 +68,20 @@ impl fmt::Debug for Instance {
             //.field("fields", &self.fields.len())
             .field("methods", &self.class().methods.len())
             .finish()
+    }
+}
+
+impl GcType for Instance {
+    fn get_magic_gc_id() -> u8 {
+        AstObjMagicId::Instance as u8
+    }
+
+    fn scan_object(instance: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
+        visit_slot_fn(SOMSlot::from(&instance.class));
+
+        for i in 0..instance.class().get_nbr_fields() {
+            let val: &Value = Instance::lookup_field(&instance, i as u8);
+            visit_value(val, visit_slot_fn)
+        }
     }
 }
