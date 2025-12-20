@@ -17,7 +17,7 @@ pub mod block1 {
     pub static CLASS_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| Box::new([]));
 
     fn value(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
-        interpreter.push_block_frame(1, universe.gc_interface);
+        interpreter.push_block_frame(1, &mut universe.gc_interface);
         Ok(())
     }
 
@@ -47,7 +47,7 @@ pub mod block2 {
     pub static CLASS_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| Box::new([]));
 
     fn value(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
-        interpreter.push_block_frame(2, universe.gc_interface);
+        interpreter.push_block_frame(2, &mut universe.gc_interface);
         Ok(())
     }
 
@@ -70,7 +70,7 @@ pub mod block3 {
     pub static CLASS_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| Box::new([]));
 
     fn value_with(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
-        interpreter.push_block_frame(3, universe.gc_interface);
+        interpreter.push_block_frame(3, &mut universe.gc_interface);
         Ok(())
     }
 

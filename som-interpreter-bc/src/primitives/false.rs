@@ -35,7 +35,7 @@ fn or_and_if_false(interpreter: &mut Interpreter, universe: &mut Universe) -> Re
 
     if cond_val.as_block().is_some() {
         // if it's a block: we execute "other" by creating a new frame.
-        interpreter.push_block_frame(1, universe.gc_interface);
+        interpreter.push_block_frame(1, &mut universe.gc_interface);
         interpreter.get_current_frame().prev_frame.remove_n_last_elements(1); // the "False". the "Block" was already consumed and put into the new frame
     } else {
         // if it's not a block... we remove the arguments off the stack, and add the result back to

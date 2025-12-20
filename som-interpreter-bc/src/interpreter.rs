@@ -322,7 +322,7 @@ impl Interpreter {
                     let _timing = profiler_maybe_start!("PUSH_CONSTANT");
                     let current_frame = self.get_current_frame();
                     let literal = current_frame.lookup_constant(idx as usize);
-                    let value = value_from_literal(literal, universe.gc_interface);
+                    let value = value_from_literal(literal, &mut universe.gc_interface);
                     self.get_current_frame().stack_push(value);
                     profiler_maybe_stop!(_timing);
                 }
@@ -648,7 +648,7 @@ impl Interpreter {
                     //let name = &method.holder().name.clone();
                     //eprintln!("--- Invoking {:?} (in {:?})", &method.signature(), &name);
                     //eprintln!("--- Invoking {:?}", &method.signature());
-                    interpreter.push_method_frame(method, nb_params + 1, universe.gc_interface);
+                    interpreter.push_method_frame(method, nb_params + 1, &mut universe.gc_interface);
                 }
                 Method::Primitive(func, _met_info) => {
                     //eprintln!("--- Invoking prim {:?} (in {:?})", &_met_info.signature, &_met_info.holder.name);

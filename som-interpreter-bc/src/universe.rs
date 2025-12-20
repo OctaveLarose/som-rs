@@ -14,6 +14,7 @@ use som_gc::gcref::Gc;
 use som_value::interned::Interned;
 use std::fs;
 use std::io;
+use std::marker::PhantomPinned;
 use std::path::{Path, PathBuf};
 
 /// GC default heap size
@@ -34,7 +35,10 @@ pub struct Universe {
     /// The interpreter's core classes.
     pub core: CoreClasses<Gc<Class>>,
     /// GC interface for GC operations
-    pub gc_interface: &'static mut GCInterface,
+    pub gc_interface: Box<GCInterface>,
+    /// Universe must be `Pin`, since the GC must assume the field `gc_interface` will never move,
+    /// since it holds a duplicated reference to it that it needs to interact with the VM
+    _pin: PhantomPinned,
 }
 
 impl Universe {
@@ -48,10 +52,10 @@ impl Universe {
         let mut interner = Interner::with_capacity(200);
         let mut globals = vec![];
 
-        let gc_interface = GCInterface::init(heap_size, crate::gc::get_callbacks_for_gc());
+        let mut gc_interface = Box::new(GCInterface::init(heap_size));
 
         let mut core: CoreClasses<Gc<Class>> = CoreClasses::from_load_cls_fn(|name: &str, _super_cls: Option<&Gc<Class>>| {
-            Self::load_system_class(&mut interner, classpath.as_slice(), name, gc_interface).unwrap()
+            Self::load_system_class(&mut interner, classpath.as_slice(), name, &mut gc_interface).unwrap()
         });
 
         core.object_class.class().set_super_class(&core.class_class);
@@ -94,6 +98,7 @@ impl Universe {
             classpath,
             core,
             gc_interface,
+            _pin: PhantomPinned,
         })
     }
 
@@ -135,7 +140,7 @@ impl Universe {
             };
 
             let mut class =
-                compile_class(&mut self.interner, &defn, Some(&super_class), self.gc_interface).ok_or_else(|| Error::msg(String::new()))?;
+                compile_class(&mut self.interner, &defn, Some(&super_class), &mut self.gc_interface).ok_or_else(|| Error::msg(String::new()))?;
             set_super_class(&mut class, &super_class, &self.core.metaclass_class);
 
             let symbol = self.intern_symbol(class.name());
@@ -216,7 +221,7 @@ impl Universe {
     pub fn escaped_block(&mut self, interpreter: &mut Interpreter, value: Value, block: Gc<Block>) -> Option<()> {
         let method_name = self.intern_symbol("escapedBlock:");
         let method = value.lookup_method(self, method_name)?;
-        interpreter.push_method_frame_with_args(method, vec![value, Value::Block(block)], self.gc_interface);
+        interpreter.push_method_frame_with_args(method, vec![value, Value::Block(block)], &mut self.gc_interface);
         Some(())
     }
 
@@ -242,7 +247,7 @@ impl Universe {
                 Value::Symbol(symbol),
                 Value::Array(VecValue(self.gc_interface.alloc_slice(&args, AllocSiteMarker::VecValue))),
             ],
-            self.gc_interface,
+            &mut self.gc_interface,
         );
 
         Some(())
@@ -254,7 +259,7 @@ impl Universe {
         let method = value.lookup_method(self, method_name)?;
 
         interpreter.get_current_frame().bytecode_idx = interpreter.bytecode_idx;
-        interpreter.push_method_frame_with_args(method, vec![value, Value::Symbol(name)], self.gc_interface);
+        interpreter.push_method_frame_with_args(method, vec![value, Value::Symbol(name)], &mut self.gc_interface);
 
         Some(())
     }
@@ -266,7 +271,7 @@ impl Universe {
         let system_value = self.lookup_global(self.interner.reverse_lookup("system")?)?;
 
         let args_vec = VecValue(self.gc_interface.alloc_slice(&args, AllocSiteMarker::VecValue));
-        let frame_ptr = Frame::alloc_initial_method(initialize, &[system_value, Value::Array(args_vec)], self.gc_interface);
+        let frame_ptr = Frame::alloc_initial_method(initialize, &[system_value, Value::Array(args_vec)], &mut self.gc_interface);
         let interpreter = Interpreter::new(frame_ptr);
 
         Some(interpreter)

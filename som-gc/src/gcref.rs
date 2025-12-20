@@ -158,7 +158,12 @@ impl<T> Gc<T> {
             number as u8
         }
 
-        let gc_interface = unsafe { &**crate::VM_TO_MMTK_INTERFACE.get().unwrap() };
+        let gc_interface = unsafe {
+            match crate::VM_TO_MMTK_INTERFACE.get() {
+                Some(gc_interface) => &**gc_interface,
+                None => return true, // Assume we're initializing the VM for now, just return true
+            }
+        };
 
         // if we're collecting, we're handling both new and old pointers, so we just say they're all valid for simplicity.
         if gc_interface.is_currently_collecting() {

@@ -1,5 +1,5 @@
 use crate::evaluate::Evaluate;
-use crate::gc::{get_callbacks_for_gc, VecValue};
+use crate::gc::VecValue;
 use crate::invokable::{Invoke, Return};
 use crate::value::Value;
 use crate::vm_objects::block::Block;
@@ -42,15 +42,16 @@ pub struct Universe {
     /// The time record of the universe's creation.
     pub start_time: Instant,
     /// GC interface
-    pub gc_interface: &'static mut GCInterface,
+    pub gc_interface: Box<GCInterface>,
 }
 
-impl Drop for Universe {
-    fn drop(&mut self) {
-        let _box: Box<GCInterface> = unsafe { Box::from_raw(self.gc_interface) };
-        drop(_box)
-    }
-}
+// Back when gc_interface was a &'static mut, we had a `Drop` impl
+//impl Drop for Universe {
+//    fn drop(&mut self) {
+//        let _box: Box<GCInterface> = unsafe { Box::from_raw(self.gc_interface) };
+//        drop(_box)
+//    }
+//}
 
 impl Universe {
     /// Initialize the universe from the given classpath.
@@ -63,10 +64,10 @@ impl Universe {
         let mut interner = Interner::with_capacity(200);
         let mut globals: HashMap<Interned, Value> = HashMap::new();
 
-        let gc_interface = GCInterface::init(heap_size, get_callbacks_for_gc());
+        let mut gc_interface = Box::new(GCInterface::init(heap_size));
 
         let mut core: CoreClasses<Gc<Class>> = CoreClasses::from_load_cls_fn(|name: &str, super_cls: Option<&Gc<Class>>| {
-            Self::load_system_class(classpath.as_slice(), name, super_cls.cloned(), gc_interface, &mut interner).unwrap()
+            Self::load_system_class(classpath.as_slice(), name, super_cls.cloned(), &mut gc_interface, &mut interner).unwrap()
         });
 
         // TODO: these can be removed for the most part - in the AST at least, we set a lot of super class relationships when loading system classes directly.
@@ -163,7 +164,7 @@ impl Universe {
                 self.core.object_class.clone()
             };
 
-            let mut class = Class::from_class_def(defn, Some(super_class.clone()), self.gc_interface, &mut self.interner).map_err(Error::msg)?;
+            let mut class = Class::from_class_def(defn, Some(super_class.clone()), &mut self.gc_interface, &mut self.interner).map_err(Error::msg)?;
             set_super_class(&mut class, &super_class, &self.core.metaclass_class);
 
             let symbol = self.intern_symbol(class.name());

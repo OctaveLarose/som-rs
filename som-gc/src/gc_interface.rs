@@ -6,7 +6,7 @@ use crate::gcref::Gc;
 use crate::gcslice::GcSlice;
 use crate::object_model::OBJECT_REF_OFFSET;
 use crate::slot::SOMSlot;
-use crate::{MMTK_SINGLETON, MMTK_TO_VM_INTERFACE, SOMVM, VM_TO_MMTK_INTERFACE};
+use crate::{MMTK_SINGLETON, SOMVM};
 use core::mem::size_of;
 use log::debug;
 use mmtk::util::alloc::Allocator;
@@ -21,6 +21,7 @@ use mmtk::{memory_manager, AllocationSemantics, MMTKBuilder, Mutator};
 use num_bigint::BigInt;
 #[cfg(feature = "track-allocations")]
 use std::collections::HashMap;
+use std::marker::PhantomPinned;
 use std::sync::{Condvar, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
@@ -36,20 +37,32 @@ static GC_OFFSET: usize = 0;
 static GC_ALIGN: usize = 8;
 // static GC_SEMANTICS: AllocationSemantics = AllocationSemantics::Default;
 
+/// Interface from VM to the GC logic (MMTk)
 pub struct GCInterface {
+    /// Reference to the MMTk mutator.
     mutator: Box<Mutator<SOMVM>>,
+    /// Reference to the MMTk mutator thread. TODO: I never quite understood how to use it, or if we weren't misusing it somehow.
+    mutator_thread: VMMutatorThread,
+    /// Allocator used by the selected GC plan.
     #[cfg(feature = "marksweep")]
     default_allocator: *mut FreeListAllocator<SOMVM>,
     #[cfg(feature = "semispace")]
     default_allocator: *mut mmtk::util::alloc::BumpAllocator<SOMVM>,
     #[cfg(feature = "semispace")]
     #[allow(unused)]
+    /// Unused bump pointer, that could lead to slightly faster allocation for the semispace implementation.
     alloc_bump_ptr: BumpPointer,
-    mutator_thread: VMMutatorThread,
+    /// Whether or not we are currently collecting. NB: might not be very useful, since we have `WORLD_LOCK`.
     is_collecting: bool,
+    /// How many times we've restarted the world, i.e., how many collections have been done (and finished) so far.
     start_the_world_count: usize,
+    /// Total amount of time spent collecting. Used by the `gc_stats` primitive.
     total_gc_time: Duration,
+    /// Size of the heap that we requested to MMTk.
     max_heap_size: usize,
+
+    /// Making sure that GCInterface never moves.
+    _pin: PhantomPinned,
 
     #[cfg(feature = "track-allocations")]
     pub total_program_repr_size: u128, // public as a hack
@@ -79,15 +92,15 @@ pub struct MMTKtoVMCallbacks {
 }
 
 impl GCInterface {
-    /// Initialize the GCInterface. Internally inits MMTk and fetches everything needed to actually communicate with the GC.
-    pub fn init<'a>(heap_size: usize, vm_callbacks: MMTKtoVMCallbacks) -> &'a mut Self {
+    /// Initialize the GCInterface.
+    pub fn init(heap_size: usize) -> Self {
         let (mutator_thread, mutator) = Self::init_mmtk(heap_size);
         #[cfg(feature = "marksweep")]
         let default_allocator = Self::get_default_allocator::<FreeListAllocator<SOMVM>>(mutator.as_ref());
         #[cfg(feature = "semispace")]
         let default_allocator = Self::get_default_allocator::<BumpAllocator<SOMVM>>(mutator.as_ref());
 
-        let self_ = Box::new(Self {
+        Self {
             mutator_thread,
             mutator,
             is_collecting: false,
@@ -97,34 +110,14 @@ impl GCInterface {
             start_the_world_count: 0,
             total_gc_time: Duration::new(0, 0),
             max_heap_size: heap_size,
-
+            _pin: PhantomPinned,
             #[cfg(feature = "track-allocations")]
             total_program_repr_size: 0,
             #[cfg(feature = "track-allocations")]
             total_other_memory_size: 0,
             #[cfg(feature = "track-allocations")]
             alloc_map: HashMap::new(),
-        });
-
-        let gc_interface_ptr = Box::leak(self_);
-
-        unsafe {
-            // in the context of tests, this function gets invoked many times, so they can have already been initialized.
-            // TODO: which makes me realize that this function's structure is subpar. Why do we return a NEW GCInterface at all, then?
-            // The universe should likely use a reference to the OnceCell, or something... That'd be better.
-
-            if VM_TO_MMTK_INTERFACE.get().is_none() {
-                // very unsafe, very ugly: we duplicate a mutable reference to the GC interface ptr. need to avoid by implementing above idea
-                let dup_ptr = &mut *(gc_interface_ptr as *mut GCInterface);
-                VM_TO_MMTK_INTERFACE.set(dup_ptr).unwrap_or_else(|_| panic!("couldn't set mutator wrapper?"));
-            }
-
-            if MMTK_TO_VM_INTERFACE.get().is_none() {
-                MMTK_TO_VM_INTERFACE.get_or_init(|| vm_callbacks);
-            }
         }
-
-        gc_interface_ptr
     }
 
     /// Initialize MMTk, and get from it all the info we need to initialize our interface

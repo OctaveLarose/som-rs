@@ -28,10 +28,6 @@ fn main() -> anyhow::Result<()> {
     let opts: CLIOptions = CLIOptions::parse();
 
     match opts.file {
-        None => {
-            let mut universe = Universe::with_classpath(opts.classpath)?;
-            shell::interactive(&mut universe, opts.verbose)?
-        }
         Some(file) => {
             let file_stem = file.file_stem().ok_or_else(|| anyhow!("the given path has no file stem"))?;
             let file_stem = file_stem.to_str().ok_or_else(|| anyhow!("the given path contains invalid UTF-8 in its file stem"))?;
@@ -50,6 +46,7 @@ fn main() -> anyhow::Result<()> {
 
             let mut value_stack = GlobalValueStack::from(Vec::with_capacity(1000));
 
+            som_gc::handshake_with_vm(&mut universe.gc_interface, som_interpreter_ast::gc::get_callbacks_for_gc());
             UNIVERSE_RAW_PTR_CONST.store(&mut universe, Ordering::SeqCst);
             STACK_ARGS_RAW_PTR_CONST.store(&mut value_stack, Ordering::SeqCst);
 
@@ -91,6 +88,11 @@ fn main() -> anyhow::Result<()> {
                 Return::Restart => println!("ERROR: asked for a restart to the top-level"),
                 _ => {}
             }
+        }
+        None => {
+            let mut universe = Universe::with_classpath(opts.classpath)?;
+            som_gc::handshake_with_vm(&mut universe.gc_interface, som_interpreter_ast::gc::get_callbacks_for_gc());
+            shell::interactive(&mut universe, opts.verbose)?
         }
     }
 

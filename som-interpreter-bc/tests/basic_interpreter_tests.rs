@@ -1,6 +1,7 @@
 use rstest::{fixture, rstest};
 use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_interpreter_bc::compiler::compile::compile_class;
+use som_interpreter_bc::gc::get_callbacks_for_gc;
 use som_interpreter_bc::interpreter::Interpreter;
 use som_interpreter_bc::universe::Universe;
 use som_interpreter_bc::value::Value;
@@ -28,13 +29,13 @@ pub fn universe<'a>() -> &'a mut Universe {
                 PathBuf::from("../core-lib/Examples/Benchmarks/Json"),
                 PathBuf::from("../core-lib/Examples/Benchmarks/DeltaBlue"),
                 PathBuf::from("../core-lib/Examples/Benchmarks/Richards"),
-                // PathBuf::from("../core-lib/Examples/Benchmarks/LanguageFeatures"), // breaks basic tests?
                 PathBuf::from("../core-lib/TestSuite/BasicInterpreterTests"),
             ];
             Universe::with_classpath(classpath).expect("could not setup test universe")
         });
 
         let mut_universe_ref = UNIVERSE_CELL.get_mut().unwrap();
+        som_gc::handshake_with_vm(&mut mut_universe_ref.gc_interface, get_callbacks_for_gc());
         UNIVERSE_RAW_PTR_CONST.store(mut_universe_ref, Ordering::SeqCst);
 
         mut_universe_ref
@@ -139,7 +140,7 @@ fn basic_interpreter_tests(universe: &mut Universe) {
         let class_def = som_parser::apply(lang::class_def(), tokens.as_slice()).unwrap();
 
         let object_class = universe.core.object_class();
-        let class = compile_class(&mut universe.interner, &class_def, Some(&object_class), universe.gc_interface);
+        let class = compile_class(&mut universe.interner, &class_def, Some(&object_class), &mut universe.gc_interface);
         assert!(class.is_some(), "could not compile test expression");
         let mut class = class.unwrap();
 
@@ -150,7 +151,7 @@ fn basic_interpreter_tests(universe: &mut Universe) {
 
         let method = class.lookup_method(method_name).expect("method not found ??");
 
-        let frame = Frame::alloc_initial_method(method, &[system_value], universe.gc_interface);
+        let frame = Frame::alloc_initial_method(method, &[system_value], &mut universe.gc_interface);
         let mut interpreter = Interpreter::new(frame);
         if let Some(output) = interpreter.run(universe) {
             assert_eq!(&output, expected, "unexpected test output value");

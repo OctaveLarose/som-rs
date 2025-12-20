@@ -35,7 +35,7 @@ fn and_if_true(interpreter: &mut Interpreter, universe: &mut Universe) -> Result
     let cond_val = *interpreter.get_current_frame().stack_last();
 
     if cond_val.as_block().is_some() {
-        interpreter.push_block_frame(1, universe.gc_interface);
+        interpreter.push_block_frame(1, &mut universe.gc_interface);
         interpreter.get_current_frame().prev_frame.remove_n_last_elements(1); // the "True". the "Block" was already consumed and put into the new frame
     } else {
         interpreter.get_current_frame().remove_n_last_elements(2);

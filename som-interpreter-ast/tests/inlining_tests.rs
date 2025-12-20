@@ -5,7 +5,6 @@ use som_interpreter_ast::ast::AstExpression::*;
 use som_interpreter_ast::ast::InlinedNode::IfInlined;
 use som_interpreter_ast::ast::{AstBinaryDispatch, AstBody, AstDispatchNode, AstLiteral, AstMethodDef, AstUnaryDispatch, InlinedNode};
 use som_interpreter_ast::compiler::AstMethodCompilerCtxt;
-use som_interpreter_ast::gc::get_callbacks_for_gc;
 use som_interpreter_ast::nodes::global_read::GlobalNode;
 use som_interpreter_ast::nodes::inlined::if_inlined_node::IfInlinedNode;
 use som_interpreter_ast::nodes::inlined::to_do_inlined_node::ToDoInlinedNode;
@@ -25,7 +24,8 @@ fn get_ast(class_txt: &str, interner: &mut Interner) -> AstMethodDef {
 
     let method_def = som_parser::apply(lang::instance_method_def(), tokens.as_slice()).unwrap();
 
-    AstMethodCompilerCtxt::parse_method_def(&method_def, None, GCInterface::init(DEFAULT_HEAP_SIZE, get_callbacks_for_gc()), interner)
+    let mut gc_interface = Box::new(GCInterface::init(DEFAULT_HEAP_SIZE));
+    AstMethodCompilerCtxt::parse_method_def(&method_def, None, &mut gc_interface, interner)
 }
 
 #[rstest]
