@@ -1,5 +1,5 @@
 use crate::ast::AstBlock;
-use crate::gc::AstObjMagicId;
+use crate::gc::GcIdentifier;
 use som_gc::gc_interface::GcType;
 use som_gc::gcref::Gc;
 use som_gc::slot::SOMSlot;
@@ -46,11 +46,15 @@ impl fmt::Debug for Block {
 
 impl GcType for Block {
     fn get_magic_gc_id() -> u8 {
-        AstObjMagicId::Block as u8
+        GcIdentifier::Block as u8
     }
 
     fn scan_object(block: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
         visit_slot_fn(SOMSlot::from(&block.frame));
         visit_slot_fn(SOMSlot::from(&block.block));
+    }
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        size_of::<Block>()
     }
 }

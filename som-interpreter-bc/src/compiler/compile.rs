@@ -12,6 +12,7 @@ use std::cell::Cell;
 use std::str::FromStr;
 
 use crate::compiler::Literal;
+use crate::gc::VecLiteral;
 use crate::primitives;
 use crate::primitives::UNIMPLEM_PRIMITIVE;
 use crate::value::Value;
@@ -755,7 +756,7 @@ impl MethodCodegen for ast::Expression {
                                 let literals_vec: Vec<Literal> = val.iter().map(|val| convert_literal(ctxt, val, gc_interface)).collect();
                                 gc_interface.alloc_slice(literals_vec.as_slice(), AllocSiteMarker::VecBCLiteral)
                             };
-                            Literal::Array(literals)
+                            Literal::Array(VecLiteral(literals))
                         }
                     }
                 }

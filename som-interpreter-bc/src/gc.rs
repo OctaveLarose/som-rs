@@ -6,32 +6,31 @@ use crate::vm_objects::frame::Frame;
 use crate::vm_objects::instance::Instance;
 use crate::vm_objects::method::Method;
 use crate::{INTERPRETER_RAW_PTR_CONST, UNIVERSE_RAW_PTR_CONST};
-use core::mem::size_of;
 use log::{debug, trace};
-use mmtk::util::ObjectReference;
+use mmtk::util::{Address, ObjectReference};
 use mmtk::vm::{ObjectModel, SlotVisitor};
 use mmtk::Mutator;
 use num_bigint::BigInt;
-use som_gc::gc_interface::{GcType, MMTKtoVMCallbacks, SupportedSliceType, BIGINT_MAGIC_ID, STRING_MAGIC_ID};
+use som_gc::gc_interface::{GcType, MMTKtoVMCallbacks, BIGINT_MAGIC_ID, STRING_MAGIC_ID};
 use som_gc::gcref::Gc;
-use som_gc::gcslice::GcSlice;
+use som_gc::gcslice::{GcSlice, SupportedSliceType};
 use som_gc::object_model::VMObjectModel;
 use som_gc::slot::SOMSlot;
 use som_gc::SOMVM;
 use std::ops::{Deref, DerefMut};
 
-// Mine. to put in GC headers
+/// Every GC object starts with this ID to identify what its type is.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum BCObjMagicId {
+pub enum GcIdentifier {
     String = STRING_MAGIC_ID as isize,
     BigInt = BIGINT_MAGIC_ID as isize,
     Frame = 100,
-    ArrayLiteral = GCSLICE_LITERAL_MAGIC_ID as isize,
-    Block = 102,
-    Class = 103,
-    Instance = 104,
-    Method = 105,
-    ArrayVal = 106,
+    Block = 101,
+    Instance = 102,
+    Method = 103,
+    Class = 104,
+    ArrayVal = 105,
+    ArrayLiteral = 106,
 }
 
 #[derive(Clone, Debug)]
@@ -53,24 +52,66 @@ impl DerefMut for VecValue {
 
 impl SupportedSliceType for Value {
     fn get_magic_gc_slice_id() -> u8 {
-        BCObjMagicId::ArrayVal as u8
-    }
-}
-
-pub const GCSLICE_LITERAL_MAGIC_ID: u8 = 101;
-impl SupportedSliceType for Literal {
-    fn get_magic_gc_slice_id() -> u8 {
-        GCSLICE_LITERAL_MAGIC_ID
+        GcIdentifier::ArrayVal as u8
     }
 }
 
 impl GcType for VecValue {
     fn get_magic_gc_id() -> u8 {
-        BCObjMagicId::ArrayVal as u8
+        GcIdentifier::ArrayVal as u8
     }
 
     fn scan_object(_self: Gc<Self>, _scan_fn: &mut dyn FnMut(SOMSlot)) {
-        todo!()
+        let slice: GcSlice<Value> = GcSlice::new(Address::from_ptr(_self.ptr));
+        for val in slice.iter() {
+            visit_value(val, _scan_fn)
+        }
+    }
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        let slice: GcSlice<Value> = GcSlice::new(Address::from_ptr(_self.ptr));
+        slice.get_true_size()
+    }
+}
+
+impl SupportedSliceType for Literal {
+    fn get_magic_gc_slice_id() -> u8 {
+        GcIdentifier::ArrayLiteral as u8
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct VecLiteral(pub GcSlice<Literal>);
+
+impl Deref for VecLiteral {
+    type Target = GcSlice<Literal>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for VecLiteral {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl GcType for VecLiteral {
+    fn get_magic_gc_id() -> u8 {
+        GcIdentifier::ArrayLiteral as u8
+    }
+
+    fn scan_object(_self: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
+        let slice: GcSlice<Literal> = GcSlice::new(Address::from_ptr(_self.ptr));
+        for val in slice.iter() {
+            visit_literal(val, visit_slot_fn)
+        }
+    }
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        let slice: GcSlice<Literal> = GcSlice::new(Address::from_ptr(_self.ptr));
+        slice.get_true_size()
     }
 }
 
@@ -94,47 +135,14 @@ pub(crate) fn visit_value(val: &Value, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
     }
 }
 
+/// Visit a literal type.
 pub fn visit_literal(lit: &Literal, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
     match lit {
         Literal::Block(blk) => visit_slot_fn(SOMSlot::from(blk)),
         Literal::String(str) => visit_slot_fn(SOMSlot::from(str)),
         Literal::BigInteger(bigint) => visit_slot_fn(SOMSlot::from(bigint)),
-        Literal::Array(arr) => visit_slot_fn(SOMSlot::from(arr)),
+        Literal::Array(arr) => visit_slot_fn(SOMSlot::from(arr.deref())),
         Literal::Symbol(_) | Literal::Double(_) | Literal::Integer(_) => {}
-    }
-}
-
-pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotVisitor<SOMSlot> + 'a)) {
-    unsafe {
-        let gc_id: &BCObjMagicId = VMObjectModel::ref_to_header(object).as_ref();
-
-        let mut visit_fn = |slot: SOMSlot| {
-            slot_visitor.visit_slot(slot);
-        };
-
-        trace!("entering scan_object (type: {:?})", gc_id);
-
-        match gc_id {
-            BCObjMagicId::Frame => Frame::scan_object(object.to_raw_address().into(), &mut visit_fn),
-            BCObjMagicId::Method => Method::scan_object(object.to_raw_address().into(), &mut visit_fn),
-            BCObjMagicId::Class => Class::scan_object(object.to_raw_address().into(), &mut visit_fn),
-            BCObjMagicId::Block => Block::scan_object(object.to_raw_address().into(), &mut visit_fn),
-            BCObjMagicId::Instance => Instance::scan_object(object.to_raw_address().into(), &mut visit_fn),
-            BCObjMagicId::ArrayVal => {
-                let arr: GcSlice<Value> = GcSlice::from(object.to_raw_address());
-                for val in arr.iter() {
-                    visit_value(val, &mut visit_fn)
-                }
-            }
-            BCObjMagicId::ArrayLiteral => {
-                let literal_vec: GcSlice<Literal> = GcSlice::from(object.to_raw_address());
-                for lit in literal_vec.iter() {
-                    visit_literal(lit, &mut visit_fn)
-                }
-            }
-            // leaf nodes: no children.
-            BCObjMagicId::String | BCObjMagicId::BigInt => {}
-        }
     }
 }
 
@@ -185,47 +193,53 @@ fn get_roots_in_mutator_thread(_mutator: &mut Mutator<SOMVM>) -> Vec<SOMSlot> {
     }
 }
 
-fn get_object_size(object: ObjectReference) -> usize {
-    let gc_id: &BCObjMagicId = unsafe { VMObjectModel::ref_to_header(object).as_ref() };
+pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotVisitor<SOMSlot> + 'a)) {
+    unsafe {
+        let gc_id: &GcIdentifier = VMObjectModel::ref_to_header(object).as_ref();
 
-    let obj_size = {
+        let mut visit_fn = |slot: SOMSlot| {
+            slot_visitor.visit_slot(slot);
+        };
+
+        trace!("entering scan_object (type: {:?})", gc_id);
+
+        // FEAT: make a macro to avoid duplication with `get_object_size` function maybe? Or maybe leverage the Rust typesystem in some way
         match gc_id {
-            BCObjMagicId::String => size_of::<String>(),
-            BCObjMagicId::BigInt => size_of::<BigInt>(),
-            BCObjMagicId::ArrayLiteral => {
-                let literals: GcSlice<Literal> = GcSlice::from(object.to_raw_address());
-                literals.get_true_size()
-            }
-            BCObjMagicId::Frame => unsafe {
-                let frame: &Frame = object.to_raw_address().as_ref();
-                Frame::get_true_size(frame.get_max_stack_size(), frame.get_nbr_args(), frame.get_nbr_locals())
-            },
-            BCObjMagicId::ArrayVal => {
-                let values: GcSlice<Value> = GcSlice::from(object.to_raw_address());
-                values.get_true_size()
-            }
-            BCObjMagicId::Method => size_of::<Method>(),
-            BCObjMagicId::Block => size_of::<Block>(),
-            BCObjMagicId::Class => size_of::<Class>(),
-            BCObjMagicId::Instance => unsafe {
-                let instance: &Instance = object.to_raw_address().as_ref();
-                size_of::<Instance>() + instance.class.fields.len() * size_of::<Value>()
-            },
+            GcIdentifier::Frame => Frame::scan_object(object.to_raw_address().into(), &mut visit_fn),
+            GcIdentifier::Method => Method::scan_object(object.to_raw_address().into(), &mut visit_fn),
+            GcIdentifier::Class => Class::scan_object(object.to_raw_address().into(), &mut visit_fn),
+            GcIdentifier::Block => Block::scan_object(object.to_raw_address().into(), &mut visit_fn),
+            GcIdentifier::Instance => Instance::scan_object(object.to_raw_address().into(), &mut visit_fn),
+            GcIdentifier::String => String::scan_object(object.to_raw_address().into(), &mut visit_fn),
+            GcIdentifier::BigInt => BigInt::scan_object(object.to_raw_address().into(), &mut visit_fn),
+            GcIdentifier::ArrayVal => VecValue::scan_object(object.to_raw_address().into(), &mut visit_fn),
+            GcIdentifier::ArrayLiteral => VecLiteral::scan_object(object.to_raw_address().into(), &mut visit_fn),
         }
-    };
-
-    // debug!("get object size invoked ({:?}), and returning {}", gc_id, obj_size);
-
-    obj_size
+    }
 }
 
-//fn adapt_post_copy(_object: ObjectReference, _original_obj: ObjectReference) {}
+fn get_object_size(object: ObjectReference) -> usize {
+    let gc_id: &GcIdentifier = unsafe { VMObjectModel::ref_to_header(object).as_ref() };
+
+    match gc_id {
+        GcIdentifier::String => String::get_size_in_memory(object.to_raw_address().into()),
+        GcIdentifier::BigInt => BigInt::get_size_in_memory(object.to_raw_address().into()),
+        GcIdentifier::Frame => Frame::get_size_in_memory(object.to_raw_address().into()),
+        GcIdentifier::Method => Method::get_size_in_memory(object.to_raw_address().into()),
+        GcIdentifier::Block => Block::get_size_in_memory(object.to_raw_address().into()),
+        GcIdentifier::Class => Class::get_size_in_memory(object.to_raw_address().into()),
+        GcIdentifier::Instance => Instance::get_size_in_memory(object.to_raw_address().into()),
+        GcIdentifier::ArrayVal => VecValue::get_size_in_memory(object.to_raw_address().into()),
+        GcIdentifier::ArrayLiteral => VecLiteral::get_size_in_memory(object.to_raw_address().into()),
+    }
+
+    // debug!("get object size invoked ({:?}), and returning {}", gc_id, obj_size);
+}
 
 pub fn get_callbacks_for_gc() -> MMTKtoVMCallbacks {
     MMTKtoVMCallbacks {
         scan_object,
         get_roots_in_mutator_thread,
         get_object_size,
-        //adapt_post_copy,
     }
 }

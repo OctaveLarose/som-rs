@@ -1,4 +1,4 @@
-use crate::gc::{visit_expr, AstObjMagicId};
+use crate::gc::{visit_expr, GcIdentifier, VecLiteral};
 use crate::nodes::global_read::GlobalNode;
 use crate::nodes::inlined::and_inlined_node::AndInlinedNode;
 use crate::nodes::inlined::if_inlined_node::IfInlinedNode;
@@ -14,7 +14,6 @@ use indenter::indented;
 use num_bigint::BigInt;
 use som_gc::gc_interface::GcType;
 use som_gc::gcref::Gc;
-use som_gc::gcslice::GcSlice;
 use som_gc::slot::SOMSlot;
 use som_value::interned::Interned;
 use std::fmt::Write;
@@ -77,7 +76,7 @@ pub enum AstLiteral {
     /// Represents a big integer (bigger than a 64-bit signed integer can represent).
     BigInteger(Gc<BigInt>),
     /// Represents an array literal (eg. `$(1 2 3)`)
-    Array(GcSlice<AstLiteral>),
+    Array(VecLiteral),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -144,10 +143,9 @@ pub struct AstMethodDef {
     pub locals_nbr: u8,
 }
 
-// ---- GC stuff ----
 impl GcType for AstBlock {
     fn get_magic_gc_id() -> u8 {
-        AstObjMagicId::AstBlock as u8
+        GcIdentifier::AstBlock as u8
     }
 
     fn scan_object(ast_block: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
@@ -155,7 +153,12 @@ impl GcType for AstBlock {
             visit_expr(expr, visit_slot_fn)
         }
     }
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        size_of::<AstBlock>()
+    }
 }
+
 // ----------------
 
 impl Display for AstMethodDef {

@@ -3,6 +3,7 @@ use crate::ast::{
     AstBinaryDispatch, AstBlock, AstBody, AstDispatchNode, AstExpression, AstLiteral, AstMethodDef, AstNAryDispatch, AstSuperMessage,
     AstTernaryDispatch, AstUnaryDispatch,
 };
+use crate::gc::VecLiteral;
 use crate::nodes::global_read::GlobalNode;
 use crate::nodes::inlined::and_inlined_node::AndInlinedNode;
 use crate::nodes::inlined::if_inlined_node::IfInlinedNode;
@@ -645,7 +646,7 @@ impl<'a> AstMethodCompilerCtxt<'a> {
                     let arr: Vec<AstLiteral> = arr.iter().map(|lit| self.parse_literal(lit)).collect();
                     self.gc_interface.alloc_slice(arr.as_slice(), AllocSiteMarker::SliceAstLiteral)
                 };
-                AstLiteral::Array(arr_ptr)
+                AstLiteral::Array(VecLiteral(arr_ptr))
             }
         }
     }

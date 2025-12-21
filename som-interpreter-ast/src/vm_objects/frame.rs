@@ -1,4 +1,4 @@
-use crate::gc::{visit_value, AstObjMagicId};
+use crate::gc::{visit_value, GcIdentifier};
 use crate::universe::{GlobalValueStack, Universe};
 use crate::value::Value;
 use core::mem::size_of;
@@ -232,7 +232,7 @@ impl Debug for Frame {
 
 impl GcType for Frame {
     fn get_magic_gc_id() -> u8 {
-        AstObjMagicId::Frame as u8
+        GcIdentifier::Frame as u8
     }
 
     fn scan_object(frame: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
@@ -249,5 +249,9 @@ impl GcType for Frame {
             let val: &Value = frame.lookup_argument(i);
             visit_value(val, visit_slot_fn)
         }
+    }
+
+    fn get_size_in_memory(frame: Gc<Self>) -> usize {
+        Frame::get_true_size(frame.nbr_args, frame.nbr_locals)
     }
 }

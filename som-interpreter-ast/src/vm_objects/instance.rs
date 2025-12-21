@@ -1,4 +1,4 @@
-use crate::gc::{visit_value, AstObjMagicId};
+use crate::gc::{visit_value, GcIdentifier};
 use crate::value::Value;
 use crate::vm_objects::class::Class;
 use som_gc::gc_interface::GcType;
@@ -73,7 +73,7 @@ impl fmt::Debug for Instance {
 
 impl GcType for Instance {
     fn get_magic_gc_id() -> u8 {
-        AstObjMagicId::Instance as u8
+        GcIdentifier::Instance as u8
     }
 
     fn scan_object(instance: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
@@ -83,5 +83,9 @@ impl GcType for Instance {
             let val: &Value = Instance::lookup_field(&instance, i as u8);
             visit_value(val, visit_slot_fn)
         }
+    }
+
+    fn get_size_in_memory(instance: Gc<Self>) -> usize {
+        size_of::<Instance>() + instance.get_nbr_fields() * size_of::<Value>()
     }
 }

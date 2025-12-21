@@ -2,7 +2,7 @@
 //! This module only needs to expose the compile_class() function: the rest of the VM should not
 //! need access to more than that, barring testing.
 
-use crate::gc::VecValue;
+use crate::gc::{VecLiteral, VecValue};
 use crate::value::Value;
 use crate::vm_objects::block::Block;
 use num_bigint::BigInt;
@@ -10,7 +10,6 @@ use som_gc::gc_interface::AllocSiteMarker;
 use som_gc::{
     gc_interface::{GCInterface, SOMAllocator},
     gcref::Gc,
-    gcslice::GcSlice,
 };
 use som_value::interned::Interned;
 use std::hash::{Hash, Hasher};
@@ -25,7 +24,7 @@ pub enum Literal {
     Double(f64),
     Integer(i32),
     BigInteger(Gc<BigInt>),
-    Array(GcSlice<Literal>),
+    Array(VecLiteral),
     Block(Gc<Block>),
 }
 

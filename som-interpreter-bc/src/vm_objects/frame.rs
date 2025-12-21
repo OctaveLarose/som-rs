@@ -1,5 +1,5 @@
 use crate::compiler::Literal;
-use crate::gc::{visit_value, BCObjMagicId};
+use crate::gc::{visit_value, GcIdentifier};
 use crate::value::Value;
 use crate::vm_objects::block::{Block, CacheEntry};
 use crate::vm_objects::class::Class;
@@ -421,7 +421,7 @@ impl Debug for Frame {
 
 impl GcType for Frame {
     fn get_magic_gc_id() -> u8 {
-        BCObjMagicId::Frame as u8
+        GcIdentifier::Frame as u8
     }
 
     fn scan_object(frame: Gc<Self>, visit_fn: &mut dyn FnMut(SOMSlot)) {
@@ -445,5 +445,9 @@ impl GcType for Frame {
         for stack_item in stack_iter.into_iter() {
             visit_value(stack_item, visit_fn);
         }
+    }
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        Frame::get_true_size(_self.get_max_stack_size(), _self.get_nbr_args(), _self.get_nbr_locals())
     }
 }

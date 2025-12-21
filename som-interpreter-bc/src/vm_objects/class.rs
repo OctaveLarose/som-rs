@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::gc::{visit_value, BCObjMagicId};
+use crate::gc::{visit_value, GcIdentifier};
 use crate::value::Value;
 use crate::vm_objects::method::Method;
 use indexmap::IndexMap;
@@ -112,7 +112,7 @@ impl fmt::Debug for Class {
 
 impl GcType for Class {
     fn get_magic_gc_id() -> u8 {
-        BCObjMagicId::Class as u8
+        GcIdentifier::Class as u8
     }
 
     fn scan_object(class: Gc<Self>, visit_slot_fn: &mut dyn FnMut(som_gc::slot::SOMSlot)) {
@@ -129,5 +129,9 @@ impl GcType for Class {
         for field_ref in class.fields.iter() {
             visit_value(field_ref, visit_slot_fn)
         }
+    }
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        size_of::<Class>()
     }
 }

@@ -1,4 +1,4 @@
-use crate::gc::BCObjMagicId;
+use crate::gc::GcIdentifier;
 use crate::universe::Universe;
 use crate::value::Value;
 use crate::vm_objects::class::Class;
@@ -66,7 +66,7 @@ impl fmt::Debug for MethodInfo {
 
 impl GcType for Block {
     fn get_magic_gc_id() -> u8 {
-        BCObjMagicId::Block as u8
+        GcIdentifier::Block as u8
     }
 
     fn scan_object(block: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
@@ -75,5 +75,9 @@ impl GcType for Block {
         }
 
         visit_slot_fn(SOMSlot::from(&block.blk_info));
+    }
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        size_of::<Block>()
     }
 }

@@ -5,7 +5,7 @@ use std::fmt;
 use std::fmt::{Debug, Formatter};
 
 use crate::compiler::Literal;
-use crate::gc::{visit_literal, visit_value, BCObjMagicId};
+use crate::gc::{visit_literal, visit_value, GcIdentifier};
 use crate::interpreter::Interpreter;
 use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
@@ -177,7 +177,7 @@ impl Invoke for Gc<Method> {
 
 impl GcType for Method {
     fn get_magic_gc_id() -> u8 {
-        BCObjMagicId::Method as u8
+        GcIdentifier::Method as u8
     }
 
     fn scan_object(method: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
@@ -212,6 +212,10 @@ impl GcType for Method {
                 visit_slot_fn(SOMSlot::from(&met_info.holder));
             }
         }
+    }
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        size_of::<Method>()
     }
 }
 

@@ -3,7 +3,7 @@ use crate::api::{
     mmtk_used_bytes,
 };
 use crate::gcref::Gc;
-use crate::gcslice::GcSlice;
+use crate::gcslice::{GcSlice, SupportedSliceType};
 use crate::object_model::OBJECT_REF_OFFSET;
 use crate::slot::SOMSlot;
 use crate::{MMTK_SINGLETON, SOMVM};
@@ -81,11 +81,11 @@ impl Drop for GCInterface {
 
 /// Callbacks used to provide MMTk->VM communication.
 pub struct MMTKtoVMCallbacks {
-    /// Scans an object. Needed for tracing.
+    /// Scans an object, needed for tracing.
     pub scan_object: fn(ObjectReference, &mut dyn SlotVisitor<SOMSlot>),
     /// Get the VM roots.
     pub get_roots_in_mutator_thread: fn(&mut Mutator<SOMVM>) -> Vec<SOMSlot>,
-    /// Get the size of the object. Needed when copying it
+    /// Get the size of the object, needed for copying. Non-copying GC implementations will never invoke this.
     pub get_object_size: fn(ObjectReference) -> usize,
     // /// Adapt an object after being copied elsewhere (no longer needed at the moment)
     //pub adapt_post_copy: fn(ObjectReference, ObjectReference),
@@ -509,6 +509,7 @@ where
 {
     fn get_magic_gc_id() -> u8;
     fn scan_object(_self: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot));
+    fn get_size_in_memory(_self: Gc<Self>) -> usize;
 }
 
 pub const STRING_MAGIC_ID: u8 = 10;
@@ -520,33 +521,20 @@ impl GcType for String {
     }
 
     fn scan_object(_self: Gc<Self>, _visit_slot_fn: &mut dyn FnMut(SOMSlot)) {}
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        size_of::<String>()
+    }
 }
+
 impl GcType for BigInt {
     fn get_magic_gc_id() -> u8 {
         BIGINT_MAGIC_ID
     }
 
     fn scan_object(_self: Gc<Self>, _scan_fn: &mut dyn FnMut(SOMSlot)) {}
-}
 
-//impl<T> HasTypeInfoForGC for GCSlice<T> {
-//    fn get_magic_gc_id() -> u8 {
-//        GCSLICE_MAGIC_ID
-//    }
-//}
-
-pub trait SupportedSliceType {
-    fn get_magic_gc_slice_id() -> u8
-    where
-        Self: Sized;
-}
-
-impl<T: SupportedSliceType> GcType for GcSlice<T> {
-    fn get_magic_gc_id() -> u8 {
-        T::get_magic_gc_slice_id()
-    }
-
-    fn scan_object(_self: Gc<Self>, _scan_fn: &mut dyn FnMut(SOMSlot)) {
-        todo!()
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        32 // HACK: thought it would be better than a dependency on BigInt just to fetch that size. But eh
     }
 }

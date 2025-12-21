@@ -1,5 +1,5 @@
 use crate::ast::AstMethodDef;
-use crate::gc::{visit_expr, visit_literal, visit_value, AstObjMagicId};
+use crate::gc::{visit_expr, visit_literal, visit_value, GcIdentifier};
 use crate::nodes::trivial_methods::{TrivialGetterMethod, TrivialGlobalMethod, TrivialLiteralMethod, TrivialSetterMethod};
 use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
@@ -101,7 +101,7 @@ impl Method {
 
 impl GcType for Method {
     fn get_magic_gc_id() -> u8 {
-        AstObjMagicId::Method as u8
+        GcIdentifier::Method as u8
     }
 
     fn scan_object(method: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
@@ -121,5 +121,9 @@ impl GcType for Method {
             }
             MethodKind::Primitive(_) | MethodKind::TrivialGetter(_) | MethodKind::TrivialSetter(_) => {}
         }
+    }
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        size_of::<Method>()
     }
 }

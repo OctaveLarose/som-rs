@@ -3,7 +3,7 @@ use std::marker::PhantomPinned;
 use crate::gcref::Gc;
 use mmtk::util::Address;
 
-/// Special GC ref that stores a list.
+/// Special, subtype of GC ref that stores a list.
 /// It's really just a `Vec<T>` replacement (though immutable), where Rust manages none of the memory itself.
 /// Used because finalization might be a slowdown if we stored references to `Vec`s on the heap?
 pub struct GcSlice<T> {
@@ -136,16 +136,6 @@ impl<'a, T: std::fmt::Debug> Iterator for GCSliceIter<'a, T> {
     }
 }
 
-// impl<T: std::fmt::Debug> std::fmt::Debug for GcSlice<T> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.write_str("GcSlice [")?;
-//         for idx in 0..self.len() {
-//             f.write_str(&format!("{:?},\n", self.get(idx)))?;
-//         }
-//         f.write_str("]")
-//     }
-// }
-
 impl<T: std::fmt::Debug> std::fmt::Debug for GcSlice<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("GcSlice: ")?;
@@ -156,3 +146,31 @@ impl<T: std::fmt::Debug> std::fmt::Debug for GcSlice<T> {
         debug_list.finish()
     }
 }
+
+/// Used by VMs need to specify what type is allowed to be put inside of a slice
+pub trait SupportedSliceType {
+    fn get_magic_gc_slice_id() -> u8
+    where
+        Self: Sized;
+}
+
+// FEAT: I like the idea of a common GcType for slices like that, but it makes it more difficult to supply a scanning closure
+// since the scanning logic depends on the stored type. So shelved for now.
+
+//impl<T: SupportedSliceType + std::fmt::Debug> GcType for GcSlice<T> {
+//    fn get_magic_gc_id() -> u8 {
+//        T::get_magic_gc_slice_id()
+//    }
+//
+//    fn scan_object(_self: Gc<Self>, _scan_fn: &mut dyn FnMut(SOMSlot)) {
+//        // has to be implemented on the VM size, since this needs a function definition change to pass a scanning closure that takes a T and not just a SOMSlot
+//        // (which could be implemented with a new trait probably! FEAT: doing that.)
+//        unimplemented!("scanning slices implementation is currently done only on VM-specific code")
+//    }
+//
+//    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+//        // conversion feels a bit hackish, but this is essentially just a downcast. With a new trait that would take a GcSlice<T> instead of Gc<GcSlice<T>>, we'd be better off
+//        let slice: GcSlice<T> = GcSlice::new(Address::from_ptr(_self.ptr));
+//        slice.get_true_size()
+//    }
+//}
