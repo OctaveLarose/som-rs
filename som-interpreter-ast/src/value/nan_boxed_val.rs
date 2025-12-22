@@ -120,6 +120,7 @@ impl Value {
     pub const NIL: Self = Value(BaseValue::NIL);
     pub const INTEGER_ZERO: Self = Value(BaseValue::INTEGER_ZERO);
     pub const INTEGER_ONE: Self = Value(BaseValue::INTEGER_ONE);
+    pub const STACK_MARKER: Self = Value(BaseValue::new(42, 42));
 
     delegate_to_base_value!(
         new_boolean(value: bool) -> Self,

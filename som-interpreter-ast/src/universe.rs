@@ -219,8 +219,12 @@ impl Universe {
     pub fn eval_with_frame<T: Evaluate>(&mut self, value_stack: &mut GlobalValueStack, nbr_locals: u8, nbr_args: usize, invokable: &mut T) -> Return {
         let frame = Frame::alloc_new_frame(nbr_locals, nbr_args, self, value_stack);
         self.current_frame = frame;
+        value_stack.push(Value::STACK_MARKER);
         let ret = invokable.evaluate(self, value_stack);
         self.current_frame = self.current_frame.prev_frame.clone();
+
+        while value_stack.pop() != Value::STACK_MARKER {}
+
         ret
     }
 
@@ -228,12 +232,18 @@ impl Universe {
     pub fn eval_block_with_frame(&mut self, value_stack: &mut GlobalValueStack, nbr_locals: u8, nbr_args: usize) -> Return {
         let frame = Frame::alloc_new_frame(nbr_locals, nbr_args, self, value_stack);
         self.current_frame = frame.clone();
+        value_stack.push(Value::STACK_MARKER);
         debug_assert_valid_semispace_ptr!(self.current_frame);
+
         let mut invokable = frame.lookup_argument(0).as_block().unwrap();
         debug_assert_valid_semispace_ptr!(invokable);
         debug_assert_valid_semispace_ptr!(invokable.block);
+
         let ret = invokable.evaluate(self, value_stack);
         self.current_frame = self.current_frame.prev_frame.clone();
+
+        while value_stack.pop() != Value::STACK_MARKER {}
+
         ret
     }
 
@@ -243,12 +253,16 @@ impl Universe {
     pub fn eval_block_with_frame_no_pop(&mut self, value_stack: &mut GlobalValueStack, nbr_locals: u8, nbr_args: usize) -> Return {
         let frame = Frame::alloc_new_frame_no_pop(nbr_locals, nbr_args, self, value_stack);
         self.current_frame = frame.clone();
+        value_stack.push(Value::STACK_MARKER);
         debug_assert_valid_semispace_ptr!(self.current_frame);
         let mut invokable = frame.lookup_argument(0).as_block().unwrap();
         debug_assert_valid_semispace_ptr!(invokable);
         debug_assert_valid_semispace_ptr!(invokable.block);
         let ret = invokable.evaluate(self, value_stack);
         self.current_frame = self.current_frame.prev_frame.clone();
+
+        while value_stack.pop() != Value::STACK_MARKER {}
+        
         ret
     }
 
