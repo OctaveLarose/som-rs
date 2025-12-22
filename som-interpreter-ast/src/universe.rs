@@ -16,6 +16,7 @@ use som_value::interned::Interned;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
+use std::marker::PhantomPinned;
 use std::path::{Path, PathBuf};
 use std::slice::Iter;
 use std::time::Instant;
@@ -43,6 +44,9 @@ pub struct Universe {
     pub start_time: Instant,
     /// GC interface
     pub gc_interface: Box<GCInterface>,
+    /// Universe must be `Pin`, since the GC must assume the field `gc_interface` will never move,
+    /// since it holds a duplicated reference to it that it needs to interact with the VM
+    _pin: PhantomPinned,
 }
 
 // Back when gc_interface was a &'static mut, we had a `Drop` impl
@@ -76,21 +80,13 @@ impl Universe {
 
         set_super_class(&mut core.class_class, &core.object_class, &core.metaclass_class);
         set_super_class(&mut core.metaclass_class.clone(), &core.class_class, &core.metaclass_class);
-        // initializeSystemClass(nilClass, objectClass, "Nil");
         set_super_class(&mut core.nil_class, &core.object_class, &core.metaclass_class);
-        // initializeSystemClass(arrayClass, objectClass, "Array");
         set_super_class(&mut core.array_class, &core.object_class, &core.metaclass_class);
-        // initializeSystemClass(methodClass, arrayClass, "Method");
         set_super_class(&mut core.method_class, &core.array_class, &core.metaclass_class);
-        // initializeSystemClass(stringClass, objectClass, "String");
         set_super_class(&mut core.string_class, &core.object_class, &core.metaclass_class);
-        // initializeSystemClass(symbolClass, stringClass, "Symbol");
         set_super_class(&mut core.symbol_class, &core.string_class, &core.metaclass_class);
-        // initializeSystemClass(integerClass, objectClass, "Integer");
         set_super_class(&mut core.integer_class, &core.object_class, &core.metaclass_class);
-        // initializeSystemClass(primitiveClass, objectClass, "Primitive");
         set_super_class(&mut core.primitive_class, &core.object_class, &core.metaclass_class);
-        // initializeSystemClass(doubleClass, objectClass, "Double");
         set_super_class(&mut core.double_class, &core.object_class, &core.metaclass_class);
 
         set_super_class(&mut core.system_class, &core.object_class, &core.metaclass_class);
@@ -127,6 +123,7 @@ impl Universe {
             start_time: Instant::now(),
             core,
             gc_interface,
+            _pin: PhantomPinned,
         })
     }
 
