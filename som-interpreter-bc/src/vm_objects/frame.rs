@@ -13,7 +13,7 @@ use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::ops::DerefMut;
 
-pub(crate) const OFFSET_TO_STACK: usize = size_of::<Frame>();
+pub(crate) const OFFSET_TO_VALUES: usize = size_of::<Frame>();
 
 // TODO: fix hacky conversions from u8 to usize and vice-versa, settle on a more uniform scheme (i.e. only usizes..)
 
@@ -38,40 +38,40 @@ pub struct Frame {
     /// It's also stored in the current context, but we keep it here for faster access since we need it to calculate the offset to local variables
     pub nbr_args: u8,
 
-    /// Needed for similar reasons as the number of arguments, for easier access to args and locals.
-    pub max_stack_size: u8,
-
     /// markers. we don't use them directly. it's mostly a reminder that the struct looks different in memory... not the cleanest but not sure how else to go about it
-    pub stack_marker: PhantomData<[Value]>,
     pub args_marker: PhantomData<[Value]>,
     pub locals_marker: PhantomData<[Value]>,
 }
 
 impl Frame {
     /// Allocates a frame for a block.
-    /// We assume that the block is on the stack of the previous frame, as is the case when calling
-    /// the primitive functions that create new blocks. We do this to make sure it's reachable during GC.
-    pub fn alloc_from_block(nbr_args: usize, prev_frame: &mut Gc<Frame>, gc_interface: &mut GCInterface) -> Gc<Frame> {
+    pub fn alloc_from_block(nbr_args: usize, prev_frame: Gc<Frame>, stack: &mut Vec<Value>, gc_interface: &mut GCInterface) -> Gc<Frame> {
         std::hint::black_box(&prev_frame);
 
-        let (max_stack_size, nbr_locals) = {
-            let block_value = prev_frame.stack_nth_back(nbr_args - 1);
+        let nbr_locals = {
+            let block_value = stack[stack.len() - 1 - (nbr_args - 1)];
+
             let block = block_value.as_block().unwrap();
             {
                 let block_env = block.blk_info.get_env();
-                (block_env.max_stack_size as usize, block_env.nbr_locals)
+                block_env.nbr_locals
             }
         };
 
-        let size = Frame::get_true_size(max_stack_size, nbr_args as u8, nbr_locals);
+        let size = Frame::get_true_size(nbr_args as u8, nbr_locals);
         let mut frame_ptr: Gc<Frame> = gc_interface.request_memory_for_type(size, AllocSiteMarker::BlockFrame);
 
-        let block_value = prev_frame.stack_nth_back(nbr_args - 1);
+        // let block_value = stack.nth_back(nbr_args - 1);
+        let block_value = *stack.get(stack.len() - 1 - (nbr_args - 1)).unwrap();
         *frame_ptr = Frame::from_block(block_value.as_block().unwrap());
 
-        let args = prev_frame.stack_n_last_elements(nbr_args);
-        Frame::init_frame_post_alloc(frame_ptr.clone(), args, max_stack_size, prev_frame.clone());
-        prev_frame.remove_n_last_elements(nbr_args);
+        // let args = stack.n_last_elements(nbr_args);
+        let args = &stack[stack.len() - nbr_args..];
+
+        Frame::init_frame_post_alloc(frame_ptr.clone(), args, prev_frame.clone());
+
+        let _ = stack.split_off(stack.len() - nbr_args); // TODO: this should just be put before as args. keeping it that way just to match the og code structure, but that may have been an oversight
+                                                         // prev_frame.remove_n_last_elements(nbr_args);
 
         frame_ptr
     }
@@ -80,12 +80,12 @@ impl Frame {
     /// Special-cased because the normal case pushes the previous value on the previous frame's
     /// stack for it to be reachable: we have no previous frame in some cases, so we can't.
     pub fn alloc_initial_method(init_method: Gc<Method>, args: &[Value], gc_interface: &mut GCInterface) -> Gc<Frame> {
-        let (max_stack_size, nbr_locals) = match &*init_method {
-            Method::Defined(m_env) => (m_env.max_stack_size as usize, m_env.nbr_locals),
+        let nbr_locals = match &*init_method {
+            Method::Defined(m_env) => m_env.nbr_locals,
             _ => unreachable!("if we're allocating a method frame, it has to be defined."),
         };
 
-        let size = Frame::get_true_size(max_stack_size, args.len() as u8, nbr_locals);
+        let size = Frame::get_true_size(args.len() as u8, nbr_locals);
 
         let nbr_gc_runs = gc_interface.get_nbr_collections();
         let mut frame_ptr: Gc<Frame> = gc_interface.request_memory_for_type(size, AllocSiteMarker::InitMethodFrame);
@@ -97,26 +97,25 @@ impl Frame {
         );
 
         *frame_ptr = Frame::from_method(init_method);
-        Frame::init_frame_post_alloc(frame_ptr.clone(), args, max_stack_size, Gc::default());
+        Frame::init_frame_post_alloc(frame_ptr.clone(), args, Gc::default());
 
         frame_ptr
     }
 
     /// Initializes a frame with all its expected values, given a pointer to a Frame.
     /// Recurring logic for all functions that allocate frames.
-    pub(crate) fn init_frame_post_alloc(mut frame: Gc<Frame>, args: &[Value], stack_size: usize, prev_frame: Gc<Frame>) {
+    pub(crate) fn init_frame_post_alloc(mut frame: Gc<Frame>, args: &[Value], prev_frame: Gc<Frame>) {
         unsafe {
             frame.stack_ptr = 0;
 
-            frame.max_stack_size = stack_size as u8;
             frame.nbr_args = args.len() as u8;
 
             // initializing arguments from the args slice
-            let args_ptr = frame.as_ptr().byte_add(OFFSET_TO_STACK + stack_size * size_of::<Value>()) as *mut Value;
+            let args_ptr = frame.as_ptr().byte_add(OFFSET_TO_VALUES) as *mut Value;
             std::slice::from_raw_parts_mut(args_ptr, args.len()).copy_from_slice(args);
 
             // setting all locals to NIL.
-            let locals_ptr = frame.as_ptr().byte_add(OFFSET_TO_STACK + (stack_size + args.len()) * size_of::<Value>()) as *mut Value;
+            let locals_ptr = frame.as_ptr().byte_add(OFFSET_TO_VALUES + std::mem::size_of_val(args)) as *mut Value;
             for idx in 0..frame.get_nbr_locals() {
                 *locals_ptr.add(idx as usize) = Value::NIL;
             }
@@ -133,10 +132,8 @@ impl Frame {
             bytecode_idx: 0,
             stack_ptr: 0,
             nbr_args: 0,
-            max_stack_size: 0,
             args_marker: PhantomData,
             locals_marker: PhantomData,
-            stack_marker: PhantomData,
         }
     }
 
@@ -148,26 +145,19 @@ impl Frame {
             bytecode_idx: 0,
             stack_ptr: 0,
             nbr_args: 0,
-            max_stack_size: 0,
             args_marker: PhantomData,
             locals_marker: PhantomData,
-            stack_marker: PhantomData,
         }
     }
 
     /// Returns the true size of the `Frame`, counting the extra memory needed for its stack/locals/arguments.
-    pub fn get_true_size(max_stack_size: usize, nbr_args: u8, nbr_locals: u8) -> usize {
-        size_of::<Frame>() + ((max_stack_size + nbr_args as usize + nbr_locals as usize) * size_of::<Value>())
+    pub fn get_true_size(nbr_args: u8, nbr_locals: u8) -> usize {
+        size_of::<Frame>() + ((nbr_args as usize + nbr_locals as usize) * size_of::<Value>())
     }
 
     #[inline(always)]
     pub fn get_bytecode_ptr(&self) -> &Vec<Bytecode> {
         &self.current_context.get_env().body
-    }
-
-    #[inline(always)]
-    pub fn get_max_stack_size(&self) -> usize {
-        self.max_stack_size as usize
     }
 
     /// # Safety
@@ -220,8 +210,8 @@ impl Frame {
     #[inline(always)]
     pub fn lookup_local(&self, idx: usize) -> &Value {
         unsafe {
-            let value_heap_ptr = (self as *const Self).byte_add(OFFSET_TO_STACK) as *mut Value;
-            let locals_ptr = value_heap_ptr.add(self.get_max_stack_size() + self.nbr_args as usize);
+            let value_heap_ptr = (self as *const Self).byte_add(OFFSET_TO_VALUES) as *mut Value;
+            let locals_ptr = value_heap_ptr.add(self.nbr_args as usize);
             &*locals_ptr.add(idx)
         }
     }
@@ -230,8 +220,8 @@ impl Frame {
     #[inline(always)]
     pub fn assign_local(&mut self, idx: usize, value: Value) {
         unsafe {
-            let value_heap_ptr = (self as *const Self).byte_add(OFFSET_TO_STACK) as *mut Value;
-            let locals_ptr = value_heap_ptr.add(self.get_max_stack_size() + self.nbr_args as usize);
+            let value_heap_ptr = (self as *const Self).byte_add(OFFSET_TO_VALUES) as *mut Value;
+            let locals_ptr = value_heap_ptr.add(self.nbr_args as usize);
             *locals_ptr.add(idx) = value
         }
     }
@@ -239,7 +229,7 @@ impl Frame {
     #[inline(always)]
     pub fn lookup_argument(&self, idx: usize) -> &Value {
         unsafe {
-            let args_ptr = (self as *const Self as usize + OFFSET_TO_STACK + self.get_max_stack_size() * size_of::<Value>()) as *mut Value;
+            let args_ptr = (self as *const Self as usize + OFFSET_TO_VALUES) as *mut Value;
             &*args_ptr.add(idx)
         }
     }
@@ -248,7 +238,7 @@ impl Frame {
     #[inline(always)]
     pub fn assign_arg(&mut self, idx: usize, value: Value) {
         unsafe {
-            let args_ptr = (self as *const Self as usize + OFFSET_TO_STACK + self.get_max_stack_size() * size_of::<Value>()) as *mut Value;
+            let args_ptr = (self as *const Self as usize + OFFSET_TO_VALUES) as *mut Value;
             *args_ptr.add(idx) = value
         }
     }
@@ -278,128 +268,85 @@ impl Frame {
         target_frame
     }
 
-    /// Gets the nth element from the stack (not in reverse order - "3" yields the 3rd element from the bottom, not the top)
-    /// # Safety
-    /// The caller needs to ensure this is a valid stack value. That means not outside the stack's maximum size, and not pointing to an uninitialized value.
-    #[inline(always)]
-    pub unsafe fn nth_stack(&self, n: u8) -> &Value {
-        let stack_ptr = self as *const Self as usize + OFFSET_TO_STACK;
-        let val_ptr = stack_ptr + (n as usize * size_of::<Value>());
-        &*(val_ptr as *const Value)
-    }
-
-    /// Gets the nth element from the stack mutably (not in reverse order - "3" yields the 3rd element from the bottom, not the top)
-    /// # Safety
-    /// The caller needs to ensure this is a valid stack value. That means not outside the stack's maximum size, and not pointing to an uninitialized value.
-    #[inline(always)]
-    pub unsafe fn nth_stack_mut(&mut self, n: u8) -> &mut Value {
-        let stack_ptr = self as *mut Self as usize + OFFSET_TO_STACK;
-        let val_ptr = stack_ptr + (n as usize * size_of::<Value>());
-        &mut *(val_ptr as *mut Value)
-    }
-
-    #[inline(always)]
-    pub fn stack_push(&mut self, value: Value) {
-        debug_assert!(
-            self.stack_ptr < self.current_context.get_env().max_stack_size,
-            "stack_push failed in {:?}::>{:?} (hit max stack size of {}), {:?}",
-            self.current_context.holder().name,
-            self.current_context.signature(),
-            self.current_context.get_env().max_stack_size,
-            self
-        );
-        debug_assert!(self.stack_ptr < self.current_context.get_env().max_stack_size);
-        unsafe {
-            *self.nth_stack_mut(self.stack_ptr) = value;
-            self.stack_ptr += 1;
-        }
-    }
-
-    #[inline(always)]
-    pub fn stack_pop(&mut self) -> Value {
-        debug_assert!(self.stack_ptr > 0);
-        unsafe {
-            self.stack_ptr -= 1;
-            *self.nth_stack_mut(self.stack_ptr)
-        }
-    }
-
-    #[inline(always)]
-    pub fn stack_last(&self) -> &Value {
-        debug_assert!(self.stack_ptr > 0);
-        unsafe { self.nth_stack(self.stack_ptr - 1) }
-    }
-
-    #[inline(always)]
-    pub fn stack_last_mut(&mut self) -> &mut Value {
-        debug_assert!(self.stack_ptr > 0);
-        unsafe { self.nth_stack_mut(self.stack_ptr - 1) }
-    }
-
-    #[inline(always)]
-    pub fn stack_nth_back(&self, n: usize) -> &Value {
-        debug_assert!(self.stack_ptr >= (n + 1) as u8);
-        unsafe { self.nth_stack(self.stack_ptr - (n as u8 + 1)) }
-    }
-
-    #[inline(always)]
-    pub fn stack_n_last_elements(&self, n: usize) -> &[Value] {
-        unsafe {
-            let slice_ptr = self.nth_stack(self.stack_ptr - n as u8);
-            std::slice::from_raw_parts(slice_ptr, n)
-        }
-    }
-
-    #[inline(always)]
-    pub fn remove_n_last_elements(&mut self, n: usize) {
-        debug_assert!(self.stack_ptr + 1 > n as u8);
-        self.stack_ptr -= n as u8
-    }
-
-    /// Gets the total number of elements on the stack. Only used for debugging.
-    #[cfg(test)]
-    pub fn stack_len(&self) -> usize {
-        self.stack_ptr as usize
-    }
-}
-
-/// Iterate over the stack for a given frame.
-/// It iterates like a stack in "reverse order", returning the last-added element to the stack first.
-pub struct FrameStackIter<'a> {
-    frame: &'a Frame,
-    stack_idx: u8,
-}
-
-impl<'a> From<&'a Frame> for FrameStackIter<'a> {
-    fn from(frame: &'a Frame) -> Self {
-        Self {
-            frame,
-            stack_idx: frame.stack_ptr,
-        }
-    }
-}
-
-impl<'a> Iterator for FrameStackIter<'a> {
-    type Item = &'a Value;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.stack_idx == 0 {
-            return None;
-        }
-
-        self.stack_idx -= 1;
-        let val = unsafe { self.frame.nth_stack(self.stack_idx) };
-        Some(val)
-    }
+    ///// Gets the nth element from the stack (not in reverse order - "3" yields the 3rd element from the bottom, not the top)
+    ///// # Safety
+    ///// The caller needs to ensure this is a valid stack value. That means not outside the stack's maximum size, and not pointing to an uninitialized value.
+    //#[inline(always)]
+    //pub unsafe fn nth_stack(&self, n: u8) -> &Value {
+    //    let stack_ptr = self as *const Self as usize + OFFSET_TO_VALUES;
+    //    let val_ptr = stack_ptr + (n as usize * size_of::<Value>());
+    //    &*(val_ptr as *const Value)
+    //}
+    //
+    ///// Gets the nth element from the stack mutably (not in reverse order - "3" yields the 3rd element from the bottom, not the top)
+    ///// # Safety
+    ///// The caller needs to ensure this is a valid stack value. That means not outside the stack's maximum size, and not pointing to an uninitialized value.
+    //#[inline(always)]
+    //pub unsafe fn nth_stack_mut(&mut self, n: u8) -> &mut Value {
+    //    let stack_ptr = self as *mut Self as usize + OFFSET_TO_VALUES;
+    //    let val_ptr = stack_ptr + (n as usize * size_of::<Value>());
+    //    &mut *(val_ptr as *mut Value)
+    //}
+    //
+    //#[inline(always)]
+    //pub fn stack_push(&mut self, value: Value) {
+    //    debug_assert!(self.stack_ptr < self.current_context.get_env().max_stack_size);
+    //    unsafe {
+    //        *self.nth_stack_mut(self.stack_ptr) = value;
+    //        self.stack_ptr += 1;
+    //    }
+    //}
+    //
+    //#[inline(always)]
+    //pub fn stack_pop(&mut self) -> Value {
+    //    debug_assert!(self.stack_ptr > 0);
+    //    unsafe {
+    //        self.stack_ptr -= 1;
+    //        *self.nth_stack_mut(self.stack_ptr)
+    //    }
+    //}
+    //
+    //#[inline(always)]
+    //pub fn stack_last(&self) -> &Value {
+    //    debug_assert!(self.stack_ptr > 0);
+    //    unsafe { self.nth_stack(self.stack_ptr - 1) }
+    //}
+    //
+    //#[inline(always)]
+    //pub fn stack_last_mut(&mut self) -> &mut Value {
+    //    debug_assert!(self.stack_ptr > 0);
+    //    unsafe { self.nth_stack_mut(self.stack_ptr - 1) }
+    //}
+    //
+    //#[inline(always)]
+    //pub fn stack_nth_back(&self, n: usize) -> &Value {
+    //    debug_assert!(self.stack_ptr >= (n + 1) as u8);
+    //    unsafe { self.nth_stack(self.stack_ptr - (n as u8 + 1)) }
+    //}
+    //
+    //#[inline(always)]
+    //pub fn stack_n_last_elements(&self, n: usize) -> &[Value] {
+    //    unsafe {
+    //        let slice_ptr = self.nth_stack(self.stack_ptr - n as u8);
+    //        std::slice::from_raw_parts(slice_ptr, n)
+    //    }
+    //}
+    //
+    //#[inline(always)]
+    //pub fn remove_n_last_elements(&mut self, n: usize) {
+    //    debug_assert!(self.stack_ptr + 1 > n as u8);
+    //    self.stack_ptr -= n as u8
+    //}
+    //
+    ///// Gets the total number of elements on the stack. Only used for debugging.
+    //#[cfg(test)]
+    //pub fn stack_len(&self) -> usize {
+    //    self.stack_ptr as usize
+    //}
 }
 
 impl Debug for Frame {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        fn stack_printer(frame: &Frame) -> String {
-            let stack_elems = FrameStackIter::from(frame).map(|val| format!("{:?}", val)).collect::<Vec<_>>();
-            format!("[{}]", stack_elems.join(", "))
-        }
-
         f.debug_struct("Frame")
             .field(
                 "current method",
@@ -414,7 +361,6 @@ impl Debug for Frame {
                 let locals: Vec<String> = (0..self.get_nbr_locals()).map(|idx| format!("{:?}", self.lookup_local(idx as usize))).collect();
                 &format!("[{}]", locals.join(", "))
             })
-            .field("stack", &stack_printer(self))
             .finish()
     }
 }
@@ -440,14 +386,9 @@ impl GcType for Frame {
             let val: &Value = frame.lookup_argument(i as usize);
             visit_value(val, visit_fn)
         }
-
-        let stack_iter = FrameStackIter::from(&*frame);
-        for stack_item in stack_iter.into_iter() {
-            visit_value(stack_item, visit_fn);
-        }
     }
 
     fn get_size_in_memory(_self: Gc<Self>) -> usize {
-        Frame::get_true_size(_self.get_max_stack_size(), _self.get_nbr_args(), _self.get_nbr_locals())
+        Frame::get_true_size(_self.get_nbr_args(), _self.get_nbr_locals())
     }
 }

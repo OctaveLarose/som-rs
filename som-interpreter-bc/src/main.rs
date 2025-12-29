@@ -158,12 +158,11 @@ fn dump_class_methods(class: Gc<Class>, opts: &CLIOptions, file_stem: &str, univ
         match &*method {
             Method::Defined(env) => {
                 println!(
-                    "{class}>>#{signature} ({num_locals} locals, {num_literals} literals) (max stack size: {max_stack_size})",
+                    "{class}>>#{signature} ({num_locals} locals, {num_literals} literals)",
                     class = file_stem,
                     signature = method.signature(),
                     num_locals = env.nbr_locals,
                     num_literals = env.literals.len(),
-                    max_stack_size = env.max_stack_size,
                 );
 
                 disassemble_method_body(universe, &class, env);

@@ -41,7 +41,6 @@ pub struct MethodInfo {
     pub inline_cache: BodyInlineCache,
     pub nbr_locals: u8,
     pub nbr_params: u8,
-    pub max_stack_size: u8,
 }
 
 /// Represents a class method.
@@ -161,9 +160,9 @@ impl Invoke for Gc<Method> {
             }
             Method::Primitive(func, ..) => {
                 let nbr_args = args.len() + 1;
-                interpreter.get_current_frame().stack_push(receiver);
+                interpreter.stack.push(receiver);
                 for arg in args {
-                    interpreter.get_current_frame().stack_push(arg)
+                    interpreter.stack.push(arg)
                 }
                 func(interpreter, universe, nbr_args).unwrap_or_else(|_| panic!("invoking func {} failed", &self.signature()));
             }

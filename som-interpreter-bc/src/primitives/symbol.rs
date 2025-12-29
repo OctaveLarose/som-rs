@@ -3,7 +3,6 @@ use once_cell::sync::Lazy;
 use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_gc::gcref::Gc;
 
-use crate::cur_frame;
 use crate::interpreter::Interpreter;
 use crate::primitives::PrimInfo;
 use crate::primitives::PrimitiveFn;
@@ -14,7 +13,7 @@ pub static INSTANCE_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| Box::new([(
 pub static CLASS_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| Box::new([]));
 
 fn as_string(interp: &mut Interpreter, universe: &mut Universe) -> Result<Gc<String>, Error> {
-    let symbol = cur_frame!(interp).stack_pop().as_symbol().unwrap();
+    let symbol = interp.stack.pop().unwrap().as_symbol().unwrap();
     Ok(universe.gc_interface.alloc(universe.lookup_symbol(symbol).to_owned(), AllocSiteMarker::String))
 }
 

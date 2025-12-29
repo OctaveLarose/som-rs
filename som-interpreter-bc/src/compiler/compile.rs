@@ -58,77 +58,6 @@ pub(crate) trait InnerGenCtxt: GenCtxt {
     fn remove_dup_popx_pop_sequences(&mut self);
 }
 
-/// Calculates the maximum stack size possible. For each frame, this allows us to allocate a stack of precisely the maximum possible size it needs.
-/// FEAT: it's possible our estimate is overly conservative. Reducing the max stack size reduces time spent allocating, and could maybe be a worthwhile optimization.
-/// TODO: at least, there should be a few tests down there in this file checking it.
-pub(crate) fn get_max_stack_size(body: &[Bytecode], interner: &Interner) -> u8 {
-    let mut abstract_stack_size = 0;
-    let mut max_stack_size_observed: u8 = 0;
-
-    for bc in body {
-        match bc {
-            Bytecode::Dup
-            | Bytecode::Dup2
-            | Bytecode::PushLocal(..)
-            | Bytecode::PushNonLocal(..)
-            | Bytecode::PushArg(..)
-            | Bytecode::PushNonLocalArg(..)
-            | Bytecode::PushField(..)
-            | Bytecode::PushBlock(..)
-            | Bytecode::PushConstant(..)
-            | Bytecode::PushGlobal(..)
-            | Bytecode::Push0
-            | Bytecode::Push1
-            | Bytecode::PushNil
-            | Bytecode::PushSelf => {
-                abstract_stack_size += 1;
-                if abstract_stack_size > max_stack_size_observed {
-                    max_stack_size_observed = abstract_stack_size
-                }
-            }
-            Bytecode::Pop
-            | Bytecode::PopLocal(..)
-            | Bytecode::PopArg(..)
-            | Bytecode::PopField(..)
-            | Bytecode::JumpOnTruePop(..)
-            | Bytecode::JumpOnFalsePop(..) => abstract_stack_size -= 1,
-            Bytecode::Send1(_) => {}
-            Bytecode::Send2(_) => abstract_stack_size -= 1, // number of arguments (they all get popped) + 1 for the result
-            Bytecode::Send3(_) => abstract_stack_size -= 2,
-            Bytecode::SendN(symbol) | Bytecode::SuperSend(symbol) => {
-                let nb_params = {
-                    let uninterned = interner.lookup(*symbol);
-                    match uninterned.chars().next() {
-                        Some(ch) if !ch.is_alphabetic() => 1,
-                        _ => uninterned.chars().filter(|ch| *ch == ':').count() as u8,
-                    }
-                };
-
-                if nb_params > 0 {
-                    abstract_stack_size -= nb_params - 1
-                }
-            }
-            Bytecode::Inc => {}
-            Bytecode::Dec => {}
-            Bytecode::ReturnSelf => {}
-            Bytecode::ReturnLocal => {}
-            Bytecode::ReturnNonLocal(_) => {}
-            Bytecode::Jump(_) => {}
-            Bytecode::JumpBackward(_) => {}
-            Bytecode::JumpOnTrueTopNil(_) => {}
-            Bytecode::JumpOnFalseTopNil(_) => {}
-            Bytecode::JumpOnNilTopTop(_) => {}
-            Bytecode::JumpOnNotNilTopTop(_) => {}
-            Bytecode::JumpOnNilPop(_) => {}
-            Bytecode::JumpOnNotNilPop(_) => {}
-            Bytecode::JumpIfGreater(_) => {}
-        }
-    }
-
-    // Need to add an extra slot for the hack invoke case
-    max_stack_size_observed + 1
-}
-
 struct BlockGenCtxt<'a> {
     pub outer: &'a mut dyn GenCtxt,
     pub args_nbr: usize,
@@ -970,7 +899,6 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                 let body = ctxt.inner.body.clone().unwrap_or_default();
                 let literals: Vec<Literal> = ctxt.inner.literals.clone().into_iter().collect();
                 let signature = ctxt.signature.clone();
-                let max_stack_size = get_max_stack_size(&body, ctxt.get_interner());
                 let nbr_params = {
                     match ctxt.signature.chars().next() {
                         Some(ch) if !ch.is_alphabetic() => 1,
@@ -993,7 +921,6 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                         nbr_params,
                         literals,
                         inline_cache,
-                        max_stack_size,
                         #[cfg(feature = "frame-debug-info")]
                         block_debug_info: dbg_info,
                     })
@@ -1059,7 +986,6 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
     let nbr_locals = ctxt.locals_nbr as u8;
     let nbr_params = ctxt.args_nbr as u8;
     let inline_cache = vec![None; body.len()];
-    let max_stack_size = get_max_stack_size(&body, ctxt.get_interner());
 
     let block = Block {
         frame,
@@ -1071,7 +997,6 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
                 body,
                 nbr_params,
                 inline_cache,
-                max_stack_size,
                 #[cfg(feature = "frame-debug-info")]
                 block_debug_info: ctxt.debug_info,
             }),

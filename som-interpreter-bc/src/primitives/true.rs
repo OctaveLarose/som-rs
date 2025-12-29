@@ -32,14 +32,16 @@ fn or(_self: Value, _other: Value) -> Result<bool, Error> {
 
 /// See equivalent function for the false primitive.
 fn and_if_true(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
-    let cond_val = *interpreter.get_current_frame().stack_last();
+    let cond_val = *interpreter.stack.last().unwrap();
 
     if cond_val.as_block().is_some() {
         interpreter.push_block_frame(1, &mut universe.gc_interface);
-        interpreter.get_current_frame().prev_frame.remove_n_last_elements(1); // the "True". the "Block" was already consumed and put into the new frame
+        let stack_marker = interpreter.stack.pop().unwrap();
+        *interpreter.stack.last_mut().unwrap() = stack_marker; // the "True". the "Block" was already consumed and put into the new frame
     } else {
-        interpreter.get_current_frame().remove_n_last_elements(2);
-        interpreter.get_current_frame().stack_push(cond_val);
+        interpreter.stack.pop();
+        interpreter.stack.pop();
+        interpreter.stack.push(cond_val);
     }
     Ok(())
 }

@@ -70,7 +70,6 @@ fn disassemble_body(universe: &Universe, class: &Class, level: usize, env: &mut 
                     println!("({padding}  | (invalid block)");
                     continue;
                 };
-                println!(" - (max stack size: {})", blk.blk_info.get_env().max_stack_size);
                 env.push(&**blk);
                 disassemble_body(universe, class, level + 1, env);
                 env.pop();

@@ -262,7 +262,7 @@ impl Universe {
         self.current_frame = self.current_frame.prev_frame.clone();
 
         while value_stack.pop() != Value::STACK_MARKER {}
-        
+
         ret
     }
 

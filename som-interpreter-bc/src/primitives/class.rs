@@ -40,18 +40,18 @@ fn superclass(receiver: Gc<Class>) -> Result<Value, Error> {
 fn new(interp: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
     std::hint::black_box(&interp.current_frame);
 
-    let nbr_fields = interp.get_current_frame().stack_last().as_class().unwrap().get_nbr_fields();
+    let nbr_fields = interp.stack.last().unwrap().as_class().unwrap().get_nbr_fields();
     let size = size_of::<Instance>() + (nbr_fields * size_of::<Value>());
 
     let mut instance_ptr: Gc<Instance> = universe.gc_interface.request_memory_for_type(size, AllocSiteMarker::Instance);
-    *instance_ptr = Instance::from_class(interp.get_current_frame().stack_last().as_class().unwrap());
+    *instance_ptr = Instance::from_class(interp.stack.last().unwrap().as_class().unwrap());
 
     for idx in 0..nbr_fields {
         Instance::assign_field(&instance_ptr, idx, Value::NIL)
     }
 
-    interp.get_current_frame().stack_pop();
-    interp.get_current_frame().stack_push(Value::Instance(instance_ptr));
+    interp.stack.pop();
+    interp.stack.push(Value::Instance(instance_ptr));
 
     Ok(())
 }
@@ -62,7 +62,7 @@ fn name(interp: &mut Interpreter, universe: &mut Universe) -> Result<Interned, E
 }
 
 fn methods(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValue, Error> {
-    let cls: Gc<Class> = interp.get_current_frame().stack_last().as_class().unwrap();
+    let cls: Gc<Class> = interp.stack.last().unwrap().as_class().unwrap();
     std::hint::black_box(&cls); // paranoia, in case the compiler gets ideas about reusing that variable
     let slice_size = cls.methods.len() * size_of::<Value>();
     let slice_addr = universe.gc_interface.request_memory_for_slice_type(slice_size, AllocSiteMarker::VecValue);
