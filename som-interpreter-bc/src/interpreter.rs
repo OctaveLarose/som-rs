@@ -180,13 +180,8 @@ impl Interpreter {
             let block_value = *self.stack.get(self.stack.len() - 1 - (nbr_args - 1)).unwrap();
             *frame_ptr = Frame::from_block(block_value.as_block().unwrap());
 
-            let args = &self.stack[self.stack.len() - nbr_args..];
-
-            Frame::init_frame_post_alloc(frame_ptr.clone(), args, self.get_current_frame());
-
-            let _ = self.stack.split_off(self.stack.len() - nbr_args);
-            // TODO: this should just be put before as args. keeping it that way just to match the og code structure, but that may have been an oversight
-            // prev_frame.remove_n_last_elements(nbr_args);
+            let args = self.stack.split_off(self.stack.len() - nbr_args);
+            Frame::init_frame_post_alloc(frame_ptr.clone(), &args, self.get_current_frame());
 
             frame_ptr
         };
