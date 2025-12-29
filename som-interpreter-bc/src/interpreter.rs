@@ -160,7 +160,37 @@ impl Interpreter {
 
     /// Creates and allocates a new frame corresponding to a method.
     pub fn push_block_frame(&mut self, nbr_args: usize, mutator: &mut GCInterface) -> Gc<Frame> {
-        let frame_ptr = Frame::alloc_from_block(nbr_args, self.get_current_frame().clone(), &mut self.stack, mutator);
+        // This used to be a function defined in the frame module, but its logic is tightly coupled with the interpreter. As in, it needs access to the stack, and the mutator.
+        // NB: Also, inlining it here helps write moving-GC-proof code, since instead of passing references to the interpreter's internals (which would be moved by potential GC triggers), we can query those internals ourselves and ensure we get them from the source, where they would have been moved correctly.
+        // A good example is querying the "current" (now parent) frame from the interpreter *after* allocating memory for the new frame, which was an issue when this was a non-inlined function since we then needed to pass a reference to the frame *before* allocating memory, as a function argument, and then we had to be very careful not to get bugs.
+        let frame_ptr = {
+            let nbr_locals = {
+                let block_value = self.stack[self.stack.len() - 1 - (nbr_args - 1)];
+
+                let block = block_value.as_block().unwrap();
+                {
+                    let block_env = block.blk_info.get_env();
+                    block_env.nbr_locals
+                }
+            };
+
+            let size = Frame::get_true_size(nbr_args as u8, nbr_locals);
+            let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::BlockFrame);
+
+            let block_value = *self.stack.get(self.stack.len() - 1 - (nbr_args - 1)).unwrap();
+            *frame_ptr = Frame::from_block(block_value.as_block().unwrap());
+
+            let args = &self.stack[self.stack.len() - nbr_args..];
+
+            Frame::init_frame_post_alloc(frame_ptr.clone(), args, self.get_current_frame());
+
+            let _ = self.stack.split_off(self.stack.len() - nbr_args);
+            // TODO: this should just be put before as args. keeping it that way just to match the og code structure, but that may have been an oversight
+            // prev_frame.remove_n_last_elements(nbr_args);
+
+            frame_ptr
+        };
+
         self.stack.push(Value::STACK_MARKER);
         self.bytecode_idx = 0;
         self.current_frame = UnsafeCell::from(frame_ptr.clone());

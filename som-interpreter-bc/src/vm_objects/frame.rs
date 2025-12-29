@@ -45,7 +45,7 @@ pub struct Frame {
 
 impl Frame {
     /// Allocates a frame for a block.
-    pub fn alloc_from_block(nbr_args: usize, prev_frame: Gc<Frame>, stack: &mut Vec<Value>, gc_interface: &mut GCInterface) -> Gc<Frame> {
+    pub fn alloc_from_block(nbr_args: usize, prev_frame: &Gc<Frame>, stack: &mut Vec<Value>, gc_interface: &mut GCInterface) -> Gc<Frame> {
         std::hint::black_box(&prev_frame);
 
         let nbr_locals = {
@@ -125,7 +125,7 @@ impl Frame {
     }
 
     // Creates a frame from a block. Meant to only be called by the alloc_from_block function
-    fn from_block(block: Gc<Block>) -> Self {
+    pub(crate) fn from_block(block: Gc<Block>) -> Self {
         Self {
             prev_frame: Gc::default(),
             current_context: block.blk_info.clone(),
