@@ -32,9 +32,6 @@ pub struct Frame {
     /// Bytecode index.
     pub bytecode_idx: u16,
 
-    /// Stack pointer/index. Points to the NEXT element that can be written to the stack. Alternatively, can be seen as number of elements on the stack
-    pub stack_ptr: u8,
-
     /// It's also stored in the current context, but we keep it here for faster access since we need it to calculate the offset to local variables
     pub nbr_args: u8,
 
@@ -44,50 +41,21 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// Allocates a frame for a block.
-    pub fn alloc_from_block(nbr_args: usize, prev_frame: &Gc<Frame>, stack: &mut Vec<Value>, gc_interface: &mut GCInterface) -> Gc<Frame> {
-        std::hint::black_box(&prev_frame);
-
-        let nbr_locals = {
-            let block_value = stack[stack.len() - 1 - (nbr_args - 1)];
-
-            let block = block_value.as_block().unwrap();
-            {
-                let block_env = block.blk_info.get_env();
-                block_env.nbr_locals
-            }
-        };
-
-        let size = Frame::get_true_size(nbr_args as u8, nbr_locals);
-        let mut frame_ptr: Gc<Frame> = gc_interface.request_memory_for_type(size, AllocSiteMarker::BlockFrame);
-
-        // let block_value = stack.nth_back(nbr_args - 1);
-        let block_value = *stack.get(stack.len() - 1 - (nbr_args - 1)).unwrap();
-        *frame_ptr = Frame::from_block(block_value.as_block().unwrap());
-
-        // let args = stack.n_last_elements(nbr_args);
-        let args = &stack[stack.len() - nbr_args..];
-
-        Frame::init_frame_post_alloc(frame_ptr.clone(), args, prev_frame.clone());
-
-        let _ = stack.split_off(stack.len() - nbr_args); // TODO: this should just be put before as args. keeping it that way just to match the og code structure, but that may have been an oversight
-                                                         // prev_frame.remove_n_last_elements(nbr_args);
-
-        frame_ptr
-    }
-
     /// Allocates the very first frame, for the `initialize:` call and tests.
     /// Special-cased because the normal case pushes the previous value on the previous frame's
     /// stack for it to be reachable: we have no previous frame in some cases, so we can't.
+    /// TODO: if stack isn't in each frame, then change this, right?
     pub fn alloc_initial_method(init_method: Gc<Method>, args: &[Value], gc_interface: &mut GCInterface) -> Gc<Frame> {
-        let nbr_locals = match &*init_method {
-            Method::Defined(m_env) => m_env.nbr_locals,
-            _ => unreachable!("if we're allocating a method frame, it has to be defined."),
+        let size = {
+            let nbr_locals = match &*init_method {
+                Method::Defined(m_env) => m_env.nbr_locals,
+                _ => unreachable!("if we're allocating a method frame, it has to be defined."),
+            };
+            Frame::get_true_size(args.len() as u8, nbr_locals)
         };
 
-        let size = Frame::get_true_size(args.len() as u8, nbr_locals);
-
         let nbr_gc_runs = gc_interface.get_nbr_collections();
+
         let mut frame_ptr: Gc<Frame> = gc_interface.request_memory_for_type(size, AllocSiteMarker::InitMethodFrame);
 
         assert_eq!(
@@ -96,18 +64,16 @@ impl Frame {
             "We assume we can't trigger a collection when allocating a parent-less frame"
         );
 
-        *frame_ptr = Frame::from_method(init_method);
-        Frame::init_frame_post_alloc(frame_ptr.clone(), args, Gc::default());
+        *frame_ptr = Frame::from_method(init_method, Gc::default());
+        Frame::init_frame_args_locals(&mut frame_ptr, args);
 
         frame_ptr
     }
 
-    /// Initializes a frame with all its expected values, given a pointer to a Frame.
-    /// Recurring logic for all functions that allocate frames.
-    pub(crate) fn init_frame_post_alloc(mut frame: Gc<Frame>, args: &[Value], prev_frame: Gc<Frame>) {
+    /// Initializes a frame with all its expected values for its arguments and locals.
+    /// Takes a slice of arguments to be copied in the frame.
+    pub(crate) fn init_frame_args_locals(frame: &mut Gc<Frame>, args: &[Value]) {
         unsafe {
-            frame.stack_ptr = 0;
-
             frame.nbr_args = args.len() as u8;
 
             // initializing arguments from the args slice
@@ -115,22 +81,37 @@ impl Frame {
             std::slice::from_raw_parts_mut(args_ptr, args.len()).copy_from_slice(args);
 
             // setting all locals to NIL.
-            let locals_ptr = frame.as_ptr().byte_add(OFFSET_TO_VALUES + std::mem::size_of_val(args)) as *mut Value;
+            let locals_ptr = args_ptr.byte_add(std::mem::size_of_val(args));
             for idx in 0..frame.get_nbr_locals() {
                 *locals_ptr.add(idx as usize) = Value::NIL;
             }
+        }
+    }
 
-            frame.prev_frame = prev_frame;
+    /// Initializes a frame with all its expected values for its arguments and locals.
+    /// Takes a reference to the global stack to invoke `drain` to efficiently remove and copy its last `nbr_args` values.
+    pub(crate) fn init_frame_args_locals_from_stack(frame: &mut Gc<Frame>, stack: &mut Vec<Value>, nbr_args: usize) {
+        unsafe {
+            frame.nbr_args = nbr_args as u8;
+
+            let args = stack.drain(stack.len() - nbr_args..);
+            let args_ptr = frame.as_ptr().byte_add(OFFSET_TO_VALUES) as *mut Value;
+            std::slice::from_raw_parts_mut(args_ptr, nbr_args).copy_from_slice(args.as_slice());
+
+            // setting all locals to NIL.
+            let locals_ptr = args_ptr.byte_add(size_of::<Value>() * nbr_args);
+            for idx in 0..frame.get_nbr_locals() {
+                *locals_ptr.add(idx as usize) = Value::NIL;
+            }
         }
     }
 
     // Creates a frame from a block. Meant to only be called by the alloc_from_block function
-    pub(crate) fn from_block(block: Gc<Block>) -> Self {
+    pub(crate) fn from_block(block: Gc<Block>, prev_frame: Gc<Frame>) -> Self {
         Self {
-            prev_frame: Gc::default(),
+            prev_frame,
             current_context: block.blk_info.clone(),
             bytecode_idx: 0,
-            stack_ptr: 0,
             nbr_args: 0,
             args_marker: PhantomData,
             locals_marker: PhantomData,
@@ -138,19 +119,18 @@ impl Frame {
     }
 
     // Creates a frame from a method. Called from methods that allocate different method frames
-    pub(crate) fn from_method(method: Gc<Method>) -> Self {
+    pub(crate) fn from_method(method: Gc<Method>, prev_frame: Gc<Frame>) -> Self {
         Self {
-            prev_frame: Gc::default(),
+            prev_frame,
             current_context: method,
             bytecode_idx: 0,
-            stack_ptr: 0,
             nbr_args: 0,
             args_marker: PhantomData,
             locals_marker: PhantomData,
         }
     }
 
-    /// Returns the true size of the `Frame`, counting the extra memory needed for its stack/locals/arguments.
+    /// Returns the true size of the `Frame`, counting the extra memory needed for its locals/arguments.
     pub fn get_true_size(nbr_args: u8, nbr_locals: u8) -> usize {
         size_of::<Frame>() + ((nbr_args as usize + nbr_locals as usize) * size_of::<Value>())
     }
@@ -267,82 +247,6 @@ impl Frame {
         }
         target_frame
     }
-
-    ///// Gets the nth element from the stack (not in reverse order - "3" yields the 3rd element from the bottom, not the top)
-    ///// # Safety
-    ///// The caller needs to ensure this is a valid stack value. That means not outside the stack's maximum size, and not pointing to an uninitialized value.
-    //#[inline(always)]
-    //pub unsafe fn nth_stack(&self, n: u8) -> &Value {
-    //    let stack_ptr = self as *const Self as usize + OFFSET_TO_VALUES;
-    //    let val_ptr = stack_ptr + (n as usize * size_of::<Value>());
-    //    &*(val_ptr as *const Value)
-    //}
-    //
-    ///// Gets the nth element from the stack mutably (not in reverse order - "3" yields the 3rd element from the bottom, not the top)
-    ///// # Safety
-    ///// The caller needs to ensure this is a valid stack value. That means not outside the stack's maximum size, and not pointing to an uninitialized value.
-    //#[inline(always)]
-    //pub unsafe fn nth_stack_mut(&mut self, n: u8) -> &mut Value {
-    //    let stack_ptr = self as *mut Self as usize + OFFSET_TO_VALUES;
-    //    let val_ptr = stack_ptr + (n as usize * size_of::<Value>());
-    //    &mut *(val_ptr as *mut Value)
-    //}
-    //
-    //#[inline(always)]
-    //pub fn stack_push(&mut self, value: Value) {
-    //    debug_assert!(self.stack_ptr < self.current_context.get_env().max_stack_size);
-    //    unsafe {
-    //        *self.nth_stack_mut(self.stack_ptr) = value;
-    //        self.stack_ptr += 1;
-    //    }
-    //}
-    //
-    //#[inline(always)]
-    //pub fn stack_pop(&mut self) -> Value {
-    //    debug_assert!(self.stack_ptr > 0);
-    //    unsafe {
-    //        self.stack_ptr -= 1;
-    //        *self.nth_stack_mut(self.stack_ptr)
-    //    }
-    //}
-    //
-    //#[inline(always)]
-    //pub fn stack_last(&self) -> &Value {
-    //    debug_assert!(self.stack_ptr > 0);
-    //    unsafe { self.nth_stack(self.stack_ptr - 1) }
-    //}
-    //
-    //#[inline(always)]
-    //pub fn stack_last_mut(&mut self) -> &mut Value {
-    //    debug_assert!(self.stack_ptr > 0);
-    //    unsafe { self.nth_stack_mut(self.stack_ptr - 1) }
-    //}
-    //
-    //#[inline(always)]
-    //pub fn stack_nth_back(&self, n: usize) -> &Value {
-    //    debug_assert!(self.stack_ptr >= (n + 1) as u8);
-    //    unsafe { self.nth_stack(self.stack_ptr - (n as u8 + 1)) }
-    //}
-    //
-    //#[inline(always)]
-    //pub fn stack_n_last_elements(&self, n: usize) -> &[Value] {
-    //    unsafe {
-    //        let slice_ptr = self.nth_stack(self.stack_ptr - n as u8);
-    //        std::slice::from_raw_parts(slice_ptr, n)
-    //    }
-    //}
-    //
-    //#[inline(always)]
-    //pub fn remove_n_last_elements(&mut self, n: usize) {
-    //    debug_assert!(self.stack_ptr + 1 > n as u8);
-    //    self.stack_ptr -= n as u8
-    //}
-    //
-    ///// Gets the total number of elements on the stack. Only used for debugging.
-    //#[cfg(test)]
-    //pub fn stack_len(&self) -> usize {
-    //    self.stack_ptr as usize
-    //}
 }
 
 impl Debug for Frame {

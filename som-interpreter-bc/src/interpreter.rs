@@ -95,32 +95,28 @@ impl Interpreter {
     #[inline(always)]
     pub fn stack_n_last_elements(&self, n: usize) -> &[Value] {
         &self.stack[self.stack.len() - n..]
-        //unsafe {
-        //    let slice_ptr = self.nth_stack(self.stack_ptr - n as u8);
-        //    std::slice::from_raw_parts(slice_ptr, n)
-        //}
     }
 
     /// Creates and allocates a new frame corresponding to a method.
-    /// nbr_args is the number of arguments, including the self value, which it takes from the previous frame.
+    /// nbr_args is the number of arguments, including the self value, which it takes from the stack.
     pub fn push_method_frame(&mut self, method: Gc<Method>, nbr_args: usize, mutator: &mut GCInterface) -> Gc<Frame> {
         self.frame_method_root = method.clone();
         std::hint::black_box(&self.frame_method_root); // paranoia
 
-        let nbr_locals = match &*method {
-            Method::Defined(m_env) => m_env.nbr_locals,
-            _ => unreachable!("if we're allocating a method frame, it has to be defined."),
+        let size = {
+            let nbr_locals = match &*method {
+                Method::Defined(m_env) => m_env.nbr_locals,
+                _ => unreachable!("if we're allocating a method frame, it has to be defined."),
+            };
+
+            Frame::get_true_size(nbr_args as u8, nbr_locals)
         };
 
-        let size = Frame::get_true_size(nbr_args as u8, nbr_locals);
         let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::MethodFrame);
 
-        *frame_ptr = Frame::from_method(self.frame_method_root.clone());
+        *frame_ptr = Frame::from_method(self.frame_method_root.clone(), self.get_current_frame());
 
-        let prev_frame = self.get_current_frame();
-        let args = self.stack_n_last_elements(nbr_args);
-        Frame::init_frame_post_alloc(frame_ptr.clone(), args, prev_frame.clone());
-        self.stack.truncate(self.stack.len() - nbr_args);
+        Frame::init_frame_args_locals_from_stack(&mut frame_ptr, &mut self.stack, nbr_args);
 
         self.bytecode_idx = 0;
         self.current_frame = UnsafeCell::from(frame_ptr.clone());
@@ -146,8 +142,8 @@ impl Interpreter {
 
         let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::MethodFrameWithArgs);
 
-        *frame_ptr = Frame::from_method(self.frame_method_root.clone());
-        Frame::init_frame_post_alloc(frame_ptr.clone(), self.frame_args_root.as_ref().unwrap(), self.get_current_frame());
+        *frame_ptr = Frame::from_method(self.frame_method_root.clone(), self.get_current_frame());
+        Frame::init_frame_args_locals(&mut frame_ptr, self.frame_args_root.as_ref().unwrap());
 
         self.bytecode_idx = 0;
         self.current_frame = UnsafeCell::from(frame_ptr.clone());
@@ -164,24 +160,25 @@ impl Interpreter {
         // NB: Also, inlining it here helps write moving-GC-proof code, since instead of passing references to the interpreter's internals (which would be moved by potential GC triggers), we can query those internals ourselves and ensure we get them from the source, where they would have been moved correctly.
         // A good example is querying the "current" (now parent) frame from the interpreter *after* allocating memory for the new frame, which was an issue when this was a non-inlined function since we then needed to pass a reference to the frame *before* allocating memory, as a function argument, and then we had to be very careful not to get bugs.
         let frame_ptr = {
-            let nbr_locals = {
-                let block_value = self.stack[self.stack.len() - 1 - (nbr_args - 1)];
+            let size = {
+                let nbr_locals = {
+                    let block_value = self.stack[self.stack.len() - 1 - (nbr_args - 1)];
 
-                let block = block_value.as_block().unwrap();
-                {
-                    let block_env = block.blk_info.get_env();
-                    block_env.nbr_locals
-                }
+                    let block = block_value.as_block().unwrap();
+                    {
+                        let block_env = block.blk_info.get_env();
+                        block_env.nbr_locals
+                    }
+                };
+                Frame::get_true_size(nbr_args as u8, nbr_locals)
             };
 
-            let size = Frame::get_true_size(nbr_args as u8, nbr_locals);
             let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::BlockFrame);
 
             let block_value = *self.stack.get(self.stack.len() - 1 - (nbr_args - 1)).unwrap();
-            *frame_ptr = Frame::from_block(block_value.as_block().unwrap());
+            *frame_ptr = Frame::from_block(block_value.as_block().unwrap(), self.get_current_frame());
 
-            let args = self.stack.split_off(self.stack.len() - nbr_args);
-            Frame::init_frame_post_alloc(frame_ptr.clone(), &args, self.get_current_frame());
+            Frame::init_frame_args_locals_from_stack(&mut frame_ptr, &mut self.stack, nbr_args);
 
             frame_ptr
         };
