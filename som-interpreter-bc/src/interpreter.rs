@@ -5,7 +5,7 @@ use crate::vm_objects::block::{Block, CacheEntry};
 use crate::vm_objects::class::Class;
 use crate::vm_objects::frame::Frame;
 use crate::vm_objects::instance::Instance;
-use crate::vm_objects::method::Method;
+use crate::vm_objects::method::{Method, MethodInfo};
 use anyhow::Context;
 use std::cell::UnsafeCell;
 
@@ -47,7 +47,7 @@ macro_rules! profiler_maybe_stop {
 }
 
 // Safety: this assumes the bytecode is not malformed, and so that if a bytecode requires a pop, said pop is possible.
-// If it were to not be possible somehow, bytecode gen would have messed up, and then our interpreter would be very unsound and pretty damn bad anyway. 
+// If it were to not be possible somehow, bytecode gen would have messed up, and then our interpreter would be very unsound and pretty damn bad anyway.
 // So might as well assume we didn't mess up and get some -potential- extra perf here.
 macro_rules! stack_fast_pop {
     ($stack:expr) => {
@@ -81,7 +81,7 @@ pub struct Interpreter {
     /// GC can trigger when the interpreter wants to allocate a new frame.
     /// We're then in a situation where we've looked up a `Method` (which is how we knew we were dealing with a non-primitive, and so that we had to create a frame)
     /// So this method can't be stored on the Rust stack, or GC would miss it. Therefore: we keep it reachable there.
-    pub frame_method_root: Gc<Method>,
+    pub frame_method_root: Gc<MethodInfo>,
     pub frame_args_root: Option<Vec<Value>>,
 }
 
@@ -115,16 +115,12 @@ impl Interpreter {
 
     /// Creates and allocates a new frame corresponding to a method.
     /// nbr_args is the number of arguments, including the self value, which it takes from the stack.
-    pub fn push_method_frame(&mut self, method: Gc<Method>, nbr_args: usize, mutator: &mut GCInterface) -> Gc<Frame> {
+    pub fn push_method_frame(&mut self, method: Gc<MethodInfo>, nbr_args: usize, mutator: &mut GCInterface) -> Gc<Frame> {
         self.frame_method_root = method.clone();
         std::hint::black_box(&self.frame_method_root); // paranoia
 
         let size = {
-            let nbr_locals = match &*method {
-                Method::Defined(m_env) => m_env.nbr_locals,
-                _ => unreachable!("if we're allocating a method frame, it has to be defined."),
-            };
-
+            let nbr_locals = method.nbr_locals;
             Frame::get_true_size(nbr_args as u8, nbr_locals)
         };
 
@@ -143,14 +139,11 @@ impl Interpreter {
 
     /// Creates and allocates a new frame corresponding to a method, with arguments provided.
     /// Used in primitives and corner cases like DNU calls.
-    pub fn push_method_frame_with_args(&mut self, method: Gc<Method>, args: Vec<Value>, mutator: &mut GCInterface) -> Gc<Frame> {
+    pub fn push_method_frame_with_args(&mut self, method: Gc<MethodInfo>, args: Vec<Value>, mutator: &mut GCInterface) -> Gc<Frame> {
         self.frame_method_root = method.clone();
         std::hint::black_box(&self.frame_method_root); // paranoia
 
-        let nbr_locals = match &*method {
-            Method::Defined(m_env) => m_env.nbr_locals,
-            _ => unreachable!("if we're allocating a method frame, it has to be defined."),
-        };
+        let nbr_locals = method.nbr_locals;
 
         let size = Frame::get_true_size(args.len() as u8, nbr_locals);
 
@@ -181,10 +174,7 @@ impl Interpreter {
                     let block_value = self.stack[self.stack.len() - 1 - (nbr_args - 1)];
 
                     let block = block_value.as_block().unwrap();
-                    {
-                        let block_env = block.blk_info.get_env();
-                        block_env.nbr_locals
-                    }
+                    block.blk_info.nbr_locals
                 };
                 Frame::get_true_size(nbr_args as u8, nbr_locals)
             };
@@ -240,7 +230,7 @@ impl Interpreter {
     pub fn run(&mut self, universe: &mut Universe) -> Option<Value> {
         loop {
             // Actually safe, there's always a reference to the current bytecodes. Need unsafe because we want to store a ref for quick access in perf-critical code
-            let bytecode = *(unsafe { self.get_current_frame().get_bytecode_ptr().get_unchecked(self.bytecode_idx as usize) });
+            let bytecode = *(unsafe { self.get_current_frame().get_bytecodes().get_unchecked(self.bytecode_idx as usize) });
             self.bytecode_idx += 1;
 
             // dbg!(&bytecode);
@@ -687,11 +677,11 @@ impl Interpreter {
             };
 
             match &*method {
-                Method::Defined(_) => {
+                Method::Defined(method_info) => {
                     //let name = &method.holder().name.clone();
                     //eprintln!("--- Invoking {:?} (in {:?})", &method.signature(), &name);
                     //eprintln!("--- Invoking {:?}", &method.signature());
-                    interpreter.push_method_frame(method, nb_params + 1, &mut universe.gc_interface);
+                    interpreter.push_method_frame(method_info.clone(), nb_params + 1, &mut universe.gc_interface);
                 }
                 Method::Primitive(func, _met_info) => {
                     //eprintln!("--- Invoking prim {:?} (in {:?})", &_met_info.signature, &_met_info.holder.name);

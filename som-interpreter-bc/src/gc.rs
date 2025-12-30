@@ -4,7 +4,7 @@ use crate::vm_objects::block::Block;
 use crate::vm_objects::class::Class;
 use crate::vm_objects::frame::Frame;
 use crate::vm_objects::instance::Instance;
-use crate::vm_objects::method::Method;
+use crate::vm_objects::method::{Method, MethodInfo};
 use crate::{INTERPRETER_RAW_PTR_CONST, UNIVERSE_RAW_PTR_CONST};
 use log::{debug, trace};
 use mmtk::util::{Address, ObjectReference};
@@ -28,9 +28,10 @@ pub enum GcIdentifier {
     Block = 101,
     Instance = 102,
     Method = 103,
-    Class = 104,
-    ArrayVal = 105,
-    ArrayLiteral = 106,
+    MethodInfo = 104,
+    Class = 105,
+    ArrayVal = 106,
+    ArrayLiteral = 107,
 }
 
 #[derive(Clone, Debug)]
@@ -163,7 +164,7 @@ fn get_roots_in_mutator_thread(_mutator: &mut Mutator<SOMVM>) -> Vec<SOMSlot> {
         let current_frame_addr = &*(**INTERPRETER_RAW_PTR_CONST.as_ptr()).current_frame.get();
         debug!(
             "scanning root: current_frame (method: {})",
-            current_frame_addr.current_context.get_env().base_method_info.signature
+            current_frame_addr.current_context.base_method_info.signature
         );
         to_process_fn(SOMSlot::from(current_frame_addr));
 
@@ -212,6 +213,7 @@ pub fn scan_object<'a>(object: ObjectReference, slot_visitor: &'a mut (dyn SlotV
         match gc_id {
             GcIdentifier::Frame => Frame::scan_object(object.to_raw_address().into(), &mut visit_fn),
             GcIdentifier::Method => Method::scan_object(object.to_raw_address().into(), &mut visit_fn),
+            GcIdentifier::MethodInfo => MethodInfo::scan_object(object.to_raw_address().into(), &mut visit_fn),
             GcIdentifier::Class => Class::scan_object(object.to_raw_address().into(), &mut visit_fn),
             GcIdentifier::Block => Block::scan_object(object.to_raw_address().into(), &mut visit_fn),
             GcIdentifier::Instance => Instance::scan_object(object.to_raw_address().into(), &mut visit_fn),
@@ -231,6 +233,7 @@ fn get_object_size(object: ObjectReference) -> usize {
         GcIdentifier::BigInt => BigInt::get_size_in_memory(object.to_raw_address().into()),
         GcIdentifier::Frame => Frame::get_size_in_memory(object.to_raw_address().into()),
         GcIdentifier::Method => Method::get_size_in_memory(object.to_raw_address().into()),
+        GcIdentifier::MethodInfo => MethodInfo::get_size_in_memory(object.to_raw_address().into()),
         GcIdentifier::Block => Block::get_size_in_memory(object.to_raw_address().into()),
         GcIdentifier::Class => Class::get_size_in_memory(object.to_raw_address().into()),
         GcIdentifier::Instance => Instance::get_size_in_memory(object.to_raw_address().into()),

@@ -184,7 +184,7 @@ impl FrameEnv for MethodInfo {
 
 impl FrameEnv for Block {
     fn get_body(&self) -> &[Bytecode] {
-        &self.blk_info.get_env().body
+        &self.blk_info.body
     }
     #[cfg(feature = "frame-debug-info")]
     fn resolve_local(&self, idx: u8) -> String {
@@ -200,7 +200,7 @@ impl FrameEnv for Block {
     }
 
     fn resolve_literal(&self, idx: u8) -> Option<&Literal> {
-        self.blk_info.get_env().literals.get(usize::from(idx))
+        self.blk_info.literals.get(usize::from(idx))
     }
 
     #[cfg(feature = "frame-debug-info")]

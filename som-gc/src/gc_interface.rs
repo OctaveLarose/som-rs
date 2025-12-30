@@ -289,6 +289,7 @@ pub enum AllocSiteMarker {
     BlockFrame,
     Instance,
     Method,
+    MethodInfo,
     BlockMethod,
     Class,
     String,

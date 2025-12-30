@@ -221,7 +221,7 @@ impl Universe {
     pub fn escaped_block(&mut self, interpreter: &mut Interpreter, value: Value, block: Gc<Block>) -> Option<()> {
         let method_name = self.intern_symbol("escapedBlock:");
         let method = value.lookup_method(self, method_name)?;
-        interpreter.push_method_frame_with_args(method, vec![value, Value::Block(block)], &mut self.gc_interface);
+        interpreter.push_method_frame_with_args(method.get_env(), vec![value, Value::Block(block)], &mut self.gc_interface);
         Some(())
     }
 
@@ -241,7 +241,7 @@ impl Universe {
         // }
 
         interpreter.push_method_frame_with_args(
-            method,
+            method.get_env(),
             vec![
                 value,
                 Value::Symbol(symbol),
@@ -259,7 +259,7 @@ impl Universe {
         let method = value.lookup_method(self, method_name)?;
 
         interpreter.get_current_frame().bytecode_idx = interpreter.bytecode_idx;
-        interpreter.push_method_frame_with_args(method, vec![value, Value::Symbol(name)], &mut self.gc_interface);
+        interpreter.push_method_frame_with_args(method.get_env(), vec![value, Value::Symbol(name)], &mut self.gc_interface);
 
         Some(())
     }

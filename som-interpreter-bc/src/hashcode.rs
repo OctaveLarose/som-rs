@@ -67,11 +67,11 @@ impl Hash for Class {
 impl Hash for Block {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         let blk_info = &self.blk_info;
-        blk_info.get_env().literals.iter().for_each(|it| it.hash(hasher));
-        blk_info.get_env().nbr_locals.hash(hasher);
+        blk_info.literals.iter().for_each(|it| it.hash(hasher));
+        blk_info.nbr_locals.hash(hasher);
         // self.blk_info.locals.iter().for_each(|it| it.hash(hasher));
-        blk_info.get_env().nbr_params.hash(hasher);
-        blk_info.get_env().body.iter().for_each(|it| it.hash(hasher));
+        blk_info.nbr_params.hash(hasher);
+        blk_info.body.iter().for_each(|it| it.hash(hasher));
     }
 }
 

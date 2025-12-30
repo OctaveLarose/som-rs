@@ -24,7 +24,7 @@ pub struct Block {
     /// Reference to the captured stack frame.
     pub frame: Option<Gc<Frame>>,
     /// Block environment needed for execution, e.g. the block's bytecodes, literals, number of locals...
-    pub blk_info: Gc<Method>,
+    pub blk_info: Gc<MethodInfo>,
 }
 
 impl Block {
@@ -41,14 +41,14 @@ impl Block {
     /// Retrieve the number of parameters this block accepts.
     pub fn nb_parameters(&self) -> u8 {
         debug_assert_valid_semispace_ptr!(self.blk_info);
-        self.blk_info.get_env().nbr_params
+        self.blk_info.nbr_params
     }
 }
 
 impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct(&format!("Block{}", self.nb_parameters() + 1))
-            .field("block", &self.blk_info.get_env())
+            .field("block", &self.blk_info)
             .field("frame", &self.frame.as_ref().map(|f| f.as_ptr()))
             .finish()
     }

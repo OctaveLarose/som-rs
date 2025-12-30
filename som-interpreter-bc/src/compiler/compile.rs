@@ -914,7 +914,7 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                     #[cfg(feature = "frame-debug-info")]
                     let dbg_info = ctxt.inner.debug_info;
 
-                    Method::Defined(MethodInfo {
+                    let method_info = MethodInfo {
                         base_method_info: BasicMethodInfo::new(signature, Gc::default()),
                         body,
                         nbr_locals,
@@ -923,7 +923,9 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                         inline_cache,
                         #[cfg(feature = "frame-debug-info")]
                         block_debug_info: dbg_info,
-                    })
+                    };
+
+                    Method::Defined(gc_interface.alloc(method_info, AllocSiteMarker::MethodInfo))
                 }
             }
         }
@@ -987,21 +989,20 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
     let nbr_params = ctxt.args_nbr as u8;
     let inline_cache = vec![None; body.len()];
 
+    let method_info = MethodInfo {
+        base_method_info: BasicMethodInfo::new(signature, Gc::default()),
+        nbr_locals,
+        literals,
+        body,
+        nbr_params,
+        inline_cache,
+        #[cfg(feature = "frame-debug-info")]
+        block_debug_info: ctxt.debug_info,
+    };
+
     let block = Block {
         frame,
-        blk_info: gc_interface.alloc(
-            Method::Defined(MethodInfo {
-                base_method_info: BasicMethodInfo::new(signature, Gc::default()),
-                nbr_locals,
-                literals,
-                body,
-                nbr_params,
-                inline_cache,
-                #[cfg(feature = "frame-debug-info")]
-                block_debug_info: ctxt.debug_info,
-            }),
-            AllocSiteMarker::BlockMethod,
-        ),
+        blk_info: gc_interface.alloc(method_info, AllocSiteMarker::MethodInfo),
     };
 
     // println!("(system) compiled block !");

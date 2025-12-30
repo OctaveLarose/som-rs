@@ -45,9 +45,10 @@ pub struct MethodInfo {
 
 /// Represents a class method.
 #[derive(Clone)]
+#[repr(C)] // to handle Gc<MethodInfo> TODO doc
 pub enum Method {
     /// A user-defined method from the AST.
-    Defined(MethodInfo),
+    Defined(Gc<MethodInfo>),
     /// An interpreter primitive.
     Primitive(&'static PrimitiveFn, BasicMethodInfo),
     /// A trivial literal read
@@ -90,7 +91,7 @@ impl Method {
                 env.base_method_info.holder = holder_ptr.clone();
                 for lit in &mut env.literals {
                     if let Literal::Block(blk) = lit {
-                        blk.blk_info.set_holder(holder_ptr);
+                        blk.blk_info.base_method_info.holder = holder_ptr.clone();
                     }
                 }
             }
@@ -102,16 +103,9 @@ impl Method {
         }
     }
 
-    pub fn get_env(&self) -> &MethodInfo {
+    pub fn get_env(&self) -> Gc<MethodInfo> {
         match self {
-            Method::Defined(env) => env,
-            _ => panic!("requesting method metadata from primitive/trivial method"),
-        }
-    }
-
-    pub fn get_env_mut(&mut self) -> &mut MethodInfo {
-        match self {
-            Method::Defined(env) => env,
+            Method::Defined(env) => env.clone(),
             _ => panic!("requesting method metadata from primitive/trivial method"),
         }
     }
@@ -153,10 +147,10 @@ pub trait Invoke {
 impl Invoke for Gc<Method> {
     fn invoke(&self, interpreter: &mut Interpreter, universe: &mut Universe, receiver: Value, mut args: Vec<Value>) {
         match &**self {
-            Method::Defined(_) => {
+            Method::Defined(method_info) => {
                 let mut frame_args = vec![receiver];
                 frame_args.append(&mut args);
-                interpreter.push_method_frame_with_args(self.clone(), frame_args, &mut universe.gc_interface);
+                interpreter.push_method_frame_with_args(method_info.clone(), frame_args, &mut universe.gc_interface);
             }
             Method::Primitive(func, ..) => {
                 let nbr_args = args.len() + 1;
@@ -174,6 +168,36 @@ impl Invoke for Gc<Method> {
     }
 }
 
+impl GcType for MethodInfo {
+    fn get_magic_gc_id() -> u8 {
+        GcIdentifier::MethodInfo as u8
+    }
+
+    fn scan_object(method: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
+        visit_slot_fn(SOMSlot::from(&method.base_method_info.holder));
+
+        for cache_entry in method.inline_cache.iter().flatten() {
+            match cache_entry {
+                CacheEntry::Send(cls_ptr, method_ptr) => {
+                    visit_slot_fn(SOMSlot::from(cls_ptr));
+                    visit_slot_fn(SOMSlot::from(method_ptr));
+                }
+                CacheEntry::Global(val) => {
+                    visit_value(val, visit_slot_fn);
+                }
+            }
+        }
+
+        for lit in &method.literals {
+            visit_literal(lit, visit_slot_fn)
+        }
+    }
+
+    fn get_size_in_memory(_self: Gc<Self>) -> usize {
+        size_of::<MethodInfo>()
+    }
+}
+
 impl GcType for Method {
     fn get_magic_gc_id() -> u8 {
         GcIdentifier::Method as u8
@@ -181,24 +205,8 @@ impl GcType for Method {
 
     fn scan_object(method: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
         match &*method {
-            Method::Defined(method) => {
-                visit_slot_fn(SOMSlot::from(&method.base_method_info.holder));
-
-                for cache_entry in method.inline_cache.iter().flatten() {
-                    match cache_entry {
-                        CacheEntry::Send(cls_ptr, method_ptr) => {
-                            visit_slot_fn(SOMSlot::from(cls_ptr));
-                            visit_slot_fn(SOMSlot::from(method_ptr));
-                        }
-                        CacheEntry::Global(val) => {
-                            visit_value(val, visit_slot_fn);
-                        }
-                    }
-                }
-
-                for lit in &method.literals {
-                    visit_literal(lit, visit_slot_fn)
-                }
+            Method::Defined(method_info) => {
+                visit_slot_fn(SOMSlot::from(method_info));
             }
             Method::Primitive(_, met_info)
             | Method::TrivialGlobal(_, met_info)

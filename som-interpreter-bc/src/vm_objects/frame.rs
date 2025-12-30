@@ -11,7 +11,8 @@ use som_gc::gcref::Gc;
 use som_gc::slot::SOMSlot;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
-use std::ops::DerefMut;
+
+use super::method::MethodInfo;
 
 pub(crate) const OFFSET_TO_VALUES: usize = size_of::<Frame>();
 
@@ -23,11 +24,8 @@ pub struct Frame {
     pub prev_frame: Gc<Frame>,
 
     /// The method the execution context currently is in.
-    /// Interestingly, this is a Gc<Method> and not a pointer to MethodInfo, what we really need (it's never a primitive).
-    /// In fact, we induce (minimal) runtime overhead by having to fetch the info from the Method enum regularly.
     /// So why do we do things that way? Because of moving GC. If we have a pointer to a MethodInfo, that's an inner pointer to a Method object. So when GC moves the frame, it can't update that pointer.
-    /// It could update if Gc<MethodInfo> was a thing. And it was, at some point, and it turned out that really broke things (not sure why, I assume because MMTk didn't play well with a Gc<Enum> that had a Gc<SomethingElse> variant)  
-    pub current_context: Gc<Method>,
+    pub current_context: Gc<MethodInfo>,
 
     /// Bytecode index.
     pub bytecode_idx: u16,
@@ -64,7 +62,7 @@ impl Frame {
             "We assume we can't trigger a collection when allocating a parent-less frame"
         );
 
-        *frame_ptr = Frame::from_method(init_method, Gc::default());
+        *frame_ptr = Frame::from_method(init_method.get_env(), Gc::default());
         Frame::init_frame_args_locals(&mut frame_ptr, args);
 
         frame_ptr
@@ -119,7 +117,7 @@ impl Frame {
     }
 
     // Creates a frame from a method. Called from methods that allocate different method frames
-    pub(crate) fn from_method(method: Gc<Method>, prev_frame: Gc<Frame>) -> Self {
+    pub(crate) fn from_method(method: Gc<MethodInfo>, prev_frame: Gc<Frame>) -> Self {
         Self {
             prev_frame,
             current_context: method,
@@ -136,28 +134,25 @@ impl Frame {
     }
 
     #[inline(always)]
-    pub fn get_bytecode_ptr(&self) -> &Vec<Bytecode> {
-        &self.current_context.get_env().body
+    pub fn get_bytecodes(&self) -> &Vec<Bytecode> {
+        &self.current_context.body
     }
 
     /// # Safety
     /// So long as idx is a bytecode_idx, it's valid, since there's as many entries as there are bytecode. Otherwise, it could break.
     #[inline(always)]
     pub unsafe fn get_inline_cache_entry(&mut self, idx: usize) -> &mut Option<CacheEntry> {
-        match self.current_context.deref_mut() {
-            Method::Defined(env) => env.inline_cache.get_unchecked_mut(idx),
-            _ => unreachable!(),
-        }
+        self.current_context.inline_cache.get_unchecked_mut(idx)
     }
 
     #[inline(always)]
     pub fn get_nbr_args(&self) -> u8 {
-        self.current_context.get_env().nbr_params + 1 // + 1 to account for self.
+        self.current_context.nbr_params + 1 // + 1 to account for self.
     }
 
     #[inline(always)]
     pub fn get_nbr_locals(&self) -> u8 {
-        self.current_context.get_env().nbr_locals
+        self.current_context.nbr_locals
     }
 
     /// Get the self value for this frame.
@@ -174,7 +169,7 @@ impl Frame {
 
     /// Get the holder for this current method.
     pub(crate) fn get_method_holder(&self) -> Gc<Class> {
-        self.current_context.holder().clone()
+        self.current_context.base_method_info.holder.clone()
         // old logic below - not sure why that was ever needed?
         //match self.lookup_argument(0).as_block() {
         //    Some(b) => {
@@ -225,7 +220,7 @@ impl Frame {
 
     #[inline(always)]
     pub fn lookup_constant(&self, idx: usize) -> &Literal {
-        self.current_context.get_env().literals.get(idx).unwrap()
+        self.current_context.literals.get(idx).unwrap()
     }
 
     /// Returns the nth frame back in the frame list, given n and the current frame.
@@ -254,7 +249,10 @@ impl Debug for Frame {
         f.debug_struct("Frame")
             .field(
                 "current method",
-                &format!("{}::>{}", self.current_context.holder().name(), self.current_context.signature()),
+                &format!(
+                    "{}::>{}",
+                    self.current_context.base_method_info.holder.name, self.current_context.base_method_info.signature
+                ),
             )
             .field("bc idx", &self.bytecode_idx)
             .field("args", {
