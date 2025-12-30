@@ -79,7 +79,7 @@ pub fn interactive(universe: &mut Universe, verbose: bool) -> Result<(), Error> 
         class.class().set_super_class(&object_class.class());
         class.class().set_class(&metaclass_class);
 
-        let method = class.lookup_method(method_name).expect("method not found ??");
+        let method = class.lookup_method(method_name).expect("method not found ??").as_method_info();
         let start = Instant::now();
 
         let frame_ptr = Frame::alloc_initial_method(method, &[Value::Class(class), last_value], &mut universe.gc_interface);

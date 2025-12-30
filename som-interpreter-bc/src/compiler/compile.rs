@@ -893,7 +893,7 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                     let dbg_info = ctxt.inner.debug_info;
 
                     let method_info = MethodInfo {
-                        base_method_info: BasicMethodInfo::new(signature, Gc::default()),
+                        basic_method_info: BasicMethodInfo::new(signature, Gc::default()),
                         body,
                         nbr_locals,
                         nbr_args,
@@ -968,7 +968,7 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
     let inline_cache = vec![None; body.len()];
 
     let method_info = MethodInfo {
-        base_method_info: BasicMethodInfo::new(signature, Gc::default()),
+        basic_method_info: BasicMethodInfo::new(signature, Gc::default()),
         nbr_locals,
         literals,
         body,

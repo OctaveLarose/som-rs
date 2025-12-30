@@ -221,7 +221,7 @@ impl Universe {
     pub fn escaped_block(&mut self, interpreter: &mut Interpreter, value: Value, block: Gc<Block>) -> Option<()> {
         let method_name = self.intern_symbol("escapedBlock:");
         let method = value.lookup_method(self, method_name)?;
-        interpreter.push_method_frame_with_args(method.get_env(), vec![value, Value::Block(block)], &mut self.gc_interface);
+        interpreter.push_method_frame_with_args(method.as_method_info(), vec![value, Value::Block(block)], &mut self.gc_interface);
         Some(())
     }
 
@@ -241,7 +241,7 @@ impl Universe {
         // }
 
         interpreter.push_method_frame_with_args(
-            method.get_env(),
+            method.as_method_info(),
             vec![
                 value,
                 Value::Symbol(symbol),
@@ -259,7 +259,7 @@ impl Universe {
         let method = value.lookup_method(self, method_name)?;
 
         interpreter.get_current_frame().bytecode_idx = interpreter.bytecode_idx;
-        interpreter.push_method_frame_with_args(method.get_env(), vec![value, Value::Symbol(name)], &mut self.gc_interface);
+        interpreter.push_method_frame_with_args(method.as_method_info(), vec![value, Value::Symbol(name)], &mut self.gc_interface);
 
         Some(())
     }
@@ -267,7 +267,7 @@ impl Universe {
     /// Call `System>>#initialize:` with the given name, if it is defined.
     pub fn initialize(&mut self, args: Vec<Value>) -> Option<Interpreter> {
         let method_name = self.interner.intern("initialize:");
-        let initialize = self.core.system_class().lookup_method(method_name)?;
+        let initialize = self.core.system_class().lookup_method(method_name)?.as_method_info();
         let system_value = self.lookup_global(self.interner.reverse_lookup("system")?)?;
 
         let args_vec = VecValue(self.gc_interface.alloc_slice(&args, AllocSiteMarker::VecValue));

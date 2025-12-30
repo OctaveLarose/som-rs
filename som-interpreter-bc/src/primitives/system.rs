@@ -158,7 +158,7 @@ fn print_stack_trace(interpreter: &mut Interpreter, _: &mut Universe) -> Result<
             "\t{}: {}>>#{} @bi: {}",
             frame_idx,
             class.name(),
-            frame.current_context.base_method_info.signature,
+            frame.context.basic_method_info.signature,
             frame.bytecode_idx
         );
     }

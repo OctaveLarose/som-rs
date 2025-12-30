@@ -2,7 +2,7 @@ use crate::compiler::compile::compile_class;
 use crate::universe::Universe;
 use crate::value::Value;
 use crate::vm_objects::frame::Frame;
-use crate::vm_objects::method::Method;
+use crate::vm_objects::method::MethodInfo;
 use crate::UNIVERSE_RAW_PTR_CONST;
 use rstest::{fixture, rstest};
 use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
@@ -39,7 +39,7 @@ pub fn universe<'a>() -> &'a mut Universe {
     }
 }
 
-fn get_method(method_txt: &str, method_name: &str, universe: &mut Universe) -> Gc<Method> {
+fn get_method(method_txt: &str, method_name: &str, universe: &mut Universe) -> Gc<MethodInfo> {
     let method_name_interned = universe.intern_symbol(method_name);
 
     let class_txt = format!("Foo = ( {} )", method_txt);
@@ -54,7 +54,7 @@ fn get_method(method_txt: &str, method_name: &str, universe: &mut Universe) -> G
     let class = compile_class(&mut universe.interner, &class_def, Some(&object_class), &mut universe.gc_interface);
     assert!(class.is_some(), "could not compile test expression");
 
-    class.unwrap().lookup_method(method_name_interned).expect("method not found somehow?")
+    class.unwrap().lookup_method(method_name_interned).expect("method not found somehow?").as_method_info()
 }
 
 #[rstest]

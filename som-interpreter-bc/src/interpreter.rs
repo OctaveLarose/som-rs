@@ -48,6 +48,9 @@ macro_rules! profiler_maybe_stop {
 // Safety: this assumes the bytecode is not malformed, and so that if a bytecode requires a pop, said pop is possible.
 // If it were to not be possible somehow, bytecode gen would have messed up, and then our interpreter would be very unsound and pretty damn bad anyway.
 // So might as well assume we didn't mess up and get some -potential- extra perf here.
+//
+// TODO: these macros are not used by any of the primitives at the moment (would require a macro_export which Rust discourages, but is likely fine in this context)
+// But there might be a small perf benefit if we do that.
 macro_rules! stack_fast_pop {
     ($stack:expr) => {
         unsafe { $stack.pop().unwrap_unchecked() }
@@ -118,10 +121,7 @@ impl Interpreter {
         self.frame_method_root = method.clone();
         std::hint::black_box(&self.frame_method_root); // paranoia
 
-        let size = {
-            let nbr_locals = method.nbr_locals;
-            Frame::get_true_size(nbr_args as u8, nbr_locals)
-        };
+        let size = Frame::get_true_size(nbr_args as u8, method.nbr_locals);
 
         let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::MethodFrame);
 
@@ -171,7 +171,6 @@ impl Interpreter {
             let size = {
                 let nbr_locals = {
                     let block_value = self.stack[self.stack.len() - 1 - (nbr_args - 1)];
-
                     let block = block_value.as_block().unwrap();
                     block.blk_info.nbr_locals
                 };
@@ -198,6 +197,7 @@ impl Interpreter {
         let new_current_frame = &self.get_current_frame().prev_frame;
 
         while self.stack.pop().unwrap() != Value::STACK_MARKER {}
+
         self.current_frame = UnsafeCell::from(new_current_frame.clone());
         match new_current_frame.is_empty() {
             true => {}
@@ -233,7 +233,6 @@ impl Interpreter {
             self.bytecode_idx += 1;
 
             // dbg!(&bytecode);
-            // dbg!("stack before that BC: {}", &self.stack);
 
             // for the optional profiler macros not to be reported as warnings
             #[allow(clippy::let_unit_value)]
@@ -608,8 +607,8 @@ impl Interpreter {
                     };
 
                     if is_greater {
-                        self.stack.pop();
-                        self.stack.pop();
+                        stack_fast_pop!(&mut self.stack);
+                        stack_fast_pop!(&mut self.stack);
                         self.bytecode_idx += offset - 1;
                     }
                 }
@@ -620,7 +619,7 @@ impl Interpreter {
                     if condition_result.is_nil() {
                         self.bytecode_idx += offset - 1;
                     } else {
-                        self.stack.pop();
+                        stack_fast_pop!(&mut self.stack);
                     }
                     profiler_maybe_stop!(_timing);
                 }
@@ -695,7 +694,7 @@ impl Interpreter {
                 }
                 Method::TrivialLiteral(met, _) => {
                     //eprintln!("--- Invoking trivial method");
-                    interpreter.stack.pop(); // remove the receiver
+                    stack_fast_pop!(&mut interpreter.stack); // remove the receiver
                     met.invoke(universe, interpreter)
                 }
                 Method::TrivialGetter(met, _) => {

@@ -35,7 +35,7 @@ impl BasicMethodInfo {
 /// Data for a method, or a block.
 #[derive(Clone)]
 pub struct MethodInfo {
-    pub base_method_info: BasicMethodInfo,
+    pub basic_method_info: BasicMethodInfo,
     pub literals: Vec<Literal>,
     pub body: Vec<Bytecode>,
     pub inline_cache: BodyInlineCache,
@@ -45,7 +45,8 @@ pub struct MethodInfo {
 
 /// Represents a class method.
 #[derive(Clone)]
-#[repr(C)] // to handle Gc<MethodInfo> TODO doc
+// repr(C) to support a Gc<MethodInfo> variant. I remember Rust doing optimizations way back when that could essentially conflate a Gc<Method> with a Gc<MethodInfo> in memory?
+#[repr(C)]
 pub enum Method {
     /// A user-defined method from the AST.
     Defined(Gc<MethodInfo>),
@@ -75,7 +76,7 @@ impl Method {
 
     pub fn holder(&self) -> &Gc<Class> {
         match &self {
-            Method::Defined(env) => &env.base_method_info.holder,
+            Method::Defined(env) => &env.basic_method_info.holder,
             Method::Primitive(_, met_info)
             | Method::TrivialGlobal(_, met_info)
             | Method::TrivialGetter(_, met_info)
@@ -88,10 +89,10 @@ impl Method {
     pub fn set_holder(&mut self, holder_ptr: &Gc<Class>) {
         match self {
             Method::Defined(env) => {
-                env.base_method_info.holder = holder_ptr.clone();
+                env.basic_method_info.holder = holder_ptr.clone();
                 for lit in &mut env.literals {
                     if let Literal::Block(blk) = lit {
-                        blk.blk_info.base_method_info.holder = holder_ptr.clone();
+                        blk.blk_info.basic_method_info.holder = holder_ptr.clone();
                     }
                 }
             }
@@ -103,7 +104,7 @@ impl Method {
         }
     }
 
-    pub fn get_env(&self) -> Gc<MethodInfo> {
+    pub fn as_method_info(&self) -> Gc<MethodInfo> {
         match self {
             Method::Defined(env) => env.clone(),
             _ => panic!("requesting method metadata from primitive/trivial method"),
@@ -130,7 +131,7 @@ impl Method {
 
     pub fn signature(&self) -> &str {
         match &self {
-            Method::Defined(gc) => &gc.base_method_info.signature,
+            Method::Defined(gc) => &gc.basic_method_info.signature,
             Method::Primitive(_, met_info)
             | Method::TrivialGlobal(_, met_info)
             | Method::TrivialLiteral(_, met_info)
@@ -174,7 +175,7 @@ impl GcType for MethodInfo {
     }
 
     fn scan_object(method: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
-        visit_slot_fn(SOMSlot::from(&method.base_method_info.holder));
+        visit_slot_fn(SOMSlot::from(&method.basic_method_info.holder));
 
         for cache_entry in method.inline_cache.iter().flatten() {
             match cache_entry {
