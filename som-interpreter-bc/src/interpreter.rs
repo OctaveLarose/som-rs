@@ -19,13 +19,6 @@ use som_gc::gcref::Gc;
 use som_value::interned::Interned;
 use std::time::Instant;
 
-#[macro_export]
-macro_rules! cur_frame {
-    ($interp:expr) => {
-        $interp.get_current_frame()
-    };
-}
-
 macro_rules! resolve_method_and_send {
     ($self:expr, $universe:expr, $symbol:expr, $nbr_args:expr) => {{
         //let receiver = $self.stack.nth_back($nbr_args);
@@ -50,6 +43,29 @@ macro_rules! profiler_maybe_stop {
     ($timing:expr) => {
         #[cfg(feature = "profiler")]
         Profiler::global().finish_detached_event($timing);
+    };
+}
+
+// Safety: this assumes the bytecode is not malformed, and so that if a bytecode requires a pop, said pop is possible.
+// If it were to not be possible somehow, bytecode gen would have messed up, and then our interpreter would be very unsound and pretty damn bad anyway. 
+// So might as well assume we didn't mess up and get some -potential- extra perf here.
+macro_rules! stack_fast_pop {
+    ($stack:expr) => {
+        unsafe { $stack.pop().unwrap_unchecked() }
+    };
+}
+
+// Safety: same logic as `stack_fast_pop`.
+macro_rules! stack_fast_last {
+    ($stack:expr) => {
+        unsafe { $stack.last().unwrap_unchecked() }
+    };
+}
+
+// Safety: same logic as `stack_fast_pop`.
+macro_rules! stack_fast_last_mut {
+    ($stack:expr) => {
+        unsafe { $stack.last_mut().unwrap_unchecked() }
     };
 }
 
@@ -301,13 +317,13 @@ impl Interpreter {
                 }
                 Bytecode::Dup => {
                     let _timing = profiler_maybe_start!("DUP");
-                    let value = *self.stack.last().unwrap();
+                    let value = *stack_fast_last!(&mut self.stack);
                     self.stack.push(value);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::Inc => {
                     let _timing = profiler_maybe_start!("INC");
-                    let last = self.stack.last_mut()?;
+                    let last = stack_fast_last_mut!(&mut self.stack);
 
                     if let Some(int) = last.as_integer() {
                         *last = Value::new_integer(int + 1);
@@ -322,7 +338,7 @@ impl Interpreter {
                 }
                 Bytecode::Dec => {
                     let _timing = profiler_maybe_start!("DEC");
-                    let last = self.stack.last_mut()?;
+                    let last = stack_fast_last_mut!(&mut self.stack);
 
                     if let Some(int) = last.as_integer() {
                         *last = Value::new_integer(int - 1);
@@ -336,7 +352,6 @@ impl Interpreter {
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::PushBlock(idx) => {
-                    // TODO: clean up that code! use unsafecell instead of black_box also
                     let _timing = profiler_maybe_start!("PUSH_BLOCK");
 
                     // allocating ahead of time in case it triggers GC.
@@ -410,26 +425,26 @@ impl Interpreter {
                 }
                 Bytecode::Pop => {
                     let _timing = profiler_maybe_start!("POP");
-                    self.stack.pop();
+                    stack_fast_pop!(&mut self.stack);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::PopLocal(up_idx, idx) => {
                     let _timing = profiler_maybe_start!("POP_LOCAL");
-                    let value = self.stack.pop().unwrap();
+                    let value = stack_fast_pop!(&mut self.stack);
                     let mut from = Frame::nth_frame_back(self.get_current_frame_mut(), up_idx);
                     from.assign_local(idx as usize, value);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::PopArg(up_idx, idx) => {
                     let _timing = profiler_maybe_start!("POP_ARG");
-                    let value = self.stack.pop().unwrap();
+                    let value = stack_fast_pop!(&mut self.stack);
                     let mut from = Frame::nth_frame_back(self.get_current_frame_mut(), up_idx);
                     from.assign_arg(idx as usize, value);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::PopField(idx) => {
                     let _timing = profiler_maybe_start!("POP_FIELD");
-                    let value = self.stack.pop().unwrap();
+                    let value = stack_fast_pop!(&mut self.stack);
                     let self_val = self.get_current_frame().get_self();
                     if let Some(instance) = self_val.as_instance() {
                         Instance::assign_field(&instance, idx as usize, value);
@@ -464,13 +479,13 @@ impl Interpreter {
                 }
                 Bytecode::ReturnLocal => {
                     let _timing = profiler_maybe_start!("RETURN_LOCAL");
-                    let val = self.stack.pop().unwrap();
+                    let value = stack_fast_pop!(&mut self.stack);
                     self.pop_frame();
                     if self.get_current_frame().is_empty() {
                         profiler_maybe_stop!(_timing);
-                        return Some(val);
+                        return Some(value);
                     }
-                    self.stack.push(val);
+                    self.stack.push(value);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::ReturnNonLocal(up_idx) => {
@@ -494,9 +509,9 @@ impl Interpreter {
                     };
 
                     if let Some(count) = escaped_frames_nbr {
-                        let val = self.stack.pop().unwrap();
+                        let value = stack_fast_pop!(&mut self.stack);
                         self.pop_n_frames(count + 1);
-                        self.stack.push(val);
+                        self.stack.push(value);
                     } else {
                         // Block has escaped its method frame.
                         let instance = self.get_current_frame().get_self();
@@ -536,13 +551,13 @@ impl Interpreter {
                 }
                 Bytecode::JumpOnTrueTopNil(offset) => {
                     let _timing = profiler_maybe_start!("JUMP_ON_TRUE_TOP_NIL");
-                    let condition_result = self.stack.last_mut()?;
+                    let condition_result = stack_fast_last_mut!(&mut self.stack);
 
                     if condition_result.is_boolean_true() {
                         self.bytecode_idx += offset - 1;
                         *condition_result = Value::NIL;
                     } else if condition_result.is_boolean_false() {
-                        self.stack.pop();
+                        stack_fast_pop!(&mut self.stack);
                     } else {
                         panic!("JumpOnTrueTopNil condition did not evaluate to boolean (was {:?})", condition_result)
                     };
@@ -550,10 +565,10 @@ impl Interpreter {
                 }
                 Bytecode::JumpOnFalseTopNil(offset) => {
                     let _timing = profiler_maybe_start!("JUMP_ON_FALSE_TOP_NIL");
-                    let condition_result = self.stack.last_mut()?;
+                    let condition_result = stack_fast_last_mut!(&mut self.stack);
 
                     if condition_result.is_boolean_true() {
-                        self.stack.pop();
+                        stack_fast_pop!(&mut self.stack);
                     } else if condition_result.is_boolean_false() {
                         self.bytecode_idx += offset - 1;
                         *condition_result = Value::NIL;
@@ -564,7 +579,7 @@ impl Interpreter {
                 }
                 Bytecode::JumpOnTruePop(offset) => {
                     let _timing = profiler_maybe_start!("JUMP_ON_TRUE_POP");
-                    let condition_result = self.stack.pop()?;
+                    let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if condition_result.is_boolean_true() {
                         self.bytecode_idx += offset - 1;
@@ -577,7 +592,7 @@ impl Interpreter {
                 }
                 Bytecode::JumpOnFalsePop(offset) => {
                     let _timing = profiler_maybe_start!("JUMP_ON_FALSE_POP");
-                    let condition_result = self.stack.pop()?;
+                    let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if condition_result.is_boolean_false() {
                         self.bytecode_idx += offset - 1;
@@ -590,7 +605,7 @@ impl Interpreter {
                 }
                 Bytecode::JumpIfGreater(offset) => {
                     let _timing = profiler_maybe_start!("JUMP_IF_GREATER");
-                    let top = self.stack.last()?;
+                    let top = stack_fast_last!(&self.stack);
                     let top2 = self.stack[self.stack.len() - 2];
 
                     let is_greater = {
@@ -611,7 +626,7 @@ impl Interpreter {
                 }
                 Bytecode::JumpOnNilTopTop(offset) => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NIL_TOP_TOP");
-                    let condition_result = self.stack.last()?;
+                    let condition_result = stack_fast_last!(&mut self.stack);
 
                     if condition_result.is_nil() {
                         self.bytecode_idx += offset - 1;
@@ -622,18 +637,18 @@ impl Interpreter {
                 }
                 Bytecode::JumpOnNotNilTopTop(offset) => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NOT_NIL_TOP_TOP");
-                    let condition_result = self.stack.last()?;
+                    let condition_result = stack_fast_last!(&mut self.stack);
 
                     if !condition_result.is_nil() {
                         self.bytecode_idx += offset - 1;
                     } else {
-                        self.stack.pop();
+                        stack_fast_pop!(&mut self.stack);
                     }
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::JumpOnNilPop(offset) => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NIL_POP");
-                    let condition_result = self.stack.pop()?;
+                    let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if condition_result.is_nil() {
                         self.bytecode_idx += offset - 1;
@@ -644,7 +659,7 @@ impl Interpreter {
                 }
                 Bytecode::JumpOnNotNilPop(offset) => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NOT_NIL_POP");
-                    let condition_result = self.stack.pop()?;
+                    let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if !condition_result.is_nil() {
                         self.bytecode_idx += offset - 1;
