@@ -40,7 +40,7 @@ pub struct MethodInfo {
     pub body: Vec<Bytecode>,
     pub inline_cache: BodyInlineCache,
     pub nbr_locals: u8,
-    pub nbr_params: u8,
+    pub nbr_args: u8,
 }
 
 /// Represents a class method.

@@ -70,7 +70,7 @@ impl Hash for Block {
         blk_info.literals.iter().for_each(|it| it.hash(hasher));
         blk_info.nbr_locals.hash(hasher);
         // self.blk_info.locals.iter().for_each(|it| it.hash(hasher));
-        blk_info.nbr_params.hash(hasher);
+        blk_info.nbr_args.hash(hasher);
         blk_info.body.iter().for_each(|it| it.hash(hasher));
     }
 }

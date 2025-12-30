@@ -21,8 +21,7 @@ use std::time::Instant;
 
 macro_rules! resolve_method_and_send {
     ($self:expr, $universe:expr, $symbol:expr, $nbr_args:expr) => {{
-        //let receiver = $self.stack.nth_back($nbr_args);
-        let receiver = $self.stack[$self.stack.len() - 1 - $nbr_args];
+        let receiver = $self.stack[$self.stack.len() - $nbr_args];
         let receiver_class = receiver.class($universe);
         let method = resolve_method(&mut $self.get_current_frame(), &receiver_class, $symbol, $self.bytecode_idx);
         do_send($self, $universe, method, $symbol, $nbr_args);
@@ -241,22 +240,22 @@ impl Interpreter {
             match bytecode {
                 Bytecode::Send1(symbol) => {
                     let _timing = profiler_maybe_start!("SEND");
-                    resolve_method_and_send!(self, universe, symbol, 0);
+                    resolve_method_and_send!(self, universe, symbol, 1);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::Send2(symbol) => {
                     let _timing = profiler_maybe_start!("SEND");
-                    resolve_method_and_send!(self, universe, symbol, 1);
+                    resolve_method_and_send!(self, universe, symbol, 2);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::Send3(symbol) => {
                     let _timing = profiler_maybe_start!("SEND");
-                    resolve_method_and_send!(self, universe, symbol, 2);
+                    resolve_method_and_send!(self, universe, symbol, 3);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::SendN(symbol) => {
                     let _timing = profiler_maybe_start!("SEND");
-                    let nbr_args = nb_params(universe.lookup_symbol(symbol));
+                    let nbr_args = nbr_args(universe.lookup_symbol(symbol));
                     resolve_method_and_send!(self, universe, symbol, nbr_args);
                     profiler_maybe_stop!(_timing);
                 }
@@ -447,9 +446,9 @@ impl Interpreter {
                 }
                 Bytecode::SuperSend(symbol) => {
                     let _timing = profiler_maybe_start!("SUPER_SEND");
-                    let nb_params = {
+                    let nbr_args = {
                         let signature = universe.lookup_symbol(symbol);
-                        nb_params(signature)
+                        nbr_args(signature)
                     };
 
                     let method = {
@@ -457,7 +456,7 @@ impl Interpreter {
                         let super_class = holder.super_class().unwrap();
                         resolve_method(self.current_frame.get_mut(), &super_class, symbol, self.bytecode_idx)
                     };
-                    do_send(self, universe, method, symbol, nb_params);
+                    do_send(self, universe, method, symbol, nbr_args);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::ReturnSelf => {
@@ -661,12 +660,12 @@ impl Interpreter {
             }
         }
 
-        pub fn do_send(interpreter: &mut Interpreter, universe: &mut Universe, method: Option<Gc<Method>>, symbol: Interned, nb_params: usize) {
+        pub fn do_send(interpreter: &mut Interpreter, universe: &mut Universe, method: Option<Gc<Method>>, symbol: Interned, nbr_args: usize) {
             // we store the current bytecode idx to be able to correctly restore the bytecode state when we pop frames
             interpreter.get_current_frame().bytecode_idx = interpreter.bytecode_idx;
 
             let Some(method) = method else {
-                let args = interpreter.stack.split_off(interpreter.stack.len() - nb_params);
+                let args = interpreter.stack.split_off(interpreter.stack.len() - nbr_args + 1);
                 let self_value = interpreter.stack.pop().unwrap();
 
                 universe
@@ -681,12 +680,12 @@ impl Interpreter {
                     //let name = &method.holder().name.clone();
                     //eprintln!("--- Invoking {:?} (in {:?})", &method.signature(), &name);
                     //eprintln!("--- Invoking {:?}", &method.signature());
-                    interpreter.push_method_frame(method_info.clone(), nb_params + 1, &mut universe.gc_interface);
+                    interpreter.push_method_frame(method_info.clone(), nbr_args, &mut universe.gc_interface);
                 }
                 Method::Primitive(func, _met_info) => {
                     //eprintln!("--- Invoking prim {:?} (in {:?})", &_met_info.signature, &_met_info.holder.name);
 
-                    func(interpreter, universe, nb_params + 1)
+                    func(interpreter, universe, nbr_args)
                         .with_context(|| anyhow::anyhow!("error calling primitive `{}`", universe.lookup_symbol(symbol)))
                         .unwrap();
                 }
@@ -728,10 +727,10 @@ impl Interpreter {
             }
         }
 
-        fn nb_params(signature: &str) -> usize {
+        fn nbr_args(signature: &str) -> usize {
             match signature.chars().next() {
-                Some(ch) if !ch.is_alphabetic() => 1,
-                _ => signature.chars().filter(|ch| *ch == ':').count(),
+                Some(ch) if !ch.is_alphabetic() => 2,
+                _ => signature.chars().filter(|ch| *ch == ':').count() + 1, // adding 1 to account for self
             }
         }
     }

@@ -27,11 +27,8 @@ pub struct Frame {
     /// So why do we do things that way? Because of moving GC. If we have a pointer to a MethodInfo, that's an inner pointer to a Method object. So when GC moves the frame, it can't update that pointer.
     pub current_context: Gc<MethodInfo>,
 
-    /// Bytecode index.
+    /// Bytecode index, needed to know where to resume execution when returning to parent frames.
     pub bytecode_idx: u16,
-
-    /// It's also stored in the current context, but we keep it here for faster access since we need it to calculate the offset to local variables
-    pub nbr_args: u8,
 
     /// markers. we don't use them directly. it's mostly a reminder that the struct looks different in memory... not the cleanest but not sure how else to go about it
     pub args_marker: PhantomData<[Value]>,
@@ -72,8 +69,6 @@ impl Frame {
     /// Takes a slice of arguments to be copied in the frame.
     pub(crate) fn init_frame_args_locals(frame: &mut Gc<Frame>, args: &[Value]) {
         unsafe {
-            frame.nbr_args = args.len() as u8;
-
             // initializing arguments from the args slice
             let args_ptr = frame.as_ptr().byte_add(OFFSET_TO_VALUES) as *mut Value;
             std::slice::from_raw_parts_mut(args_ptr, args.len()).copy_from_slice(args);
@@ -90,8 +85,6 @@ impl Frame {
     /// Takes a reference to the global stack to invoke `drain` to efficiently remove and copy its last `nbr_args` values.
     pub(crate) fn init_frame_args_locals_from_stack(frame: &mut Gc<Frame>, stack: &mut Vec<Value>, nbr_args: usize) {
         unsafe {
-            frame.nbr_args = nbr_args as u8;
-
             let args = stack.drain(stack.len() - nbr_args..);
             let args_ptr = frame.as_ptr().byte_add(OFFSET_TO_VALUES) as *mut Value;
             std::slice::from_raw_parts_mut(args_ptr, nbr_args).copy_from_slice(args.as_slice());
@@ -110,7 +103,6 @@ impl Frame {
             prev_frame,
             current_context: block.blk_info.clone(),
             bytecode_idx: 0,
-            nbr_args: 0,
             args_marker: PhantomData,
             locals_marker: PhantomData,
         }
@@ -122,7 +114,6 @@ impl Frame {
             prev_frame,
             current_context: method,
             bytecode_idx: 0,
-            nbr_args: 0,
             args_marker: PhantomData,
             locals_marker: PhantomData,
         }
@@ -147,7 +138,7 @@ impl Frame {
 
     #[inline(always)]
     pub fn get_nbr_args(&self) -> u8 {
-        self.current_context.nbr_params + 1 // + 1 to account for self.
+        self.current_context.nbr_args
     }
 
     #[inline(always)]
@@ -186,7 +177,7 @@ impl Frame {
     pub fn lookup_local(&self, idx: usize) -> &Value {
         unsafe {
             let value_heap_ptr = (self as *const Self).byte_add(OFFSET_TO_VALUES) as *mut Value;
-            let locals_ptr = value_heap_ptr.add(self.nbr_args as usize);
+            let locals_ptr = value_heap_ptr.add(self.current_context.nbr_args as usize);
             &*locals_ptr.add(idx)
         }
     }
@@ -196,7 +187,7 @@ impl Frame {
     pub fn assign_local(&mut self, idx: usize, value: Value) {
         unsafe {
             let value_heap_ptr = (self as *const Self).byte_add(OFFSET_TO_VALUES) as *mut Value;
-            let locals_ptr = value_heap_ptr.add(self.nbr_args as usize);
+            let locals_ptr = value_heap_ptr.add(self.current_context.nbr_args as usize);
             *locals_ptr.add(idx) = value
         }
     }

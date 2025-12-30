@@ -613,7 +613,7 @@ impl MethodCodegen for ast::Expression {
 
                 message.values.iter().try_for_each(|value| value.codegen(ctxt, mutator))?;
 
-                let nb_params = match message.signature.chars().nth(0) {
+                let nbr_args = match message.signature.chars().nth(0) {
                     Some(ch) if !ch.is_alphabetic() => 1,
                     _ => message.signature.chars().filter(|ch| *ch == ':').count(),
                 };
@@ -621,7 +621,7 @@ impl MethodCodegen for ast::Expression {
                 let sym = ctxt.intern_symbol(message.signature.as_str());
 
                 match is_super_call {
-                    false => match nb_params {
+                    false => match nbr_args {
                         0 => ctxt.push_instr(Bytecode::Send1(sym)),
                         1 => ctxt.push_instr(Bytecode::Send2(sym)),
                         2 => ctxt.push_instr(Bytecode::Send3(sym)),
@@ -771,11 +771,11 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
         body: &Vec<Bytecode>,
         literals: &[Literal],
         signature: &str,
-        nbr_params: usize,
+        nbr_args: usize,
         interner: &Interner,
     ) -> Option<Method> {
-        match (body.as_slice(), nbr_params) {
-            ([Bytecode::PushGlobal(x), Bytecode::ReturnLocal], 0) => match literals.get(*x as usize)? {
+        match (body.as_slice(), nbr_args) {
+            ([Bytecode::PushGlobal(x), Bytecode::ReturnLocal], 1) => match literals.get(*x as usize)? {
                 Literal::Symbol(interned) => Some(Method::TrivialGlobal(
                     TrivialGlobalMethod {
                         global_name: *interned,
@@ -785,15 +785,15 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                 )),
                 _ => None,
             },
-            ([Bytecode::PushField(x), Bytecode::ReturnLocal], 0) => Some(Method::TrivialGetter(
+            ([Bytecode::PushField(x), Bytecode::ReturnLocal], 1) => Some(Method::TrivialGetter(
                 TrivialGetterMethod { field_idx: *x },
                 BasicMethodInfo::new(String::from(signature), Gc::default()),
             )),
-            ([Bytecode::PushArg(1), Bytecode::PopField(x), Bytecode::ReturnSelf], 1) => Some(Method::TrivialSetter(
+            ([Bytecode::PushArg(1), Bytecode::PopField(x), Bytecode::ReturnSelf], 2) => Some(Method::TrivialSetter(
                 TrivialSetterMethod { field_idx: *x },
                 BasicMethodInfo::new(String::from(signature), Gc::default()),
             )),
-            ([literal_bc, Bytecode::ReturnLocal], 0) => {
+            ([literal_bc, Bytecode::ReturnLocal], 1) => {
                 let maybe_literal: Option<Literal> = match literal_bc {
                     Bytecode::PushConstant(x) => literals.get(*x as usize).cloned(),
                     Bytecode::Push0 => Some(Literal::Integer(0)),
@@ -822,15 +822,6 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
         signature: defn.signature.clone(),
         inner: BlockGenCtxt {
             outer,
-            // args: {
-            //     let mut args = IndexSet::new();
-            //     args.insert(String::from("self"));
-            //     args
-            // },
-            // locals: match &defn.body {
-            //     ast::MethodBody::Primitive => IndexSet::new(),
-            //     ast::MethodBody::Body { locals, .. } => locals.iter().cloned().collect(),
-            // },
             literals: IndexSet::new(),
             body: None,
             args: {
@@ -860,18 +851,6 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
         },
     };
 
-    // match &defn.kind {
-    //     ast::MethodKind::Unary => {}
-    //     ast::MethodKind::Positional { parameters } => {
-    //         for param in parameters {
-    //             ctxt.push_arg(param.clone());
-    //         }
-    //     }
-    //     ast::MethodKind::Operator { rhs } => {
-    //         ctxt.push_arg(rhs.clone());
-    //     }
-    // }
-
     match &defn.body {
         ast::MethodBody::Primitive => {}
         ast::MethodBody::Body { body, .. } => {
@@ -899,15 +878,14 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                 let body = ctxt.inner.body.clone().unwrap_or_default();
                 let literals: Vec<Literal> = ctxt.inner.literals.clone().into_iter().collect();
                 let signature = ctxt.signature.clone();
-                let nbr_params = {
+                let nbr_args = {
                     match ctxt.signature.chars().next() {
-                        Some(ch) if !ch.is_alphabetic() => 1,
-                        _ => ctxt.signature.chars().filter(|ch| *ch == ':').count() as u8,
+                        Some(ch) if !ch.is_alphabetic() => 2,
+                        _ => ctxt.signature.chars().filter(|ch| *ch == ':').count() as u8 + 1, // + 1 for self
                     }
                 };
 
-                if let Some(trivial_method) = make_trivial_method_if_possible(&body, &literals, &signature, nbr_params as usize, ctxt.get_interner())
-                {
+                if let Some(trivial_method) = make_trivial_method_if_possible(&body, &literals, &signature, nbr_args as usize, ctxt.get_interner()) {
                     trivial_method
                 } else {
                     let inline_cache = vec![None; body.len()];
@@ -918,7 +896,7 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                         base_method_info: BasicMethodInfo::new(signature, Gc::default()),
                         body,
                         nbr_locals,
-                        nbr_params,
+                        nbr_args,
                         literals,
                         inline_cache,
                         #[cfg(feature = "frame-debug-info")]
@@ -986,7 +964,7 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
     let signature = String::from("--block--");
     let body = ctxt.body.clone().unwrap_or_default();
     let nbr_locals = ctxt.locals_nbr as u8;
-    let nbr_params = ctxt.args_nbr as u8;
+    let nbr_args = ctxt.args_nbr as u8 + 1; // + 1 for self
     let inline_cache = vec![None; body.len()];
 
     let method_info = MethodInfo {
@@ -994,7 +972,7 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
         nbr_locals,
         literals,
         body,
-        nbr_params,
+        nbr_args,
         inline_cache,
         #[cfg(feature = "frame-debug-info")]
         block_debug_info: ctxt.debug_info,
