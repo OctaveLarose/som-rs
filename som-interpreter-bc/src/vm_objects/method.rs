@@ -33,6 +33,7 @@ impl BasicMethodInfo {
 }
 
 /// Data for a method, or a block.
+// TODO: not a fan of the name. But this *is* info/metadata about each method... Still, a rename would be nice.
 #[derive(Clone)]
 pub struct MethodInfo {
     pub basic_method_info: BasicMethodInfo,
@@ -92,7 +93,7 @@ impl Method {
                 env.basic_method_info.holder = holder_ptr.clone();
                 for lit in &mut env.literals {
                     if let Literal::Block(blk) = lit {
-                        blk.blk_info.basic_method_info.holder = holder_ptr.clone();
+                        blk.basic_method_info.holder = holder_ptr.clone();
                     }
                 }
             }

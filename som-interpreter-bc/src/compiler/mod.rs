@@ -4,7 +4,7 @@
 
 use crate::gc::{VecLiteral, VecValue};
 use crate::value::Value;
-use crate::vm_objects::block::Block;
+use crate::vm_objects::method::MethodInfo;
 use num_bigint::BigInt;
 use som_gc::gc_interface::AllocSiteMarker;
 use som_gc::{
@@ -25,7 +25,7 @@ pub enum Literal {
     Integer(i32),
     BigInteger(Gc<BigInt>),
     Array(VecLiteral),
-    Block(Gc<Block>),
+    Block(Gc<MethodInfo>),
 }
 
 impl PartialEq for Literal {
@@ -93,6 +93,8 @@ pub fn value_from_literal(literal: &Literal, gc_interface: &mut GCInterface) -> 
             let arr = &val.iter().map(|lit| value_from_literal(lit, gc_interface)).collect::<Vec<_>>();
             Value::Array(VecValue(gc_interface.alloc_slice(arr, AllocSiteMarker::VecValue)))
         }
-        Literal::Block(val) => Value::Block(val.clone()),
+        Literal::Block(_) => {
+            panic!("We should never request a value from a block literal, which are always only associated with a PushBlock bytecode")
+        }
     }
 }

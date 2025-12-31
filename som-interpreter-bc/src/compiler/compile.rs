@@ -16,7 +16,6 @@ use crate::gc::VecLiteral;
 use crate::primitives;
 use crate::primitives::UNIMPLEM_PRIMITIVE;
 use crate::value::Value;
-use crate::vm_objects::block::Block;
 use crate::vm_objects::class::Class;
 use crate::vm_objects::method::{BasicMethodInfo, Method, MethodInfo};
 use crate::vm_objects::trivial_methods::{TrivialGetterMethod, TrivialGlobalMethod, TrivialLiteralMethod, TrivialSetterMethod};
@@ -704,8 +703,8 @@ impl MethodCodegen for ast::Expression {
                 Some(())
             }
             ast::Expression::Block(val) => {
-                let block = compile_block(ctxt.as_gen_ctxt(), val, mutator)?;
-                let block = Literal::Block(mutator.alloc(block, AllocSiteMarker::Block));
+                let block_method = compile_block_method(ctxt.as_gen_ctxt(), val, mutator)?;
+                let block = Literal::Block(block_method);
                 let idx = ctxt.push_literal(block);
                 ctxt.push_instr(Bytecode::PushBlock(idx as u8));
                 Some(())
@@ -914,7 +913,7 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
     Some(method)
 }
 
-fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut GCInterface) -> Option<Block> {
+fn compile_block_method(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut GCInterface) -> Option<Gc<MethodInfo>> {
     // println!("(system) compiling block ...");
 
     let mut ctxt = BlockGenCtxt {
@@ -952,15 +951,9 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
         ctxt.push_instr(Bytecode::ReturnLocal);
     }
 
-    let frame = None;
-    // let locals = {
-    // let locals = std::mem::take(&mut ctxt.locals);
-    // locals
-    //     .into_iter()
-    //     .map(|name| ctxt.intern_symbol(&name))
-    //     .collect()
-    // };
     let literals: Vec<Literal> = ctxt.literals.clone().into_iter().collect();
+    // FEAT: could probably make `signature` into an enum or a Cow<'static, str> to store either an owner string, or just a static str "--block--".
+    // That'd save a bit of memory and I *think* there'd be no runtime cost.
     let signature = String::from("--block--");
     let body = ctxt.body.clone().unwrap_or_default();
     let nbr_locals = ctxt.locals_nbr as u8;
@@ -978,14 +971,11 @@ fn compile_block(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface: &mut 
         block_debug_info: ctxt.debug_info,
     };
 
-    let block = Block {
-        frame,
-        blk_info: gc_interface.alloc(method_info, AllocSiteMarker::MethodInfo),
-    };
+    let method_info = gc_interface.alloc(method_info, AllocSiteMarker::MethodInfo);
 
     // println!("(system) compiled block !");
 
-    Some(block)
+    Some(method_info)
 }
 
 pub fn compile_class(

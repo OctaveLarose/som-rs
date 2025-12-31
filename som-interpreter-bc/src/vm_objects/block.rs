@@ -22,7 +22,7 @@ pub type BodyInlineCache = Vec<Option<CacheEntry>>;
 #[derive(Clone)]
 pub struct Block {
     /// Reference to the captured stack frame.
-    pub frame: Option<Gc<Frame>>,
+    pub frame: Gc<Frame>,
     /// Block environment needed for execution, e.g. the block's bytecodes, literals, number of locals...
     pub blk_info: Gc<MethodInfo>,
 }
@@ -49,7 +49,7 @@ impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct(&format!("Block{}", self.nb_parameters()))
             .field("block", &self.blk_info)
-            .field("frame", &self.frame.as_ref().map(|f| f.as_ptr()))
+            .field("frame", &self.frame.as_ptr())
             .finish()
     }
 }
@@ -70,10 +70,7 @@ impl GcType for Block {
     }
 
     fn scan_object(block: Gc<Self>, visit_slot_fn: &mut dyn FnMut(SOMSlot)) {
-        if let Some(frame) = block.frame.as_ref() {
-            visit_slot_fn(SOMSlot::from(frame));
-        }
-
+        visit_slot_fn(SOMSlot::from(&block.frame));
         visit_slot_fn(SOMSlot::from(&block.blk_info));
     }
 

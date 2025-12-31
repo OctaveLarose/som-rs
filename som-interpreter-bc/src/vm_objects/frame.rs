@@ -141,10 +141,7 @@ impl Frame {
     pub(crate) fn get_self(&self) -> Value {
         let self_arg = self.lookup_argument(0);
         match self_arg.as_block() {
-            Some(b) => {
-                let block_frame = b.frame.as_ref().unwrap();
-                block_frame.get_self()
-            }
+            Some(b) => b.frame.get_self(),
             None => *self_arg,
         }
     }
@@ -215,7 +212,7 @@ impl Frame {
         let mut target_frame: Gc<Frame> = current_frame.clone();
         for _ in 0..n {
             target_frame = match &target_frame.lookup_argument(0).as_block() {
-                Some(block) => block.frame.as_ref().unwrap().clone(),
+                Some(block) => block.frame.clone(),
                 None => panic!(
                     "attempting to access a non local var/arg from a method instead of a block: self wasn't blockself but {:?}.",
                     current_frame.lookup_argument(0)

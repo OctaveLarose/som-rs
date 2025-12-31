@@ -349,12 +349,12 @@ impl Interpreter {
                     let current_frame = self.get_current_frame();
                     match current_frame.lookup_constant(idx as usize) {
                         Literal::Block(blk) => {
-                            *new_blk = (**blk).clone();
+                            new_blk.blk_info = (*blk).clone();
+                            new_blk.frame = current_frame.clone();
                         }
                         _ => panic!("PushBlock expected a block, but got another invalid literal"),
                     }
 
-                    new_blk.frame.replace(current_frame.clone());
                     self.stack.push(Value::Block(new_blk));
 
                     profiler_maybe_stop!(_timing);
