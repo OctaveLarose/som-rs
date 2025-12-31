@@ -30,16 +30,16 @@ pub struct Block {
 impl Block {
     /// Get the block's class.
     pub fn class(&self, universe: &Universe) -> Gc<Class> {
-        match self.nb_parameters() {
+        match self.nbr_args() {
             1 => universe.core.block1_class(),
             2 => universe.core.block2_class(),
             3 => universe.core.block3_class(),
-            _ => panic!("no support for blocks with more than 2 parameters"),
+            _ => panic!("no support for blocks with more than 2 args"),
         }
     }
 
-    /// Retrieve the number of parameters this block accepts.
-    pub fn nb_parameters(&self) -> u8 {
+    /// Retrieve the number of args this block accepts.
+    pub fn nbr_args(&self) -> u8 {
         debug_assert_valid_semispace_ptr!(self.blk_info);
         self.blk_info.nbr_args
     }
@@ -47,7 +47,7 @@ impl Block {
 
 impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct(&format!("Block{}", self.nb_parameters()))
+        f.debug_struct(&format!("Block{}", self.nbr_args()))
             .field("block", &self.blk_info)
             .field("frame", &self.frame.as_ptr())
             .finish()

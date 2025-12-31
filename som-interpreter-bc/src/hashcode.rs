@@ -66,6 +66,7 @@ impl Hash for Class {
 
 impl Hash for Block {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
+        hasher.write(b"#runtimeblk#");
         self.blk_info.hash(hasher)
     }
 }

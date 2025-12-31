@@ -201,19 +201,6 @@ pub struct ToDoInlinedMsg {
     pub accumulator_name: String,
 }
 
-/// A message with "super" as the receiver, so the superclass.
-#[derive(Debug, Clone, PartialEq)]
-pub struct SuperMessage {
-    /// The object to which the message is sent to.
-    pub receiver_name: String,
-    /// Do we access the static or instance methods of the superclass?
-    pub is_static_class_call: bool,
-    /// The signature of the message (eg. "ifTrue:ifFalse:").
-    pub signature: String,
-    /// The list of dynamic values that are passed.
-    pub values: Vec<Expression>,
-}
-
 /// Represents a binary operation.
 ///
 /// Exemple:
@@ -245,12 +232,8 @@ pub struct BinaryOp {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Block {
-    /// Represents the parameters' names. TODO remove
-    pub nbr_params: usize,
-    /// The names of the locals.
-    pub nbr_locals: usize,
     /// Represents the parameters' names.
-    pub parameters: Vec<String>,
+    pub args: Vec<String>,
     /// The names of the locals.
     pub locals: Vec<String>,
     /// Represents the block's body.

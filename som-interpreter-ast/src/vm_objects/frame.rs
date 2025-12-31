@@ -34,7 +34,7 @@ pub struct Frame {
     pub nbr_locals: u8,
 
     /// Parameters for this frame.
-    pub params_marker: PhantomData<Vec<Value>>,
+    pub args_marker: PhantomData<Vec<Value>>,
     /// Local variables that get defined within this frame.
     pub locals_marker: PhantomData<Vec<Value>>,
 }
@@ -48,7 +48,7 @@ impl Frame {
             prev_frame: Gc::default(),
             nbr_locals,
             nbr_args: nbr_args as u8,
-            params_marker: PhantomData,
+            args_marker: PhantomData,
             locals_marker: PhantomData,
         };
 
@@ -82,7 +82,7 @@ impl Frame {
             prev_frame: Gc::default(),
             nbr_locals,
             nbr_args: nbr_args as u8,
-            params_marker: PhantomData,
+            args_marker: PhantomData,
             locals_marker: PhantomData,
         };
 

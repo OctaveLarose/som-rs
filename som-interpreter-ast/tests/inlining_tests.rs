@@ -129,7 +129,7 @@ pub fn recursive_inlining(mut interner: Interner) {
                                         LocalVarRead(1)
                             arg:
                                 Block:
-                                    AstBlock(1 params, 0 locals):
+                                    AstBlock(1 args, 0 locals):
                                         IfInlinedNode (expected bool: true):
                                             condition expr:
                                                 BinaryDispatch \"Interned(3)\":

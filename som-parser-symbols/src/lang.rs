@@ -273,9 +273,7 @@ pub fn block<'a>() -> impl Parser<Expression, &'a [Token], AstGenCtxt<'a>> {
 
         Some((
             Expression::Block(Block {
-                nbr_params: parameters.len(),
-                nbr_locals: locals.len(),
-                parameters,
+                args: parameters,
                 locals,
                 body,
             }),

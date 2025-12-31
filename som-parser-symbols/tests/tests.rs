@@ -63,9 +63,7 @@ fn block_test() {
     assert_eq!(
         block,
         Expression::Block(Block {
-            nbr_params: 1,
-            nbr_locals: 1,
-            parameters: vec!["test".to_string()],
+            args: vec!["test".to_string()],
             locals: vec!["local".to_string()],
             body: Body {
                 exprs: vec![
@@ -134,10 +132,8 @@ fn primary_test() {
     assert_eq!(
         primary,
         Expression::Block(Block {
-            nbr_params: 0,
-            nbr_locals: 0,
             locals: vec![],
-            parameters: vec![],
+            args: vec![],
             body: Body {
                 exprs: vec![Expression::Message(Box::new(Message::Regular(RegularMessage {
                     receiver: Expression::Read("self".to_string()),

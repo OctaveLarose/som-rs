@@ -918,12 +918,12 @@ fn compile_block_method(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface
 
     let mut ctxt = BlockGenCtxt {
         outer,
-        args_nbr: defn.nbr_params,
-        locals_nbr: defn.nbr_locals,
+        args_nbr: defn.args.len(),
+        locals_nbr: defn.locals.len(),
         args: {
             let mut args = IndexSet::new();
             args.insert(String::from("#blockSelf"));
-            for arg in &defn.parameters {
+            for arg in &defn.args {
                 args.insert(arg.to_string());
             }
             args

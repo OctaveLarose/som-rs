@@ -86,7 +86,7 @@ pub struct AstTerm {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstBlock {
-    pub nbr_params: u8,
+    pub nbr_args: u8,
     pub nbr_locals: u8,
     pub body: AstBody,
 }
@@ -180,7 +180,7 @@ impl Display for AstBody {
 
 impl Display for AstBlock {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "AstBlock({} params, {} locals):", self.nbr_params, self.nbr_locals)?;
+        writeln!(f, "AstBlock({} args, {} locals):", self.nbr_args, self.nbr_locals)?;
         for expr in &self.body.exprs {
             write!(indented(f), "{}", expr)?;
         }

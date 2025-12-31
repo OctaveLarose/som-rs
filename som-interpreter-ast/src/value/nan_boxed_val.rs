@@ -198,7 +198,7 @@ impl Value {
             }
             BLOCK_TAG => {
                 let block = self.as_block().unwrap();
-                format!("instance of Block{}", block.nb_parameters() + 1)
+                format!("instance of Block{}", block.nbr_args() + 1)
             }
             INSTANCE_TAG => {
                 let instance = self.as_instance().unwrap();
@@ -404,7 +404,7 @@ impl ValueEnum {
                 let strings: Vec<String> = values.iter().map(|value| value.to_string(universe)).collect();
                 format!("#({})", strings.join(" "))
             }
-            Self::Block(block) => format!("instance of Block{}", block.nb_parameters() + 1),
+            Self::Block(block) => format!("instance of Block{}", block.nbr_args() + 1),
             Self::Instance(instance_ptr) => {
                 format!("instance of {} class", instance_ptr.class().name(),)
             }

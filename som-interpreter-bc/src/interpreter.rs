@@ -125,7 +125,7 @@ impl Interpreter {
 
         let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::MethodFrame);
 
-        *frame_ptr = Frame::from_method(self.frame_method_root.clone(), self.get_current_frame());
+        *frame_ptr = Frame::new(self.frame_method_root.clone(), self.get_current_frame());
 
         Frame::init_frame_args_locals_from_stack(&mut frame_ptr, &mut self.stack, nbr_args);
 
@@ -150,7 +150,7 @@ impl Interpreter {
 
         let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::MethodFrameWithArgs);
 
-        *frame_ptr = Frame::from_method(self.frame_method_root.clone(), self.get_current_frame());
+        *frame_ptr = Frame::new(self.frame_method_root.clone(), self.get_current_frame());
         Frame::init_frame_args_locals(&mut frame_ptr, self.frame_args_root.as_ref().unwrap());
 
         self.bytecode_idx = 0;
@@ -180,7 +180,7 @@ impl Interpreter {
             let mut frame_ptr: Gc<Frame> = mutator.request_memory_for_type(size, AllocSiteMarker::BlockFrame);
 
             let block_value = *self.stack.get(self.stack.len() - 1 - (nbr_args - 1)).unwrap();
-            *frame_ptr = Frame::from_block(block_value.as_block().unwrap(), self.get_current_frame());
+            *frame_ptr = Frame::new(block_value.as_block().unwrap().blk_info.clone(), self.get_current_frame());
 
             Frame::init_frame_args_locals_from_stack(&mut frame_ptr, &mut self.stack, nbr_args);
 

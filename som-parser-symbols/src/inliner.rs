@@ -51,7 +51,7 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
             }
         }
 
-        for blk_arg in &blk.parameters {
+        for blk_arg in &blk.args {
             if self.borrow().has_local(blk_arg) {
                 return true;
             }
@@ -63,7 +63,7 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
     // HACK: should not return bool! We should just handle shadowing, and never fail.
     fn inline_block_context(&mut self, blk: &mut ast::Block) {
         self.borrow_mut().add_locals(&blk.locals);
-        self.borrow_mut().add_locals(&blk.parameters);
+        self.borrow_mut().add_locals(&blk.args);
     }
 
     fn try_inline_if_true_or_if_false(&mut self, mut msg: ast::RegularMessage, expected_bool: bool) -> Message {
@@ -119,14 +119,12 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
                 (Expression::Block(blk), Expression::Block(blk2)) => (blk, blk2),
                 (Expression::Literal(ast::Literal::Integer(1)), Expression::Block(blk)) => (
                     &mut ast::Block {
-                        parameters: vec![],
+                        args: vec![],
                         locals: vec![],
                         body: som_core::ast::Body {
                             exprs: vec![Expression::Literal(ast::Literal::Integer(1))],
                             full_stopped: false,
                         },
-                        nbr_params: 0,
-                        nbr_locals: 0,
                     },
                     blk,
                 ),
@@ -140,7 +138,7 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
                 return Message::Regular(msg);
             }
         }
-        for blk_arg in &body_blk_2.parameters {
+        for blk_arg in &body_blk_2.args {
             if self.borrow().has_local(blk_arg) {
                 return Message::Regular(msg);
             }
@@ -246,7 +244,7 @@ impl PrimMessageInliner for AstGenCtxt<'_> {
             }
         };
 
-        let accumulator_name = body_blk.parameters.first().unwrap_or_else(|| panic!("inlining to:do:, but found no accumulator argument?")).clone();
+        let accumulator_name = body_blk.args.first().unwrap_or_else(|| panic!("inlining to:do:, but found no accumulator argument?")).clone();
 
         if self.block_shadows_some_outer_scope(body_blk) {
             return Message::Regular(msg);

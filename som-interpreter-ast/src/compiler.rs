@@ -418,15 +418,15 @@ impl<'a> AstMethodCompilerCtxt<'a> {
 
         let mut args_set: IndexSet<String> = IndexSet::new();
         args_set.insert("#blockSelf".to_string());
-        for arg in &blk.parameters {
+        for arg in &blk.args {
             args_set.insert(arg.clone());
         }
-        self.scopes.push(AstScopeCtxt::init(blk.nbr_params, blk.nbr_locals, locals_set, args_set));
+        self.scopes.push(AstScopeCtxt::init(blk.args.len(), blk.locals.len(), locals_set, args_set));
 
         let body = self.parse_body(&blk.body);
         let bl = self.scopes.last().unwrap();
         let output_blk = AstBlock {
-            nbr_params: bl.get_nbr_args() as u8,
+            nbr_args: bl.get_nbr_args() as u8,
             nbr_locals: bl.get_nbr_locals() as u8,
             body,
         };

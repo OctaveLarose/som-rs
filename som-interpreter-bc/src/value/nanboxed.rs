@@ -176,7 +176,7 @@ impl Value {
             }
             BLOCK_TAG => {
                 let block = self.as_block().unwrap();
-                format!("instance of Block{}", block.nb_parameters() + 1)
+                format!("instance of Block{}", block.nbr_args() + 1)
             }
             INSTANCE_TAG => {
                 let instance = self.as_instance().unwrap();

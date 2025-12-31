@@ -1,7 +1,7 @@
 use crate::compiler::Literal;
 use crate::gc::{visit_value, GcIdentifier};
 use crate::value::Value;
-use crate::vm_objects::block::{Block, CacheEntry};
+use crate::vm_objects::block::CacheEntry;
 use crate::vm_objects::class::Class;
 use core::mem::size_of;
 use som_core::bytecode::Bytecode;
@@ -34,22 +34,11 @@ pub struct Frame {
 }
 
 impl Frame {
-    // Creates a frame from a method. Called from methods that allocate different method frames
-    pub(crate) fn from_method(method: Gc<MethodInfo>, prev_frame: Gc<Frame>) -> Self {
+    // Creates a frame given a method and the previous frame.
+    pub(crate) fn new(method: Gc<MethodInfo>, prev_frame: Gc<Frame>) -> Self {
         Self {
             prev_frame,
             context: method,
-            bytecode_idx: 0,
-            args_marker: PhantomData,
-            locals_marker: PhantomData,
-        }
-    }
-
-    // Creates a frame from a block.
-    pub(crate) fn from_block(block: Gc<Block>, prev_frame: Gc<Frame>) -> Self {
-        Self {
-            prev_frame,
-            context: block.blk_info.clone(),
             bytecode_idx: 0,
             args_marker: PhantomData,
             locals_marker: PhantomData,
@@ -72,7 +61,7 @@ impl Frame {
             "We assume we can't trigger a collection when allocating a parent-less frame"
         );
 
-        *frame_ptr = Frame::from_method(init_method, Gc::default());
+        *frame_ptr = Frame::new(init_method, Gc::default());
         Frame::init_frame_args_locals(&mut frame_ptr, args);
 
         frame_ptr
