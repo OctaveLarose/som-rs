@@ -42,6 +42,8 @@ log = "0.4.21"
 rstest = "0.24.0"
 
 [features]
+default = ["track-allocations"]
+
 inlining-disabled = []
 track-allocations = ["som-gc/track-allocations"]
 jemalloc = ["jemallocator"]

@@ -43,6 +43,8 @@ log = "0.4.21"
 rstest = "0.24.0"
 
 [features]
+default = ["track-allocations"]
+
 jemalloc = ["jemallocator"]
 frame-debug-info = []
 inlining-disabled = []
