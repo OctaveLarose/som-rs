@@ -1,5 +1,4 @@
-use som_core::bytecode::Bytecode::{self, *};
-use som_value::interned::Interned;
+use som_core::bytecode::{BcEntry, Bytecode::*, BytecodeIter};
 use std::path::PathBuf;
 
 use som_interpreter_bc::compiler::compile::compile_class;
@@ -16,7 +15,7 @@ fn setup_universe() -> Universe {
     Universe::with_classpath(classpath).expect("could not setup test universe")
 }
 
-fn get_bytecodes_from_method(class_txt: &str, method_name: &str) -> Vec<Bytecode> {
+fn get_bytecodes_from_method(class_txt: &str, method_name: &str) -> Vec<BcEntry> {
     let mut universe = setup_universe();
 
     let method_name_interned = universe.intern_symbol(method_name);
@@ -35,12 +34,12 @@ fn get_bytecodes_from_method(class_txt: &str, method_name: &str) -> Vec<Bytecode
     let method = class.lookup_method(method_name_interned).expect("method not found ??");
 
     match &*method {
-        Method::Defined(m) => m.body.clone(),
+        Method::Defined(m) => BytecodeIter::init(&m.body, 0).collect(),
         _ => unreachable!(),
     }
 }
 
-fn expect_bytecode_sequence(bytecodes: &[Bytecode], expected_bc_sequence: &[Bytecode]) {
+fn expect_bytecode_sequence(bytecodes: &[BcEntry], expected_bc_sequence: &[BcEntry]) {
     assert!(
         bytecodes.windows(expected_bc_sequence.len()).any(|window| window == expected_bc_sequence),
         "Wrong BC sequence: \n{:?}\nExpected:\n{:?}",
@@ -62,13 +61,13 @@ fn if_true_or_false_inlining_ok() {
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            PushGlobal(0),
-            JumpOnFalseTopNil(3),
-            PushGlobal(0),
-            ReturnLocal,
-            Pop,
-            PushGlobal(1),
-            ReturnLocal,
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::U16Arg(JumpOnFalseTopNil, 6),
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::NoArg(ReturnLocal),
+            BcEntry::NoArg(Pop),
+            BcEntry::OneArg(PushGlobal, 1),
+            BcEntry::NoArg(ReturnLocal),
         ],
     );
 
@@ -83,13 +82,13 @@ fn if_true_or_false_inlining_ok() {
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            PushGlobal(0),
-            JumpOnTrueTopNil(3),
-            PushGlobal(0),
-            ReturnLocal,
-            Pop,
-            PushGlobal(1),
-            ReturnLocal,
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::U16Arg(JumpOnTrueTopNil, 6),
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::NoArg(ReturnLocal),
+            BcEntry::NoArg(Pop),
+            BcEntry::OneArg(PushGlobal, 1),
+            BcEntry::NoArg(ReturnLocal),
         ],
     );
 }
@@ -103,15 +102,15 @@ fn if_true_if_false_inlining_ok() {
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            PushGlobal(0),
-            JumpOnFalsePop(4),
-            PushGlobal(0),
-            ReturnLocal,
-            Jump(3),
-            PushGlobal(1),
-            ReturnLocal,
-            Pop,
-            ReturnSelf,
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::U16Arg(JumpOnFalsePop, 9),
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::NoArg(ReturnLocal),
+            BcEntry::U16Arg(Jump, 6),
+            BcEntry::OneArg(PushGlobal, 1),
+            BcEntry::NoArg(ReturnLocal),
+            BcEntry::NoArg(Pop),
+            BcEntry::NoArg(ReturnSelf),
         ],
     );
 
@@ -122,15 +121,15 @@ fn if_true_if_false_inlining_ok() {
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            PushGlobal(0),
-            JumpOnTruePop(4),
-            PushGlobal(1),
-            ReturnLocal,
-            Jump(3),
-            PushGlobal(0),
-            ReturnLocal,
-            Pop,
-            ReturnSelf,
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::U16Arg(JumpOnTruePop, 9),
+            BcEntry::OneArg(PushGlobal, 1),
+            BcEntry::NoArg(ReturnLocal),
+            BcEntry::U16Arg(Jump, 6),
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::NoArg(ReturnLocal),
+            BcEntry::NoArg(Pop),
+            BcEntry::NoArg(ReturnSelf),
         ],
     );
 }
@@ -151,14 +150,14 @@ fn while_true_false_inlining_ok() {
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            PushLocal(0),
-            PushConstant(1),
-            Send2(Interned(73)),
-            JumpOnFalsePop(5),
-            PushLocal(0),
-            Inc,
-            PopLocal(0, 0),
-            JumpBackward(7),
+            BcEntry::OneArg(PushLocal, 0),
+            BcEntry::OneArg(PushConstant, 1),
+            BcEntry::U16Arg(Send2, 73),
+            BcEntry::U16Arg(JumpOnFalsePop, 12),
+            BcEntry::OneArg(PushLocal, 0),
+            BcEntry::NoArg(Inc),
+            BcEntry::TwoArgs(PopLocal, 0, 0),
+            BcEntry::U16Arg(JumpBackward, 16),
         ],
     );
 
@@ -187,7 +186,14 @@ fn or_and_inlining_ok() {
     let bytecodes = get_bytecodes_from_method(class_txt, "run");
     expect_bytecode_sequence(
         &bytecodes,
-        &[PushGlobal(0), JumpOnTruePop(3), PushGlobal(1), Jump(2), PushGlobal(0), ReturnLocal],
+        &[
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::U16Arg(JumpOnTruePop, 8),
+            BcEntry::OneArg(PushGlobal, 1),
+            BcEntry::U16Arg(Jump, 5),
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::NoArg(ReturnLocal),
+        ],
     );
 
     let class_txt2 = "Foo = ( run = (
@@ -198,7 +204,14 @@ fn or_and_inlining_ok() {
     let bytecodes = get_bytecodes_from_method(class_txt2, "run");
     expect_bytecode_sequence(
         &bytecodes,
-        &[PushGlobal(0), JumpOnFalsePop(3), PushGlobal(1), Jump(2), PushGlobal(1), ReturnLocal],
+        &[
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::U16Arg(JumpOnFalsePop, 8),
+            BcEntry::OneArg(PushGlobal, 1),
+            BcEntry::U16Arg(Jump, 5),
+            BcEntry::OneArg(PushGlobal, 1),
+            BcEntry::NoArg(ReturnLocal),
+        ],
     );
 }
 
@@ -215,7 +228,14 @@ fn or_and_no_block_inlining_ok() {
     let bytecodes = get_bytecodes_from_method(class_txt, "run");
     expect_bytecode_sequence(
         &bytecodes,
-        &[PushGlobal(0), JumpOnTruePop(3), PushGlobal(1), Jump(2), PushGlobal(0), ReturnLocal],
+        &[
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::U16Arg(JumpOnTruePop, 3),
+            BcEntry::OneArg(PushGlobal, 1),
+            BcEntry::U16Arg(Jump, 2),
+            BcEntry::OneArg(PushGlobal, 0),
+            BcEntry::NoArg(ReturnLocal),
+        ],
     );
 }
 
@@ -237,20 +257,20 @@ fn inlining_pyramid() {
     let bytecodes2 = get_bytecodes_from_method(class_txt2, "run");
 
     let expected_bc = &[
-        PushLocal(0),
-        JumpOnFalseTopNil(12),
-        PushLocal(1),
-        JumpOnFalseTopNil(10),
-        PushLocal(2),
-        JumpOnFalseTopNil(8),
-        PushLocal(3),
-        JumpOnFalseTopNil(6),
-        PushLocal(4),
-        JumpOnFalseTopNil(4),
-        PushLocal(5),
-        JumpOnFalseTopNil(2),
-        PushLocal(6),
-        ReturnLocal,
+        BcEntry::OneArg(PushLocal, 0),
+        BcEntry::U16Arg(JumpOnFalseTopNil, 30),
+        BcEntry::OneArg(PushLocal, 1),
+        BcEntry::U16Arg(JumpOnFalseTopNil, 25),
+        BcEntry::OneArg(PushLocal, 2),
+        BcEntry::U16Arg(JumpOnFalseTopNil, 20),
+        BcEntry::OneArg(PushLocal, 3),
+        BcEntry::U16Arg(JumpOnFalseTopNil, 15),
+        BcEntry::OneArg(PushLocal, 4),
+        BcEntry::U16Arg(JumpOnFalseTopNil, 10),
+        BcEntry::OneArg(PushLocal, 5),
+        BcEntry::U16Arg(JumpOnFalseTopNil, 5),
+        BcEntry::OneArg(PushLocal, 6),
+        BcEntry::NoArg(ReturnLocal),
     ];
 
     expect_bytecode_sequence(&bytecodes, expected_bc);
@@ -273,21 +293,21 @@ fn to_do_inlining_ok() {
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            Push0,
-            PopLocal(0, 0),
-            Push1,
-            PushConstant(0),
-            Dup2,
-            JumpIfGreater(9),
-            Dup,
-            PopLocal(0, 1),
-            PushLocal(0),
-            PushLocal(1),
-            Send2(Interned(12)),
-            PopLocal(0, 0),
-            Inc,
-            JumpBackward(8),
-            Pop,
+            BcEntry::NoArg(Push0),
+            BcEntry::TwoArgs(PopLocal, 0, 0),
+            BcEntry::NoArg(Push1),
+            BcEntry::OneArg(PushConstant, 0),
+            BcEntry::NoArg(Dup2),
+            BcEntry::U16Arg(JumpIfGreater, 21),
+            BcEntry::NoArg(Dup),
+            BcEntry::TwoArgs(PopLocal, 0, 1),
+            BcEntry::OneArg(PushLocal, 0),
+            BcEntry::OneArg(PushLocal, 1),
+            BcEntry::U16Arg(Send2, 12),
+            BcEntry::TwoArgs(PopLocal, 0, 0),
+            BcEntry::NoArg(Inc),
+            BcEntry::U16Arg(JumpBackward, 18),
+            BcEntry::NoArg(Pop),
         ],
     );
 }

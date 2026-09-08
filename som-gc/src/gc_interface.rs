@@ -41,7 +41,7 @@ static GC_ALIGN: usize = 8;
 pub struct GCInterface {
     /// Reference to the MMTk mutator.
     mutator: Box<Mutator<SOMVM>>,
-    /// Reference to the MMTk mutator thread. TODO: I never quite understood how to use it, or if we weren't misusing it somehow.
+    /// Reference to the MMTk mutator thread.
     mutator_thread: VMMutatorThread,
     /// Allocator used by the selected GC plan.
     #[cfg(feature = "marksweep")]

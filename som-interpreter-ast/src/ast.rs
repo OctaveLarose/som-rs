@@ -100,7 +100,7 @@ pub struct AstDispatchNode {
     pub inline_cache: Option<CacheEntry>,
 }
 
-// TODO: not positive it's better to have them all own a dispatch node, as opposed to making one "Dispatch" enum encapsulating them all. checking would be nice.
+// TODO: not positive it's better to have them all own a dispatch node, as opposed to making one "Dispatch" enum encapsulating them all. checking perf would be nice.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstUnaryDispatch {
     pub dispatch_node: AstDispatchNode,

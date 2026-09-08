@@ -125,7 +125,7 @@ impl Debug for VecLiteral {
 
 impl PartialEq for VecLiteral {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 // TODO: is that valid, or do we have to compare all elements one by one?
+        self.0 == other.0 // TODO: is that valid, or do we have to compare all elements one by one?..
     }
 }
 

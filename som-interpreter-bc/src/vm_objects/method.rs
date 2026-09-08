@@ -1,9 +1,3 @@
-use som_core::bytecode::Bytecode;
-use som_gc::gc_interface::GcType;
-use som_gc::slot::SOMSlot;
-use std::fmt;
-use std::fmt::{Debug, Formatter};
-
 use crate::compiler::Literal;
 use crate::gc::{visit_literal, visit_value, GcIdentifier};
 use crate::interpreter::Interpreter;
@@ -11,6 +5,11 @@ use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
 use crate::value::Value;
 use crate::vm_objects::class::Class;
+use som_core::bytecode::{BcEntry, Bytecode, BytecodeIter};
+use som_gc::gc_interface::GcType;
+use som_gc::slot::SOMSlot;
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 
 use som_gc::gcref::Gc;
 
@@ -235,32 +234,40 @@ impl fmt::Display for Method {
             Method::Defined(env) => {
                 writeln!(f, "(")?;
                 write!(f, "    <{} locals>", env.nbr_locals)?;
-                for bytecode in &env.body {
+                // TODO: unify with disassembler logic?
+                let bc_iter = BytecodeIter::init(&env.body, 0);
+                for bytecode in bc_iter {
                     writeln!(f)?;
-                    write!(f, "    {}  ", bytecode.padded_name())?;
+
                     match bytecode {
-                        Bytecode::Dup | Bytecode::Dup2 => {}
-                        Bytecode::PushLocal(idx) => {
+                        BcEntry::NoArg(bc) | BcEntry::OneArg(bc, _) | BcEntry::TwoArgs(bc, _, _) | BcEntry::U16Arg(bc, _) => {
+                            write!(f, "    {}  ", bc.padded_name())?;
+                        }
+                    };
+
+                    match bytecode {
+                        BcEntry::NoArg(_) => {}
+                        BcEntry::OneArg(Bytecode::PushLocal, idx) => {
                             write!(f, "local: {}", idx)?;
                         }
-                        Bytecode::PushNonLocal(up_idx, idx) => {
+                        BcEntry::TwoArgs(Bytecode::PushNonLocal, up_idx, idx) => {
                             write!(f, "local: {}, context: {}", idx, up_idx)?;
                         }
-                        Bytecode::PushArg(idx) => {
+                        BcEntry::OneArg(Bytecode::PushArg, idx) => {
                             write!(f, "argument: {}", idx)?;
                         }
-                        Bytecode::PushNonLocalArg(up_idx, idx) => {
+                        BcEntry::TwoArgs(Bytecode::PushNonLocalArg, up_idx, idx) => {
                             write!(f, "argument: {}, context: {}", idx, up_idx)?;
                         }
-                        Bytecode::PushField(idx) => {
+                        BcEntry::OneArg(Bytecode::PushField, idx) => {
                             write!(f, "index: {}", idx)?;
                         }
-                        Bytecode::PushBlock(idx) => {
+                        BcEntry::OneArg(Bytecode::PushBlock, idx) => {
                             write!(f, "index: {}", idx)?;
                         }
-                        Bytecode::PushConstant(idx) => {
+                        BcEntry::OneArg(Bytecode::PushConstant, idx) => {
                             write!(f, "index: {}, ", idx)?;
-                            let constant = &env.literals[*idx as usize];
+                            let constant = &env.literals[idx as usize];
                             match constant {
                                 Literal::Symbol(_) => write!(f, "value: (#Symbol)"),
                                 Literal::String(value) => write!(f, "value: (#String) {:?}", value),
@@ -273,43 +280,22 @@ impl fmt::Display for Method {
                                 Literal::Block(_) => write!(f, "value: (#Block)"),
                             }?;
                         }
-                        Bytecode::PushGlobal(idx) => {
+                        BcEntry::OneArg(Bytecode::PushGlobal, idx) => {
                             write!(f, "index: {}", idx)?;
                         }
-                        Bytecode::Push0 | Bytecode::Push1 | Bytecode::PushNil => {}
-                        Bytecode::PushSelf => {}
-                        Bytecode::Inc | Bytecode::Dec | Bytecode::Pop => {}
-                        Bytecode::PopLocal(up_idx, idx) => {
+                        BcEntry::TwoArgs(Bytecode::PopLocal, up_idx, idx) => {
                             write!(f, "local: {}, context: {}", idx, up_idx)?;
                         }
-                        Bytecode::PopArg(up_idx, idx) => {
+                        BcEntry::TwoArgs(Bytecode::PopArg, up_idx, idx) => {
                             write!(f, "argument: {}, context: {}", idx, up_idx)?;
                         }
-                        Bytecode::PopField(idx) => {
+                        BcEntry::OneArg(Bytecode::PopField, idx) => {
                             write!(f, "index: {}", idx)?;
                         }
-                        Bytecode::Send1(idx) | Bytecode::Send2(idx) | Bytecode::Send3(idx) | Bytecode::SendN(idx) => {
+                        BcEntry::U16Arg(_, idx) => {
                             write!(f, "index: {}", idx)?;
                         }
-                        Bytecode::SuperSend(idx) => {
-                            write!(f, "index: {}", idx)?;
-                        }
-                        Bytecode::ReturnLocal => {}
-                        Bytecode::ReturnNonLocal(_) => {}
-                        Bytecode::ReturnSelf => {}
-                        Bytecode::Jump(idx)
-                        | Bytecode::JumpBackward(idx)
-                        | Bytecode::JumpOnTruePop(idx)
-                        | Bytecode::JumpOnFalsePop(idx)
-                        | Bytecode::JumpOnFalseTopNil(idx)
-                        | Bytecode::JumpOnTrueTopNil(idx)
-                        | Bytecode::JumpOnNilTopTop(idx)
-                        | Bytecode::JumpOnNotNilTopTop(idx)
-                        | Bytecode::JumpOnNilPop(idx)
-                        | Bytecode::JumpOnNotNilPop(idx)
-                        | Bytecode::JumpIfGreater(idx) => {
-                            write!(f, "index: {}", idx)?;
-                        }
+                        a => panic!("Cannot print unhandled bytecode: {:?}", a),
                     }
                 }
                 Ok(())

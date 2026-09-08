@@ -13,7 +13,7 @@ use std::cell::UnsafeCell;
 use crate::debug::profiler::Profiler;
 
 use num_bigint::BigInt;
-use som_core::bytecode::Bytecode;
+use som_core::bytecode::{read_u16, Bytecode, BC_SIZE_1_ARG, BC_SIZE_2_ARG, BC_SIZE_NO_ARGS, BC_SIZE_U16_ARG};
 use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_value::interned::Interned;
@@ -24,6 +24,7 @@ macro_rules! resolve_method_and_send {
         let receiver = $self.stack[$self.stack.len() - $nbr_args];
         let receiver_class = receiver.class($universe);
         let method = resolve_method(&mut $self.get_current_frame(), &receiver_class, $symbol, $self.bytecode_idx);
+        $self.bytecode_idx += BC_SIZE_U16_ARG; // always this size for a send
         do_send($self, $universe, method, $symbol, $nbr_args);
     }};
 }
@@ -229,67 +230,88 @@ impl Interpreter {
     pub fn run(&mut self, universe: &mut Universe) -> Option<Value> {
         loop {
             // Actually safe, there's always a reference to the current bytecodes. Need unsafe because we want to store a ref for quick access in perf-critical code
-            let bytecode = *(unsafe { self.get_current_frame().get_bytecodes().get_unchecked(self.bytecode_idx as usize) });
-            self.bytecode_idx += 1;
+            let frame = self.get_current_frame();
+            let bytecodes = frame.get_bytecodes();
+            let bytecode = *(unsafe { bytecodes.get_unchecked(self.bytecode_idx as usize) });
 
             // dbg!(&bytecode);
+            //dbg!(&self.bytecode_idx);
 
             // for the optional profiler macros not to be reported as warnings
             #[allow(clippy::let_unit_value)]
             match bytecode {
-                Bytecode::Send1(symbol) => {
+                Bytecode::Send1 => {
                     let _timing = profiler_maybe_start!("SEND");
+                    let val = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    let symbol: Interned = Interned(val);
                     resolve_method_and_send!(self, universe, symbol, 1);
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::Send2(symbol) => {
+                Bytecode::Send2 => {
                     let _timing = profiler_maybe_start!("SEND");
+                    let val = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    let symbol: Interned = Interned(val);
                     resolve_method_and_send!(self, universe, symbol, 2);
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::Send3(symbol) => {
+                Bytecode::Send3 => {
                     let _timing = profiler_maybe_start!("SEND");
+                    let val = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    let symbol: Interned = Interned(val);
                     resolve_method_and_send!(self, universe, symbol, 3);
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::SendN(symbol) => {
+                Bytecode::SendN => {
                     let _timing = profiler_maybe_start!("SEND");
+                    let val = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    let symbol: Interned = Interned(val);
                     let nbr_args = nbr_args(universe.lookup_symbol(symbol));
                     resolve_method_and_send!(self, universe, symbol, nbr_args);
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PushLocal(idx) => {
+                Bytecode::PushLocal => {
                     let _timing = profiler_maybe_start!("PUSH_LOCAL");
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
                     let value = *self.get_current_frame().lookup_local(idx as usize);
                     self.stack.push(value);
+                    self.bytecode_idx += BC_SIZE_1_ARG;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PushNonLocal(up_idx, idx) => {
+                Bytecode::PushNonLocal => {
                     let _timing = profiler_maybe_start!("PUSHNONLOCAL");
+                    let up_idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 2] as u8;
                     debug_assert_ne!(up_idx, 0);
                     let from = Frame::nth_frame_back(&self.get_current_frame(), up_idx);
                     let value = *from.lookup_local(idx as usize);
                     self.stack.push(value);
+                    self.bytecode_idx += BC_SIZE_2_ARG;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PushArg(idx) => {
+                Bytecode::PushArg => {
                     let _timing = profiler_maybe_start!("PUSH_ARG");
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
                     debug_assert_ne!(idx, 0); // that's a ReturnSelf case.
                     let value = *self.get_current_frame().lookup_argument(idx as usize);
                     self.stack.push(value);
+                    self.bytecode_idx += BC_SIZE_1_ARG;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PushNonLocalArg(up_idx, idx) => {
+                Bytecode::PushNonLocalArg => {
                     let _timing = profiler_maybe_start!("PUSH_NON_LOCAL_ARG");
+                    let up_idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 2] as u8;
                     debug_assert_ne!(up_idx, 0);
                     debug_assert_ne!((up_idx, idx), (0, 0)); // that's a ReturnSelf case.
                     let from = Frame::nth_frame_back(&self.get_current_frame(), up_idx);
                     let value = from.lookup_argument(idx as usize);
                     self.stack.push(*value);
+                    self.bytecode_idx += BC_SIZE_2_ARG;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PushField(idx) => {
+                Bytecode::PushField => {
                     let _timing = profiler_maybe_start!("PUSH_FIELD");
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
                     let self_val = self.get_current_frame().get_self();
                     let val = {
                         if let Some(instance) = self_val.as_instance() {
@@ -301,12 +323,14 @@ impl Interpreter {
                         }
                     };
                     self.stack.push(val);
+                    self.bytecode_idx += BC_SIZE_1_ARG;
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::Dup => {
                     let _timing = profiler_maybe_start!("DUP");
                     let value = *stack_fast_last!(&mut self.stack);
                     self.stack.push(value);
+                    self.bytecode_idx += BC_SIZE_NO_ARGS;
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::Inc => {
@@ -322,6 +346,7 @@ impl Interpreter {
                     } else {
                         panic!("Invalid type in Inc")
                     };
+                    self.bytecode_idx += BC_SIZE_NO_ARGS;
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::Dec => {
@@ -337,10 +362,12 @@ impl Interpreter {
                     } else {
                         panic!("Invalid type in DEC")
                     };
+                    self.bytecode_idx += BC_SIZE_NO_ARGS;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PushBlock(idx) => {
+                Bytecode::PushBlock => {
                     let _timing = profiler_maybe_start!("PUSH_BLOCK");
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
 
                     // allocating ahead of time in case it triggers GC.
                     let mut new_blk =
@@ -356,26 +383,33 @@ impl Interpreter {
                     }
 
                     self.stack.push(Value::Block(new_blk));
+                    self.bytecode_idx += BC_SIZE_1_ARG;
 
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PushConstant(idx) => {
+                Bytecode::PushConstant => {
                     let _timing = profiler_maybe_start!("PUSH_CONSTANT");
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
+
                     let current_frame = self.get_current_frame();
                     let literal = current_frame.lookup_constant(idx as usize);
                     let value = value_from_literal(literal, &mut universe.gc_interface);
                     self.stack.push(value);
+                    self.bytecode_idx += BC_SIZE_1_ARG;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PushGlobal(idx) => {
+                Bytecode::PushGlobal => {
                     let _timing = profiler_maybe_start!("PUSH_GLOBAL");
+
                     if let Some(CacheEntry::Global(value)) = unsafe { self.get_current_frame().get_inline_cache_entry(self.bytecode_idx as usize) } {
                         let value = *value;
                         self.stack.push(value);
+                        self.bytecode_idx += BC_SIZE_1_ARG;
                         continue;
                     }
 
                     let current_frame = self.get_current_frame();
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
                     let literal = current_frame.lookup_constant(idx as usize);
                     let symbol = match literal {
                         Literal::Symbol(sym) => sym,
@@ -384,7 +418,9 @@ impl Interpreter {
                     if let Some(value) = universe.lookup_global(*symbol) {
                         self.stack.push(value);
                         unsafe { *self.get_current_frame().get_inline_cache_entry(self.bytecode_idx as usize) = Some(CacheEntry::Global(value)) }
+                        self.bytecode_idx += BC_SIZE_1_ARG;
                     } else {
+                        self.bytecode_idx += BC_SIZE_1_ARG;
                         let self_value = self.get_current_frame().get_self();
                         universe.unknown_global(self, self_value, *symbol)?;
                     };
@@ -393,45 +429,57 @@ impl Interpreter {
                 Bytecode::Push0 => {
                     let _timing = profiler_maybe_start!("PUSH_0");
                     self.stack.push(Value::INTEGER_ZERO);
+                    self.bytecode_idx += BC_SIZE_NO_ARGS;
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::Push1 => {
                     let _timing = profiler_maybe_start!("PUSH_1");
                     self.stack.push(Value::INTEGER_ONE);
+                    self.bytecode_idx += BC_SIZE_NO_ARGS;
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::PushNil => {
                     let _timing = profiler_maybe_start!("PUSH_NIL");
                     self.stack.push(Value::NIL);
+                    self.bytecode_idx += BC_SIZE_NO_ARGS;
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::PushSelf => {
                     let _timing = profiler_maybe_start!("PUSH_SELF");
                     let self_val = *self.get_current_frame().lookup_argument(0);
                     self.stack.push(self_val);
+                    self.bytecode_idx += BC_SIZE_NO_ARGS;
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::Pop => {
                     let _timing = profiler_maybe_start!("POP");
                     stack_fast_pop!(&mut self.stack);
+                    self.bytecode_idx += BC_SIZE_NO_ARGS;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PopLocal(up_idx, idx) => {
+                Bytecode::PopLocal => {
                     let _timing = profiler_maybe_start!("POP_LOCAL");
+                    let up_idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 2] as u8;
                     let value = stack_fast_pop!(&mut self.stack);
                     let mut from = Frame::nth_frame_back(self.get_current_frame_mut(), up_idx);
                     from.assign_local(idx as usize, value);
+                    self.bytecode_idx += BC_SIZE_2_ARG;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PopArg(up_idx, idx) => {
+                Bytecode::PopArg => {
                     let _timing = profiler_maybe_start!("POP_ARG");
+                    let up_idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 2] as u8;
                     let value = stack_fast_pop!(&mut self.stack);
                     let mut from = Frame::nth_frame_back(self.get_current_frame_mut(), up_idx);
                     from.assign_arg(idx as usize, value);
+                    self.bytecode_idx += BC_SIZE_2_ARG;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::PopField(idx) => {
+                Bytecode::PopField => {
                     let _timing = profiler_maybe_start!("POP_FIELD");
+                    let idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
                     let value = stack_fast_pop!(&mut self.stack);
                     let self_val = self.get_current_frame().get_self();
                     if let Some(instance) = self_val.as_instance() {
@@ -441,10 +489,13 @@ impl Interpreter {
                     } else {
                         panic!("trying to assign a field to a {:?}?", &self_val)
                     };
+                    self.bytecode_idx += BC_SIZE_1_ARG;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::SuperSend(symbol) => {
+                Bytecode::SuperSend => {
                     let _timing = profiler_maybe_start!("SUPER_SEND");
+                    let val = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    let symbol: Interned = Interned(val);
                     let nbr_args = {
                         let signature = universe.lookup_symbol(symbol);
                         nbr_args(signature)
@@ -455,6 +506,7 @@ impl Interpreter {
                         let super_class = holder.super_class().unwrap();
                         resolve_method(self.current_frame.get_mut(), &super_class, symbol, self.bytecode_idx)
                     };
+                    self.bytecode_idx += BC_SIZE_2_ARG;
                     do_send(self, universe, method, symbol, nbr_args);
                     profiler_maybe_stop!(_timing);
                 }
@@ -476,8 +528,9 @@ impl Interpreter {
                     self.stack.push(value);
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::ReturnNonLocal(up_idx) => {
+                Bytecode::ReturnNonLocal => {
                     let _timing = profiler_maybe_start!("RETURN_NON_LOCAL");
+                    let up_idx: u8 = bytecodes[self.bytecode_idx as usize + 1] as u8;
                     let method_frame = Frame::nth_frame_back(&self.get_current_frame(), up_idx);
 
                     let escaped_frames_nbr = {
@@ -513,86 +566,99 @@ impl Interpreter {
                         };
 
                         // we store the current bytecode idx to be able to correctly restore the bytecode state when we pop frames
-                        self.get_current_frame().bytecode_idx = self.bytecode_idx;
+                        self.get_current_frame().bytecode_idx = self.bytecode_idx + BC_SIZE_1_ARG;
 
                         universe
                             .escaped_block(self, instance, block)
                             .expect("A block has escaped and `escapedBlock:` is not defined on receiver");
                     };
+
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::Dup2 => {
                     let _timing = profiler_maybe_start!("DUP2");
                     let second_to_last = self.stack[self.stack.len() - 2];
                     self.stack.push(second_to_last);
+                    self.bytecode_idx += BC_SIZE_NO_ARGS;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::Jump(offset) => {
+                Bytecode::Jump => {
                     let _timing = profiler_maybe_start!("JUMP");
-                    self.bytecode_idx += offset - 1; // minus one because it gets incremented by one already every loop;
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    self.bytecode_idx += offset;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::JumpBackward(offset) => {
+                Bytecode::JumpBackward => {
                     let _timing = profiler_maybe_start!("JUMP_BACKWARD");
-                    self.bytecode_idx -= offset + 1;
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    self.bytecode_idx -= offset;
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::JumpOnTrueTopNil(offset) => {
+                Bytecode::JumpOnTrueTopNil => {
                     let _timing = profiler_maybe_start!("JUMP_ON_TRUE_TOP_NIL");
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_last_mut!(&mut self.stack);
 
                     if condition_result.is_boolean_true() {
-                        self.bytecode_idx += offset - 1;
+                        self.bytecode_idx += offset;
                         *condition_result = Value::NIL;
                     } else if condition_result.is_boolean_false() {
                         stack_fast_pop!(&mut self.stack);
+                        self.bytecode_idx += BC_SIZE_U16_ARG;
                     } else {
                         panic!("JumpOnTrueTopNil condition did not evaluate to boolean (was {:?})", condition_result)
                     };
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::JumpOnFalseTopNil(offset) => {
+                Bytecode::JumpOnFalseTopNil => {
                     let _timing = profiler_maybe_start!("JUMP_ON_FALSE_TOP_NIL");
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_last_mut!(&mut self.stack);
 
                     if condition_result.is_boolean_true() {
                         stack_fast_pop!(&mut self.stack);
+                        self.bytecode_idx += BC_SIZE_U16_ARG;
                     } else if condition_result.is_boolean_false() {
-                        self.bytecode_idx += offset - 1;
+                        self.bytecode_idx += offset;
                         *condition_result = Value::NIL;
                     } else {
                         panic!("JumpOnFalseTopNil condition did not evaluate to boolean (was {:?})", condition_result)
                     };
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::JumpOnTruePop(offset) => {
+                Bytecode::JumpOnTruePop => {
                     let _timing = profiler_maybe_start!("JUMP_ON_TRUE_POP");
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if condition_result.is_boolean_true() {
-                        self.bytecode_idx += offset - 1;
+                        self.bytecode_idx += offset;
                     } else if condition_result.is_boolean_false() {
+                        self.bytecode_idx += BC_SIZE_U16_ARG;
                         // pass
                     } else {
                         panic!("JumpOnTruePop condition did not evaluate to boolean (was {:?})", condition_result)
                     };
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::JumpOnFalsePop(offset) => {
+                Bytecode::JumpOnFalsePop => {
                     let _timing = profiler_maybe_start!("JUMP_ON_FALSE_POP");
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if condition_result.is_boolean_false() {
-                        self.bytecode_idx += offset - 1;
+                        self.bytecode_idx += offset;
                     } else if condition_result.is_boolean_true() {
+                        self.bytecode_idx += BC_SIZE_U16_ARG;
                         // pass
                     } else {
                         panic!("JumpOnFalsePop condition did not evaluate to boolean (was {:?})", condition_result)
                     };
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::JumpIfGreater(offset) => {
+                Bytecode::JumpIfGreater => {
                     let _timing = profiler_maybe_start!("JUMP_IF_GREATER");
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
                     let top = stack_fast_last!(&self.stack);
                     let top2 = self.stack[self.stack.len() - 2];
 
@@ -609,49 +675,59 @@ impl Interpreter {
                     if is_greater {
                         stack_fast_pop!(&mut self.stack);
                         stack_fast_pop!(&mut self.stack);
-                        self.bytecode_idx += offset - 1;
+                        self.bytecode_idx += offset;
+                    } else {
+                        self.bytecode_idx += BC_SIZE_U16_ARG;
                     }
                 }
-                Bytecode::JumpOnNilTopTop(offset) => {
+                Bytecode::JumpOnNilTopTop => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NIL_TOP_TOP");
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_last!(&mut self.stack);
 
                     if condition_result.is_nil() {
-                        self.bytecode_idx += offset - 1;
+                        self.bytecode_idx += offset;
                     } else {
                         stack_fast_pop!(&mut self.stack);
+                        self.bytecode_idx += BC_SIZE_U16_ARG;
                     }
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::JumpOnNotNilTopTop(offset) => {
+                Bytecode::JumpOnNotNilTopTop => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NOT_NIL_TOP_TOP");
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_last!(&mut self.stack);
 
                     if !condition_result.is_nil() {
-                        self.bytecode_idx += offset - 1;
+                        self.bytecode_idx += offset;
                     } else {
                         stack_fast_pop!(&mut self.stack);
+                        self.bytecode_idx += BC_SIZE_U16_ARG;
                     }
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::JumpOnNilPop(offset) => {
+                Bytecode::JumpOnNilPop => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NIL_POP");
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if condition_result.is_nil() {
-                        self.bytecode_idx += offset - 1;
+                        self.bytecode_idx += offset;
                     } else {
+                        self.bytecode_idx += BC_SIZE_U16_ARG;
                         // pass
                     }
                     profiler_maybe_stop!(_timing);
                 }
-                Bytecode::JumpOnNotNilPop(offset) => {
+                Bytecode::JumpOnNotNilPop => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NOT_NIL_POP");
+                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if !condition_result.is_nil() {
-                        self.bytecode_idx += offset - 1;
+                        self.bytecode_idx += offset;
                     } else {
+                        self.bytecode_idx += BC_SIZE_U16_ARG;
                         // pass
                     }
                     profiler_maybe_stop!(_timing);
@@ -661,7 +737,7 @@ impl Interpreter {
 
         pub fn do_send(interpreter: &mut Interpreter, universe: &mut Universe, method: Option<Gc<Method>>, symbol: Interned, nbr_args: usize) {
             // we store the current bytecode idx to be able to correctly restore the bytecode state when we pop frames
-            interpreter.get_current_frame().bytecode_idx = interpreter.bytecode_idx;
+            interpreter.get_current_frame().bytecode_idx = interpreter.bytecode_idx; // TODO: should not be done before a primitive call. they should handle it if they need it
 
             let Some(method) = method else {
                 let args = interpreter.stack.split_off(interpreter.stack.len() - nbr_args + 1);
@@ -676,13 +752,12 @@ impl Interpreter {
 
             match &*method {
                 Method::Defined(method_info) => {
-                    //let name = &method.holder().name.clone();
-                    //eprintln!("--- Invoking {:?} (in {:?})", &method.signature(), &name);
-                    //eprintln!("--- Invoking {:?}", &method.signature());
+                    // let name = &method.holder().name.clone();
+                    // eprintln!("--- Invoking {:?} (in {:?})", &method.signature(), &name);
                     interpreter.push_method_frame(method_info.clone(), nbr_args, &mut universe.gc_interface);
                 }
                 Method::Primitive(func, _met_info) => {
-                    //eprintln!("--- Invoking prim {:?} (in {:?})", &_met_info.signature, &_met_info.holder.name);
+                    // eprintln!("--- Invoking prim {:?} (in {:?})", &_met_info.signature, &_met_info.holder.name);
 
                     func(interpreter, universe, nbr_args)
                         .with_context(|| anyhow::anyhow!("error calling primitive `{}`", universe.lookup_symbol(symbol)))
