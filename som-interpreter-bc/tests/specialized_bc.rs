@@ -1,4 +1,4 @@
-use som_core::bytecode::{BcEntry, Bytecode::*, BytecodeIter};
+use som_core::bytecode::{BcEntry, Bytecode};
 use som_interpreter_bc::compiler::compile::compile_class;
 use som_interpreter_bc::universe::Universe;
 use som_interpreter_bc::vm_objects::method::Method;
@@ -33,7 +33,7 @@ fn get_bytecodes_from_method(class_txt: &str, method_name: &str) -> Vec<BcEntry>
     let method = class.lookup_method(method_name_interned).expect("method not found ??");
 
     match &*method {
-        Method::Defined(m) => BytecodeIter::init(&m.body, 0).collect(),
+        Method::Defined(m) => Bytecode::get_iter(&m.body).collect(),
         _ => unreachable!(),
     }
 }
@@ -62,12 +62,12 @@ fn push_0_1_nil_bytecodes() {
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            BcEntry::NoArg(Push0),
-            BcEntry::TwoArgs(PopLocal, 0, 0),
-            BcEntry::NoArg(Push1),
-            BcEntry::TwoArgs(PopLocal, 0, 1),
-            BcEntry::NoArg(PushNil),
-            BcEntry::TwoArgs(PopLocal, 0, 2),
+            BcEntry::NoArg(Bytecode::PUSH_0),
+            BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 0),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 1),
+            BcEntry::NoArg(Bytecode::PUSH_NIL),
+            BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 2),
         ],
     );
 }
@@ -89,18 +89,18 @@ fn push_constant_bytecodes() {
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            BcEntry::OneArg(PushConstant, 0),
-            BcEntry::TwoArgs(PopLocal, 0, 0),
-            BcEntry::OneArg(PushConstant, 1),
-            BcEntry::TwoArgs(PopLocal, 0, 1),
-            BcEntry::OneArg(PushConstant, 2),
-            BcEntry::TwoArgs(PopLocal, 0, 2),
-            BcEntry::OneArg(PushConstant, 0),
-            BcEntry::TwoArgs(PopLocal, 0, 3),
-            BcEntry::OneArg(PushConstant, 1),
-            BcEntry::TwoArgs(PopLocal, 0, 4),
-            BcEntry::OneArg(PushConstant, 2),
-            BcEntry::TwoArgs(PopLocal, 0, 5),
+            BcEntry::OneArg(Bytecode::PUSH_CONSTANT, 0),
+            BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 0),
+            BcEntry::OneArg(Bytecode::PUSH_CONSTANT, 1),
+            BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 1),
+            BcEntry::OneArg(Bytecode::PUSH_CONSTANT, 2),
+            BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 2),
+            BcEntry::OneArg(Bytecode::PUSH_CONSTANT, 0),
+            BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 3),
+            BcEntry::OneArg(Bytecode::PUSH_CONSTANT, 1),
+            BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 4),
+            BcEntry::OneArg(Bytecode::PUSH_CONSTANT, 2),
+            BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 5),
         ],
     );
 }
@@ -127,32 +127,36 @@ fn send_bytecodes() {
 
     let bytecodes = get_bytecodes_from_method(class_txt, "run");
 
-    expect_bytecode_sequence(&bytecodes, &[BcEntry::NoArg(Push1), BcEntry::U16Arg(Send1, 96)]);
+    expect_bytecode_sequence(&bytecodes, &[BcEntry::NoArg(Bytecode::PUSH_1), BcEntry::U16Arg(Bytecode::SEND_1, 96)]);
 
-    // we do a "+ 2" to not have the bytecode INC replace a Send2.
-    expect_bytecode_sequence(
-        &bytecodes,
-        &[BcEntry::NoArg(Push1), BcEntry::OneArg(PushConstant, 0), BcEntry::U16Arg(Send2, 12)],
-    );
-
+    // we do a "+ 2" to not have the bytecode INC replace a Bytecode::SEND_2.
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            BcEntry::NoArg(PushSelf),
-            BcEntry::NoArg(Push1),
-            BcEntry::NoArg(Push1),
-            BcEntry::U16Arg(Send3, 191),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::OneArg(Bytecode::PUSH_CONSTANT, 0),
+            BcEntry::U16Arg(Bytecode::SEND_2, 12),
         ],
     );
 
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            BcEntry::NoArg(PushSelf),
-            BcEntry::NoArg(Push1),
-            BcEntry::NoArg(Push1),
-            BcEntry::NoArg(Push1),
-            BcEntry::U16Arg(SendN, 192),
+            BcEntry::NoArg(Bytecode::PUSH_SELF),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::U16Arg(Bytecode::SEND_3, 191),
+        ],
+    );
+
+    expect_bytecode_sequence(
+        &bytecodes,
+        &[
+            BcEntry::NoArg(Bytecode::PUSH_SELF),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::U16Arg(Bytecode::SEND_N, 192),
         ],
     );
 }
@@ -171,31 +175,38 @@ fn super_send_bytecodes() {
 
     let bytecodes = get_bytecodes_from_method(class_txt, "run");
 
-    expect_bytecode_sequence(&bytecodes, &[BcEntry::NoArg(PushSelf), BcEntry::U16Arg(SuperSend, 191)]);
-
     expect_bytecode_sequence(
         &bytecodes,
-        &[BcEntry::NoArg(PushSelf), BcEntry::NoArg(Push1), BcEntry::U16Arg(SuperSend, 192)],
+        &[BcEntry::NoArg(Bytecode::PUSH_SELF), BcEntry::U16Arg(Bytecode::SUPER_SEND, 191)],
     );
 
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            BcEntry::NoArg(PushSelf),
-            BcEntry::NoArg(Push1),
-            BcEntry::NoArg(Push1),
-            BcEntry::U16Arg(SuperSend, 193),
+            BcEntry::NoArg(Bytecode::PUSH_SELF),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::U16Arg(Bytecode::SUPER_SEND, 192),
         ],
     );
 
     expect_bytecode_sequence(
         &bytecodes,
         &[
-            BcEntry::NoArg(PushSelf),
-            BcEntry::NoArg(Push1),
-            BcEntry::NoArg(Push1),
-            BcEntry::NoArg(Push1),
-            BcEntry::U16Arg(SuperSend, 194),
+            BcEntry::NoArg(Bytecode::PUSH_SELF),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::U16Arg(Bytecode::SUPER_SEND, 193),
+        ],
+    );
+
+    expect_bytecode_sequence(
+        &bytecodes,
+        &[
+            BcEntry::NoArg(Bytecode::PUSH_SELF),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::NoArg(Bytecode::PUSH_1),
+            BcEntry::U16Arg(Bytecode::SUPER_SEND, 194),
         ],
     );
 }
@@ -213,7 +224,11 @@ fn return_self_bytecode_implicit() {
 
     expect_bytecode_sequence(
         &bytecodes,
-        &[BcEntry::OneArg(PushConstant, 0), BcEntry::NoArg(Pop), BcEntry::NoArg(ReturnSelf)],
+        &[
+            BcEntry::OneArg(Bytecode::PUSH_CONSTANT, 0),
+            BcEntry::NoArg(Bytecode::POP),
+            BcEntry::NoArg(Bytecode::RETURN_SELF),
+        ],
     );
 }
 
@@ -229,7 +244,7 @@ fn return_self_bytecode_explicit() {
     let bytecodes = get_bytecodes_from_method(class_txt_explicit_return, "run");
 
     assert_eq!(bytecodes.len(), 1);
-    expect_bytecode_sequence(&bytecodes, &[BcEntry::NoArg(ReturnSelf)]);
+    expect_bytecode_sequence(&bytecodes, &[BcEntry::NoArg(Bytecode::RETURN_SELF)]);
 }
 
 #[ignore]
@@ -252,29 +267,29 @@ fn something_jump_bug_popx() {
     let bytecodes = get_bytecodes_from_method(class_txt, "testIfTrueTrueResult");
 
     let _bc_no_removal = &[
-        BcEntry::OneArg(PushGlobal, 0),
-        BcEntry::U16Arg(JumpOnFalseTopNil, 2),
-        BcEntry::NoArg(Push1),
-        BcEntry::NoArg(Dup),
-        BcEntry::TwoArgs(PopLocal, 0, 0),
-        BcEntry::NoArg(Pop),
-        BcEntry::OneArg(PushLocal, 0),
-        BcEntry::U16Arg(Send1, 2),
-        BcEntry::OneArg(ReturnNonLocal, 1),
-        BcEntry::NoArg(Pop),
-        BcEntry::NoArg(ReturnSelf),
+        BcEntry::OneArg(Bytecode::PUSH_GLOBAL, 0),
+        BcEntry::U16Arg(Bytecode::JUMP_ON_FALSE_TOP_NIL, 2),
+        BcEntry::NoArg(Bytecode::PUSH_1),
+        BcEntry::NoArg(Bytecode::DUP),
+        BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 0),
+        BcEntry::NoArg(Bytecode::POP),
+        BcEntry::OneArg(Bytecode::PUSH_LOCAL, 0),
+        BcEntry::U16Arg(Bytecode::SEND_1, 2),
+        BcEntry::OneArg(Bytecode::RETURN_NON_LOCAL, 1),
+        BcEntry::NoArg(Bytecode::POP),
+        BcEntry::NoArg(Bytecode::RETURN_SELF),
     ];
 
     let expected_bytecodes = &[
-        BcEntry::OneArg(PushGlobal, 0),
-        BcEntry::U16Arg(JumpOnFalseTopNil, 2),
-        BcEntry::NoArg(Push1),
-        BcEntry::TwoArgs(PopLocal, 0, 0),
-        BcEntry::OneArg(PushLocal, 0),
-        BcEntry::U16Arg(Send1, 2),
-        BcEntry::OneArg(ReturnNonLocal, 1),
-        BcEntry::NoArg(Pop),
-        BcEntry::NoArg(ReturnSelf),
+        BcEntry::OneArg(Bytecode::PUSH_GLOBAL, 0),
+        BcEntry::U16Arg(Bytecode::JUMP_ON_FALSE_TOP_NIL, 2),
+        BcEntry::NoArg(Bytecode::PUSH_1),
+        BcEntry::TwoArgs(Bytecode::POP_LOCAL, 0, 0),
+        BcEntry::OneArg(Bytecode::PUSH_LOCAL, 0),
+        BcEntry::U16Arg(Bytecode::SEND_1, 2),
+        BcEntry::OneArg(Bytecode::RETURN_NON_LOCAL, 1),
+        BcEntry::NoArg(Bytecode::POP),
+        BcEntry::NoArg(Bytecode::RETURN_SELF),
     ];
 
     expect_bytecode_sequence(&bytecodes, expected_bytecodes);

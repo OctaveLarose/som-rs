@@ -5,7 +5,7 @@ use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
 use crate::value::Value;
 use crate::vm_objects::class::Class;
-use som_core::bytecode::{BcEntry, Bytecode, BytecodeIter};
+use som_core::bytecode::{BcEntry, Bytecode};
 use som_gc::gc_interface::GcType;
 use som_gc::slot::SOMSlot;
 use std::fmt;
@@ -37,7 +37,7 @@ impl BasicMethodInfo {
 pub struct MethodInfo {
     pub basic_method_info: BasicMethodInfo,
     pub literals: Vec<Literal>,
-    pub body: Vec<Bytecode>,
+    pub body: Vec<u8>,
     pub inline_cache: BodyInlineCache,
     pub nbr_locals: u8,
     pub nbr_args: u8,
@@ -235,37 +235,37 @@ impl fmt::Display for Method {
                 writeln!(f, "(")?;
                 write!(f, "    <{} locals>", env.nbr_locals)?;
                 // TODO: unify with disassembler logic?
-                let bc_iter = BytecodeIter::init(&env.body, 0);
+                let bc_iter = Bytecode::get_iter(&env.body);
                 for bytecode in bc_iter {
                     writeln!(f)?;
 
                     match bytecode {
                         BcEntry::NoArg(bc) | BcEntry::OneArg(bc, _) | BcEntry::TwoArgs(bc, _, _) | BcEntry::U16Arg(bc, _) => {
-                            write!(f, "    {}  ", bc.padded_name())?;
+                            write!(f, "    {}  ", Bytecode::padded_name(bc))?;
                         }
                     };
 
                     match bytecode {
                         BcEntry::NoArg(_) => {}
-                        BcEntry::OneArg(Bytecode::PushLocal, idx) => {
+                        BcEntry::OneArg(Bytecode::PUSH_LOCAL, idx) => {
                             write!(f, "local: {}", idx)?;
                         }
-                        BcEntry::TwoArgs(Bytecode::PushNonLocal, up_idx, idx) => {
+                        BcEntry::TwoArgs(Bytecode::PUSH_NON_LOCAL, up_idx, idx) => {
                             write!(f, "local: {}, context: {}", idx, up_idx)?;
                         }
-                        BcEntry::OneArg(Bytecode::PushArg, idx) => {
+                        BcEntry::OneArg(Bytecode::PUSH_ARG, idx) => {
                             write!(f, "argument: {}", idx)?;
                         }
-                        BcEntry::TwoArgs(Bytecode::PushNonLocalArg, up_idx, idx) => {
+                        BcEntry::TwoArgs(Bytecode::PUSH_NON_LOCAL_ARG, up_idx, idx) => {
                             write!(f, "argument: {}, context: {}", idx, up_idx)?;
                         }
-                        BcEntry::OneArg(Bytecode::PushField, idx) => {
+                        BcEntry::OneArg(Bytecode::PUSH_FIELD, idx) => {
                             write!(f, "index: {}", idx)?;
                         }
-                        BcEntry::OneArg(Bytecode::PushBlock, idx) => {
+                        BcEntry::OneArg(Bytecode::PUSH_BLOCK, idx) => {
                             write!(f, "index: {}", idx)?;
                         }
-                        BcEntry::OneArg(Bytecode::PushConstant, idx) => {
+                        BcEntry::OneArg(Bytecode::PUSH_CONSTANT, idx) => {
                             write!(f, "index: {}, ", idx)?;
                             let constant = &env.literals[idx as usize];
                             match constant {
@@ -280,16 +280,16 @@ impl fmt::Display for Method {
                                 Literal::Block(_) => write!(f, "value: (#Block)"),
                             }?;
                         }
-                        BcEntry::OneArg(Bytecode::PushGlobal, idx) => {
+                        BcEntry::OneArg(Bytecode::PUSH_GLOBAL, idx) => {
                             write!(f, "index: {}", idx)?;
                         }
-                        BcEntry::TwoArgs(Bytecode::PopLocal, up_idx, idx) => {
+                        BcEntry::TwoArgs(Bytecode::POP_LOCAL, up_idx, idx) => {
                             write!(f, "local: {}, context: {}", idx, up_idx)?;
                         }
-                        BcEntry::TwoArgs(Bytecode::PopArg, up_idx, idx) => {
+                        BcEntry::TwoArgs(Bytecode::POP_ARG, up_idx, idx) => {
                             write!(f, "argument: {}, context: {}", idx, up_idx)?;
                         }
-                        BcEntry::OneArg(Bytecode::PopField, idx) => {
+                        BcEntry::OneArg(Bytecode::POP_FIELD, idx) => {
                             write!(f, "index: {}", idx)?;
                         }
                         BcEntry::U16Arg(_, idx) => {

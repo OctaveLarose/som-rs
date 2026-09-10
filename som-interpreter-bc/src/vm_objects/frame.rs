@@ -4,7 +4,6 @@ use crate::value::Value;
 use crate::vm_objects::block::CacheEntry;
 use crate::vm_objects::class::Class;
 use core::mem::size_of;
-use som_core::bytecode::Bytecode;
 use som_gc::gc_interface::{AllocSiteMarker, GCInterface, GcType, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_gc::slot::SOMSlot;
@@ -105,7 +104,7 @@ impl Frame {
     }
 
     #[inline(always)]
-    pub fn get_bytecodes(&self) -> &Vec<Bytecode> {
+    pub fn get_bytecodes(&self) -> &Vec<u8> {
         &self.context.body
     }
 

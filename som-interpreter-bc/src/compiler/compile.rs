@@ -23,7 +23,7 @@ use crate::vm_objects::trivial_methods::{TrivialGetterMethod, TrivialGlobalMetho
 use som_core::ast::BlockDebugInfo;
 use som_core::ast::{self};
 use som_core::ast::{Expression, MethodBody};
-use som_core::bytecode::{read_u16, split_u16, BcEntry, Bytecode, BytecodeIter, BC_SIZE_1_ARG, BC_SIZE_2_ARG, BC_SIZE_NO_ARGS, BC_SIZE_U16_ARG};
+use som_core::bytecode::{read_u16, split_u16, BcEntry, Bytecode, BC_SIZE_1_ARG, BC_SIZE_2_ARG, BC_SIZE_NO_ARGS, BC_SIZE_U16_ARG};
 use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 
 #[derive(Debug)]
@@ -43,12 +43,12 @@ pub(crate) trait GenCtxt {
 #[allow(unused)] // Some of them were needed when we did BC-level inlining for a while. They're unused now. Maybe remove.
 pub(crate) trait InnerGenCtxt: GenCtxt {
     fn as_gen_ctxt(&mut self) -> &mut dyn GenCtxt;
-    fn push_instr_no_arg(&mut self, instr: Bytecode);
-    fn push_instr_1_arg(&mut self, instr: Bytecode, a: u8);
-    fn push_instr_2_args(&mut self, instr: Bytecode, a: u8, b: u8);
-    fn push_instr_u16_arg(&mut self, instr: Bytecode, arg: u16);
+    fn push_instr_no_arg(&mut self, instr: u8);
+    fn push_instr_1_arg(&mut self, instr: u8, a: u8);
+    fn push_instr_2_args(&mut self, instr: u8, a: u8, b: u8);
+    fn push_instr_u16_arg(&mut self, instr: u8, arg: u16);
     fn pop_instr(&mut self);
-    fn get_instructions(&self) -> &Vec<Bytecode>;
+    fn get_instructions(&self) -> &Vec<u8>;
     fn get_nbr_locals(&self) -> usize;
     fn set_nbr_locals(&mut self, nbr_locals: usize);
     fn get_literal(&self, idx: usize) -> Option<&Literal>;
@@ -67,7 +67,7 @@ struct BlockGenCtxt<'a> {
     pub args: IndexSet<String>,
     pub locals: IndexSet<String>,
     pub literals: IndexSet<Literal>,
-    pub body: Option<Vec<Bytecode>>,
+    pub body: Option<Vec<u8>>,
 }
 
 impl GenCtxt for BlockGenCtxt<'_> {
@@ -106,43 +106,37 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
         self
     }
 
-    fn push_instr_no_arg(&mut self, instr: Bytecode) {
+    fn push_instr_no_arg(&mut self, instr: u8) {
         let body = self.body.get_or_insert_with(Vec::new);
         body.push(instr);
     }
 
-    fn push_instr_1_arg(&mut self, instr: Bytecode, a: u8) {
+    fn push_instr_1_arg(&mut self, instr: u8, a: u8) {
         let body = self.body.get_or_insert_with(Vec::new);
         body.push(instr);
-        unsafe {
-            body.push(std::mem::transmute::<u8, Bytecode>(a));
-        }
+        body.push(a);
     }
 
-    fn push_instr_2_args(&mut self, instr: Bytecode, a: u8, b: u8) {
+    fn push_instr_2_args(&mut self, instr: u8, a: u8, b: u8) {
         let body = self.body.get_or_insert_with(Vec::new);
         body.push(instr);
-        unsafe {
-            body.push(std::mem::transmute::<u8, Bytecode>(a));
-            body.push(std::mem::transmute::<u8, Bytecode>(b));
-        }
+        body.push(a);
+        body.push(b);
     }
 
-    fn push_instr_u16_arg(&mut self, instr: Bytecode, arg: u16) {
+    fn push_instr_u16_arg(&mut self, instr: u8, arg: u16) {
         let body = self.body.get_or_insert_with(Vec::new);
         body.push(instr);
         let (a, b) = split_u16(arg);
-        unsafe {
-            body.push(std::mem::transmute::<u8, Bytecode>(a));
-            body.push(std::mem::transmute::<u8, Bytecode>(b));
-        }
+        body.push(a);
+        body.push(b);
     }
 
     fn pop_instr(&mut self) {
         self.body.as_mut().unwrap().pop();
     }
 
-    fn get_instructions(&self) -> &Vec<Bytecode> {
+    fn get_instructions(&self) -> &Vec<u8> {
         self.body.as_ref().unwrap()
     }
 
@@ -173,23 +167,23 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
 
     fn patch_jump(&mut self, idx_to_patch: usize, new_val: u16) {
         match self.body.as_ref().unwrap().get(idx_to_patch).unwrap() {
-            Bytecode::Jump
-            | Bytecode::JumpBackward
-            | Bytecode::JumpOnTrueTopNil
-            | Bytecode::JumpOnFalseTopNil
-            | Bytecode::JumpOnTruePop
-            | Bytecode::JumpOnFalsePop
-            | Bytecode::JumpOnNilTopTop
-            | Bytecode::JumpOnNotNilTopTop
-            | Bytecode::JumpOnNilPop
-            | Bytecode::JumpOnNotNilPop
-            | Bytecode::JumpIfGreater => {}
+            &Bytecode::JUMP
+            | &Bytecode::JUMP_BACKWARD
+            | &Bytecode::JUMP_ON_TRUE_TOP_NIL
+            | &Bytecode::JUMP_ON_FALSE_TOP_NIL
+            | &Bytecode::JUMP_ON_TRUE_POP
+            | &Bytecode::JUMP_ON_FALSE_POP
+            | &Bytecode::JUMP_ON_NIL_TOP_TOP
+            | &Bytecode::JUMP_ON_NOT_NIL_TOP_TOP
+            | &Bytecode::JUMP_ON_NIL_POP
+            | &Bytecode::JUMP_ON_NOT_NIL_POP
+            | &Bytecode::JUMP_IF_GREATER => {}
             _ => panic!("Attempting to patch a bytecode non jump"),
         };
         if let Some(body) = &mut self.body {
             let (high_byte, low_byte) = split_u16(new_val);
-            body[idx_to_patch + 1] = unsafe { std::mem::transmute::<u8, Bytecode>(high_byte) };
-            body[idx_to_patch + 2] = unsafe { std::mem::transmute::<u8, Bytecode>(low_byte) };
+            body[idx_to_patch + 1] = high_byte;
+            body[idx_to_patch + 2] = low_byte;
             debug_assert_eq!(read_u16(body, idx_to_patch + 1), new_val);
         }
     }
@@ -211,7 +205,7 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
 
         let mut entries: Vec<(usize, BcEntry)> = Vec::new();
         let mut cur_idx = 0;
-        for entry in BytecodeIter::init(body, 0) {
+        for entry in Bytecode::get_iter(body) {
             let size = match entry {
                 BcEntry::NoArg(_) => BC_SIZE_NO_ARGS as usize,
                 BcEntry::OneArg(_, _) => BC_SIZE_1_ARG as usize,
@@ -229,12 +223,12 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
             let (_, popx_entry) = &window[1];
             let (pop_idx, pop_entry) = &window[2];
 
-            let is_dup = matches!(dup_entry, BcEntry::NoArg(Bytecode::Dup));
+            let is_dup = matches!(dup_entry, BcEntry::NoArg(Bytecode::DUP));
             let is_popx = matches!(
                 popx_entry,
-                BcEntry::OneArg(Bytecode::PopField, _) | BcEntry::TwoArgs(Bytecode::PopLocal, _, _) | BcEntry::TwoArgs(Bytecode::PopArg, _, _)
+                BcEntry::OneArg(Bytecode::POP_FIELD, _) | BcEntry::TwoArgs(Bytecode::POP_LOCAL, _, _) | BcEntry::TwoArgs(Bytecode::POP_ARG, _, _)
             );
-            let is_pop = matches!(pop_entry, BcEntry::NoArg(Bytecode::Pop));
+            let is_pop = matches!(pop_entry, BcEntry::NoArg(Bytecode::POP));
 
             if !(is_dup && is_popx && is_pop) {
                 continue;
@@ -242,16 +236,16 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
 
             let are_bc_jump_targets = entries.iter().any(|(jump_idx, entry)| match entry {
                 BcEntry::U16Arg(
-                    Bytecode::Jump
-                    | Bytecode::JumpOnTrueTopNil
-                    | Bytecode::JumpOnFalseTopNil
-                    | Bytecode::JumpOnTruePop
-                    | Bytecode::JumpOnFalsePop
-                    | Bytecode::JumpIfGreater
-                    | Bytecode::JumpOnNilPop
-                    | Bytecode::JumpOnNotNilPop
-                    | Bytecode::JumpOnNilTopTop
-                    | Bytecode::JumpOnNotNilTopTop,
+                    Bytecode::JUMP
+                    | Bytecode::JUMP_ON_TRUE_TOP_NIL
+                    | Bytecode::JUMP_ON_FALSE_TOP_NIL
+                    | Bytecode::JUMP_ON_TRUE_POP
+                    | Bytecode::JUMP_ON_FALSE_POP
+                    | Bytecode::JUMP_IF_GREATER
+                    | Bytecode::JUMP_ON_NIL_POP
+                    | Bytecode::JUMP_ON_NOT_NIL_POP
+                    | Bytecode::JUMP_ON_NIL_TOP_TOP
+                    | Bytecode::JUMP_ON_NOT_NIL_TOP_TOP,
                     jump_offset,
                 ) => {
                     let bc_target_idx = jump_idx + *jump_offset as usize;
@@ -276,16 +270,16 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
         for (cur_idx, entry) in &entries {
             match entry {
                 BcEntry::U16Arg(
-                    Bytecode::Jump
-                    | Bytecode::JumpOnTrueTopNil
-                    | Bytecode::JumpOnFalseTopNil
-                    | Bytecode::JumpOnTruePop
-                    | Bytecode::JumpOnFalsePop
-                    | Bytecode::JumpIfGreater
-                    | Bytecode::JumpOnNilPop
-                    | Bytecode::JumpOnNotNilPop
-                    | Bytecode::JumpOnNilTopTop
-                    | Bytecode::JumpOnNotNilTopTop,
+                    Bytecode::JUMP
+                    | Bytecode::JUMP_ON_TRUE_TOP_NIL
+                    | Bytecode::JUMP_ON_FALSE_TOP_NIL
+                    | Bytecode::JUMP_ON_TRUE_POP
+                    | Bytecode::JUMP_ON_FALSE_POP
+                    | Bytecode::JUMP_IF_GREATER
+                    | Bytecode::JUMP_ON_NIL_POP
+                    | Bytecode::JUMP_ON_NOT_NIL_POP
+                    | Bytecode::JUMP_ON_NIL_TOP_TOP
+                    | Bytecode::JUMP_ON_NOT_NIL_TOP_TOP,
                     jump_offset,
                 ) => {
                     if indices_to_remove.contains(&(*cur_idx + *jump_offset as usize)) {
@@ -295,7 +289,7 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
                     let nbr_to_adjust = indices_to_remove.iter().filter(|&&idx| *cur_idx < idx && idx <= *cur_idx + *jump_offset as usize).count();
                     jumps_to_patch.push((*cur_idx, (*jump_offset as usize - nbr_to_adjust) as u16));
                 }
-                BcEntry::U16Arg(Bytecode::JumpBackward, jump_offset) => {
+                BcEntry::U16Arg(Bytecode::JUMP_BACKWARD, jump_offset) => {
                     let nbr_to_adjust = indices_to_remove.iter().filter(|&&idx| *cur_idx > idx && idx > *cur_idx - *jump_offset as usize).count();
                     jumps_to_patch.push((*cur_idx, (*jump_offset as usize - nbr_to_adjust) as u16));
                     // It's impossible for a JumpBackward to be generated to point to a duplicated dup/pop/pox sequence, as it stands, and as far as I know.
@@ -347,19 +341,19 @@ impl InnerGenCtxt for MethodGenCtxt<'_> {
         self
     }
 
-    fn push_instr_no_arg(&mut self, instr: Bytecode) {
+    fn push_instr_no_arg(&mut self, instr: u8) {
         self.inner.push_instr_no_arg(instr)
     }
 
-    fn push_instr_1_arg(&mut self, instr: Bytecode, a: u8) {
+    fn push_instr_1_arg(&mut self, instr: u8, a: u8) {
         self.inner.push_instr_1_arg(instr, a)
     }
 
-    fn push_instr_2_args(&mut self, instr: Bytecode, a: u8, b: u8) {
+    fn push_instr_2_args(&mut self, instr: u8, a: u8, b: u8) {
         self.inner.push_instr_2_args(instr, a, b)
     }
 
-    fn push_instr_u16_arg(&mut self, instr: Bytecode, arg: u16) {
+    fn push_instr_u16_arg(&mut self, instr: u8, arg: u16) {
         self.inner.push_instr_u16_arg(instr, arg)
     }
 
@@ -367,7 +361,7 @@ impl InnerGenCtxt for MethodGenCtxt<'_> {
         self.inner.pop_instr();
     }
 
-    fn get_instructions(&self) -> &Vec<Bytecode> {
+    fn get_instructions(&self) -> &Vec<u8> {
         self.inner.get_instructions()
     }
 
@@ -427,25 +421,25 @@ impl MethodCodegen for ast::Expression {
             ast::Expression::Read(name) => {
                 match ctxt.find_var(name.as_str()) {
                     Some(FoundVar::Local(up_idx, idx)) => match up_idx {
-                        0 => ctxt.push_instr_1_arg(Bytecode::PushLocal, idx),
-                        _ => ctxt.push_instr_2_args(Bytecode::PushNonLocal, up_idx, idx),
+                        0 => ctxt.push_instr_1_arg(Bytecode::PUSH_LOCAL, idx),
+                        _ => ctxt.push_instr_2_args(Bytecode::PUSH_NON_LOCAL, up_idx, idx),
                     },
                     Some(FoundVar::Argument(up_idx, idx)) => match (up_idx, idx) {
-                        (0, 0) => ctxt.push_instr_no_arg(Bytecode::PushSelf),
-                        (0, _) => ctxt.push_instr_1_arg(Bytecode::PushArg, idx),
-                        _ => ctxt.push_instr_2_args(Bytecode::PushNonLocalArg, up_idx, idx),
+                        (0, 0) => ctxt.push_instr_no_arg(Bytecode::PUSH_SELF),
+                        (0, _) => ctxt.push_instr_1_arg(Bytecode::PUSH_ARG, idx),
+                        _ => ctxt.push_instr_2_args(Bytecode::PUSH_NON_LOCAL_ARG, up_idx, idx),
                     },
-                    Some(FoundVar::Field(idx)) => ctxt.push_instr_1_arg(Bytecode::PushField, idx),
+                    Some(FoundVar::Field(idx)) => ctxt.push_instr_1_arg(Bytecode::PUSH_FIELD, idx),
                     None => match name.as_str() {
-                        "nil" => ctxt.push_instr_no_arg(Bytecode::PushNil),
+                        "nil" => ctxt.push_instr_no_arg(Bytecode::PUSH_NIL),
                         "super" => match ctxt.get_scope() {
-                            0 => ctxt.push_instr_no_arg(Bytecode::PushSelf),
-                            scope => ctxt.push_instr_2_args(Bytecode::PushNonLocalArg, scope as u8, 0),
+                            0 => ctxt.push_instr_no_arg(Bytecode::PUSH_SELF),
+                            scope => ctxt.push_instr_2_args(Bytecode::PUSH_NON_LOCAL_ARG, scope as u8, 0),
                         },
                         _ => {
                             let name = ctxt.intern_symbol(name);
                             let idx = ctxt.push_literal(Literal::Symbol(name));
-                            ctxt.push_instr_1_arg(Bytecode::PushGlobal, idx as u8);
+                            ctxt.push_instr_1_arg(Bytecode::PUSH_GLOBAL, idx as u8);
                         }
                     },
                 }
@@ -453,14 +447,14 @@ impl MethodCodegen for ast::Expression {
             }
             ast::Expression::Write(name, expr) => {
                 expr.codegen(ctxt, mutator)?;
-                ctxt.push_instr_no_arg(Bytecode::Dup);
+                ctxt.push_instr_no_arg(Bytecode::DUP);
                 match ctxt.find_var(name.as_str())? {
                     FoundVar::Local(up_idx, idx) => match up_idx {
-                        0 => ctxt.push_instr_2_args(Bytecode::PopLocal, 0, idx),
-                        _ => ctxt.push_instr_2_args(Bytecode::PopLocal, up_idx, idx),
+                        0 => ctxt.push_instr_2_args(Bytecode::POP_LOCAL, 0, idx),
+                        _ => ctxt.push_instr_2_args(Bytecode::POP_LOCAL, up_idx, idx),
                     },
-                    FoundVar::Argument(up_idx, idx) => ctxt.push_instr_2_args(Bytecode::PopArg, up_idx, idx),
-                    FoundVar::Field(idx) => ctxt.push_instr_1_arg(Bytecode::PopField, idx),
+                    FoundVar::Argument(up_idx, idx) => ctxt.push_instr_2_args(Bytecode::POP_ARG, up_idx, idx),
+                    FoundVar::Field(idx) => ctxt.push_instr_1_arg(Bytecode::POP_FIELD, idx),
                 }
                 Some(())
             }
@@ -473,13 +467,13 @@ impl MethodCodegen for ast::Expression {
                             let jump_idx = ctxt.get_cur_instr_idx();
 
                             match if_inlined.expected_bool {
-                                true => ctxt.push_instr_2_args(Bytecode::JumpOnFalseTopNil, 0, 0),
-                                false => ctxt.push_instr_2_args(Bytecode::JumpOnTrueTopNil, 0, 0),
+                                true => ctxt.push_instr_2_args(Bytecode::JUMP_ON_FALSE_TOP_NIL, 0, 0),
+                                false => ctxt.push_instr_2_args(Bytecode::JUMP_ON_TRUE_TOP_NIL, 0, 0),
                             }
 
                             for expr in &if_inlined.body_instrs {
                                 expr.codegen(ctxt, mutator)?;
-                                ctxt.push_instr_no_arg(Bytecode::Pop);
+                                ctxt.push_instr_no_arg(Bytecode::POP);
                             }
                             ctxt.pop_instr();
 
@@ -491,13 +485,13 @@ impl MethodCodegen for ast::Expression {
                             let jump_idx = ctxt.get_cur_instr_idx();
 
                             match if_nil_inlined.expects_nil {
-                                true => ctxt.push_instr_2_args(Bytecode::JumpOnNotNilTopTop, 0, 0),
-                                false => ctxt.push_instr_2_args(Bytecode::JumpOnNilTopTop, 0, 0),
+                                true => ctxt.push_instr_2_args(Bytecode::JUMP_ON_NOT_NIL_TOP_TOP, 0, 0),
+                                false => ctxt.push_instr_2_args(Bytecode::JUMP_ON_NIL_TOP_TOP, 0, 0),
                             }
 
                             for expr in &if_nil_inlined.body_instrs {
                                 expr.codegen(ctxt, mutator)?;
-                                ctxt.push_instr_no_arg(Bytecode::Pop);
+                                ctxt.push_instr_no_arg(Bytecode::POP);
                             }
                             ctxt.pop_instr();
 
@@ -509,24 +503,24 @@ impl MethodCodegen for ast::Expression {
 
                             let start_jump_idx = ctxt.get_cur_instr_idx();
                             match if_true_if_false.expected_bool {
-                                true => ctxt.push_instr_2_args(Bytecode::JumpOnFalsePop, 0, 0),
-                                false => ctxt.push_instr_2_args(Bytecode::JumpOnTruePop, 0, 0),
+                                true => ctxt.push_instr_2_args(Bytecode::JUMP_ON_FALSE_POP, 0, 0),
+                                false => ctxt.push_instr_2_args(Bytecode::JUMP_ON_TRUE_POP, 0, 0),
                             }
 
                             for expr in &if_true_if_false.body_1_instrs {
                                 expr.codegen(ctxt, mutator)?;
-                                ctxt.push_instr_no_arg(Bytecode::Pop);
+                                ctxt.push_instr_no_arg(Bytecode::POP);
                             }
                             ctxt.pop_instr();
 
                             let middle_jump_idx = ctxt.get_cur_instr_idx();
-                            ctxt.push_instr_2_args(Bytecode::Jump, 0, 0);
+                            ctxt.push_instr_2_args(Bytecode::JUMP, 0, 0);
 
                             ctxt.backpatch_jump_to_current(start_jump_idx);
 
                             for expr in &if_true_if_false.body_2_instrs {
                                 expr.codegen(ctxt, mutator)?;
-                                ctxt.push_instr_no_arg(Bytecode::Pop);
+                                ctxt.push_instr_no_arg(Bytecode::POP);
                             }
                             ctxt.pop_instr();
 
@@ -538,24 +532,24 @@ impl MethodCodegen for ast::Expression {
 
                             let start_jump_idx = ctxt.get_cur_instr_idx();
                             match if_nil_if_not_nil.expects_nil {
-                                true => ctxt.push_instr_2_args(Bytecode::JumpOnNotNilPop, 0, 0),
-                                false => ctxt.push_instr_2_args(Bytecode::JumpOnNilPop, 0, 0),
+                                true => ctxt.push_instr_2_args(Bytecode::JUMP_ON_NOT_NIL_POP, 0, 0),
+                                false => ctxt.push_instr_2_args(Bytecode::JUMP_ON_NIL_POP, 0, 0),
                             }
 
                             for expr in &if_nil_if_not_nil.body_1_instrs {
                                 expr.codegen(ctxt, mutator)?;
-                                ctxt.push_instr_no_arg(Bytecode::Pop);
+                                ctxt.push_instr_no_arg(Bytecode::POP);
                             }
                             ctxt.pop_instr();
 
                             let middle_jump_idx = ctxt.get_cur_instr_idx();
-                            ctxt.push_instr_2_args(Bytecode::Jump, 0, 0);
+                            ctxt.push_instr_2_args(Bytecode::JUMP, 0, 0);
 
                             ctxt.backpatch_jump_to_current(start_jump_idx);
 
                             for expr in &if_nil_if_not_nil.body_2_instrs {
                                 expr.codegen(ctxt, mutator)?;
-                                ctxt.push_instr_no_arg(Bytecode::Pop);
+                                ctxt.push_instr_no_arg(Bytecode::POP);
                             }
                             ctxt.pop_instr();
 
@@ -567,18 +561,18 @@ impl MethodCodegen for ast::Expression {
                             let skip_cond_jump_idx = ctxt.get_cur_instr_idx();
 
                             match and_inlined.is_and {
-                                true => ctxt.push_instr_2_args(Bytecode::JumpOnFalsePop, 0, 0),
-                                false => ctxt.push_instr_2_args(Bytecode::JumpOnTruePop, 0, 0),
+                                true => ctxt.push_instr_2_args(Bytecode::JUMP_ON_FALSE_POP, 0, 0),
+                                false => ctxt.push_instr_2_args(Bytecode::JUMP_ON_TRUE_POP, 0, 0),
                             }
 
                             for expr in &and_inlined.second {
                                 expr.codegen(ctxt, mutator)?;
-                                ctxt.push_instr_no_arg(Bytecode::Pop);
+                                ctxt.push_instr_no_arg(Bytecode::POP);
                             }
                             ctxt.pop_instr();
 
                             let skip_return_true_idx = ctxt.get_cur_instr_idx();
-                            ctxt.push_instr_2_args(Bytecode::Jump, 0, 0);
+                            ctxt.push_instr_2_args(Bytecode::JUMP, 0, 0);
 
                             ctxt.backpatch_jump_to_current(skip_cond_jump_idx);
 
@@ -589,7 +583,7 @@ impl MethodCodegen for ast::Expression {
                                 }
                             };
                             let idx = ctxt.push_literal(Literal::Symbol(literal_idx));
-                            ctxt.push_instr_1_arg(Bytecode::PushGlobal, idx as u8);
+                            ctxt.push_instr_1_arg(Bytecode::PUSH_GLOBAL, idx as u8);
 
                             ctxt.backpatch_jump_to_current(skip_return_true_idx);
                             return Some(());
@@ -601,27 +595,27 @@ impl MethodCodegen for ast::Expression {
                             if let Some((last, rest)) = splitted {
                                 for expr in rest {
                                     expr.codegen(ctxt, mutator)?;
-                                    ctxt.push_instr_no_arg(Bytecode::Pop);
+                                    ctxt.push_instr_no_arg(Bytecode::POP);
                                 }
                                 last.codegen(ctxt, mutator)?;
                             }
 
                             let cond_jump_idx = ctxt.get_cur_instr_idx();
                             match while_inlined.expected_bool {
-                                true => ctxt.push_instr_2_args(Bytecode::JumpOnFalsePop, 0, 0),
-                                false => ctxt.push_instr_2_args(Bytecode::JumpOnTruePop, 0, 0),
+                                true => ctxt.push_instr_2_args(Bytecode::JUMP_ON_FALSE_POP, 0, 0),
+                                false => ctxt.push_instr_2_args(Bytecode::JUMP_ON_TRUE_POP, 0, 0),
                             }
 
                             for expr in &while_inlined.body_instrs {
                                 expr.codegen(ctxt, mutator)?;
-                                ctxt.push_instr_no_arg(Bytecode::Pop);
+                                ctxt.push_instr_no_arg(Bytecode::POP);
                             }
 
                             let jump_offset = (ctxt.get_cur_instr_idx() - idx_pre_condition) as u16;
-                            ctxt.push_instr_u16_arg(Bytecode::JumpBackward, jump_offset);
+                            ctxt.push_instr_u16_arg(Bytecode::JUMP_BACKWARD, jump_offset);
                             ctxt.backpatch_jump_to_current(cond_jump_idx);
 
-                            ctxt.push_instr_no_arg(Bytecode::PushNil);
+                            ctxt.push_instr_no_arg(Bytecode::PUSH_NIL);
 
                             return Some(());
                         }
@@ -634,22 +628,22 @@ impl MethodCodegen for ast::Expression {
                                 invalid => panic!("to do inlining couldn't find a valid index for its accumulator: got {:?}", invalid),
                             };
 
-                            ctxt.push_instr_no_arg(Bytecode::Dup2);
+                            ctxt.push_instr_no_arg(Bytecode::DUP_2);
 
                             let jump_if_greater_idx = ctxt.get_cur_instr_idx();
-                            ctxt.push_instr_2_args(Bytecode::JumpIfGreater, 0, 0);
+                            ctxt.push_instr_2_args(Bytecode::JUMP_IF_GREATER, 0, 0);
 
-                            ctxt.push_instr_no_arg(Bytecode::Dup);
-                            ctxt.push_instr_2_args(Bytecode::PopLocal, 0, idx_loop_accumulator);
+                            ctxt.push_instr_no_arg(Bytecode::DUP);
+                            ctxt.push_instr_2_args(Bytecode::POP_LOCAL, 0, idx_loop_accumulator);
 
                             for expr in &to_do_inlined.body_instrs {
                                 expr.codegen(ctxt, mutator)?;
-                                ctxt.push_instr_no_arg(Bytecode::Pop);
+                                ctxt.push_instr_no_arg(Bytecode::POP);
                             }
 
-                            ctxt.push_instr_no_arg(Bytecode::Inc);
+                            ctxt.push_instr_no_arg(Bytecode::INC);
                             let jump_offset = (ctxt.get_cur_instr_idx() - jump_if_greater_idx) as u16;
-                            ctxt.push_instr_u16_arg(Bytecode::JumpBackward, jump_offset);
+                            ctxt.push_instr_u16_arg(Bytecode::JUMP_BACKWARD, jump_offset);
 
                             ctxt.backpatch_jump_to_current(jump_if_greater_idx);
 
@@ -668,8 +662,8 @@ impl MethodCodegen for ast::Expression {
                     && message.values.first()? == &Expression::Literal(ast::Literal::Integer(1))
                 {
                     match message.signature.as_str() {
-                        "+" => ctxt.push_instr_no_arg(Bytecode::Inc),
-                        "-" => ctxt.push_instr_no_arg(Bytecode::Dec),
+                        "+" => ctxt.push_instr_no_arg(Bytecode::INC),
+                        "-" => ctxt.push_instr_no_arg(Bytecode::DEC),
                         _ => unreachable!(),
                     };
                     return Some(());
@@ -686,12 +680,12 @@ impl MethodCodegen for ast::Expression {
 
                 match is_super_call {
                     false => match nbr_args {
-                        0 => ctxt.push_instr_u16_arg(Bytecode::Send1, sym),
-                        1 => ctxt.push_instr_u16_arg(Bytecode::Send2, sym),
-                        2 => ctxt.push_instr_u16_arg(Bytecode::Send3, sym),
-                        _ => ctxt.push_instr_u16_arg(Bytecode::SendN, sym),
+                        0 => ctxt.push_instr_u16_arg(Bytecode::SEND_1, sym),
+                        1 => ctxt.push_instr_u16_arg(Bytecode::SEND_2, sym),
+                        2 => ctxt.push_instr_u16_arg(Bytecode::SEND_3, sym),
+                        _ => ctxt.push_instr_u16_arg(Bytecode::SEND_N, sym),
                     },
-                    true => ctxt.push_instr_u16_arg(Bytecode::SuperSend, sym),
+                    true => ctxt.push_instr_u16_arg(Bytecode::SUPER_SEND, sym),
                 }
 
                 Some(())
@@ -701,15 +695,15 @@ impl MethodCodegen for ast::Expression {
 
                 match scope {
                     0 => match expr.as_ref() {
-                        Expression::Read(s) if s == "self" => ctxt.push_instr_no_arg(Bytecode::ReturnSelf),
+                        Expression::Read(s) if s == "self" => ctxt.push_instr_no_arg(Bytecode::RETURN_SELF),
                         _ => {
                             expr.codegen(ctxt, mutator)?;
-                            ctxt.push_instr_no_arg(Bytecode::ReturnLocal)
+                            ctxt.push_instr_no_arg(Bytecode::RETURN_LOCAL)
                         }
                     },
                     _ => {
                         expr.codegen(ctxt, mutator)?;
-                        ctxt.push_instr_1_arg(Bytecode::ReturnNonLocal, scope as u8);
+                        ctxt.push_instr_1_arg(Bytecode::RETURN_NON_LOCAL, scope as u8);
                     }
                 };
 
@@ -757,11 +751,11 @@ impl MethodCodegen for ast::Expression {
                 let literal = convert_literal(ctxt, literal, mutator);
 
                 match literal {
-                    Literal::Integer(0) => ctxt.push_instr_no_arg(Bytecode::Push0),
-                    Literal::Integer(1) => ctxt.push_instr_no_arg(Bytecode::Push1),
+                    Literal::Integer(0) => ctxt.push_instr_no_arg(Bytecode::PUSH_0),
+                    Literal::Integer(1) => ctxt.push_instr_no_arg(Bytecode::PUSH_1),
                     _ => {
                         let idx = ctxt.push_literal(literal);
-                        ctxt.push_instr_1_arg(Bytecode::PushConstant, idx as u8)
+                        ctxt.push_instr_1_arg(Bytecode::PUSH_CONSTANT, idx as u8)
                     }
                 }
 
@@ -771,7 +765,7 @@ impl MethodCodegen for ast::Expression {
                 let block_method = compile_block_method(ctxt.as_gen_ctxt(), val, mutator)?;
                 let block = Literal::Block(block_method);
                 let idx = ctxt.push_literal(block);
-                ctxt.push_instr_1_arg(Bytecode::PushBlock, idx as u8);
+                ctxt.push_instr_1_arg(Bytecode::PUSH_BLOCK, idx as u8);
                 Some(())
             }
         }
@@ -806,14 +800,14 @@ impl GenCtxt for ClassGenCtxt<'_> {
 
 fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: &mut GCInterface) -> Option<Method> {
     fn make_trivial_method_if_possible(
-        body: &Vec<Bytecode>,
+        body: &Vec<u8>,
         literals: &[Literal],
         signature: &str,
         nbr_args: usize,
         interner: &Interner,
     ) -> Option<Method> {
         match (body.as_slice(), nbr_args) {
-            ([Bytecode::PushGlobal, x, Bytecode::ReturnLocal], 1) => match literals.get(*x as usize)? {
+            ([Bytecode::PUSH_GLOBAL, x, Bytecode::RETURN_LOCAL], 1) => match literals.get(*x as usize)? {
                 Literal::Symbol(interned) => Some(Method::TrivialGlobal(
                     TrivialGlobalMethod {
                         global_name: *interned,
@@ -823,39 +817,39 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
                 )),
                 _ => None,
             },
-            ([Bytecode::PushField, x, Bytecode::ReturnLocal], 1) => Some(Method::TrivialGetter(
-                TrivialGetterMethod { field_idx: *x as u8 },
+            ([Bytecode::PUSH_FIELD, x, Bytecode::RETURN_LOCAL], 1) => Some(Method::TrivialGetter(
+                TrivialGetterMethod { field_idx: *x },
                 BasicMethodInfo::new(String::from(signature), Gc::default()),
             )),
-            ([Bytecode::PushArg, expect_one, Bytecode::PopField, x, Bytecode::ReturnSelf], 2) => {
-                if *expect_one as u8 != 1 {
+            ([Bytecode::PUSH_ARG, expect_one, Bytecode::POP_FIELD, x, Bytecode::RETURN_SELF], 2) => {
+                if *expect_one != 1 {
                     return None;
                 }
                 Some(Method::TrivialSetter(
-                    TrivialSetterMethod { field_idx: *x as u8 },
+                    TrivialSetterMethod { field_idx: *x },
                     BasicMethodInfo::new(String::from(signature), Gc::default()),
                 ))
             }
-            ([Bytecode::PushConstant, const_idx, Bytecode::ReturnLocal], 1) => {
+            ([Bytecode::PUSH_CONSTANT, const_idx, Bytecode::RETURN_LOCAL], 1) => {
                 let lit = literals.get(*const_idx as usize).cloned().unwrap();
                 Some(Method::TrivialLiteral(
                     TrivialLiteralMethod { literal: lit.clone() },
                     BasicMethodInfo::new(String::from(signature), Gc::default()),
                 ))
             }
-            ([Bytecode::Push0, Bytecode::ReturnLocal], 1) => Some(Method::TrivialLiteral(
+            ([Bytecode::PUSH_0, Bytecode::RETURN_LOCAL], 1) => Some(Method::TrivialLiteral(
                 TrivialLiteralMethod {
                     literal: Literal::Integer(0),
                 },
                 BasicMethodInfo::new(String::from(signature), Gc::default()),
             )),
-            ([Bytecode::Push1, Bytecode::ReturnLocal], 1) => Some(Method::TrivialLiteral(
+            ([Bytecode::PUSH_1, Bytecode::RETURN_LOCAL], 1) => Some(Method::TrivialLiteral(
                 TrivialLiteralMethod {
                     literal: Literal::Integer(1),
                 },
                 BasicMethodInfo::new(String::from(signature), Gc::default()),
             )),
-            ([Bytecode::PushNil, Bytecode::ReturnLocal], 1) => {
+            ([Bytecode::PUSH_NIL, Bytecode::RETURN_LOCAL], 1) => {
                 let nil_interned = interner.reverse_lookup("nil").unwrap_or_else(|| panic!("how did we not make nil a global yet?"));
                 Some(Method::TrivialLiteral(
                     TrivialLiteralMethod {
@@ -907,16 +901,16 @@ fn compile_method(outer: &mut dyn GenCtxt, defn: &ast::MethodDef, gc_interface: 
             if let Some((last, exprs)) = body.exprs.split_last() {
                 for expr in exprs {
                     expr.codegen(&mut ctxt, gc_interface)?;
-                    ctxt.push_instr_no_arg(Bytecode::Pop);
+                    ctxt.push_instr_no_arg(Bytecode::POP);
                 }
                 last.codegen(&mut ctxt, gc_interface)?;
                 if !matches!(last, Expression::Exit(_)) {
-                    ctxt.push_instr_no_arg(Bytecode::Pop);
-                    ctxt.push_instr_no_arg(Bytecode::ReturnSelf);
+                    ctxt.push_instr_no_arg(Bytecode::POP);
+                    ctxt.push_instr_no_arg(Bytecode::RETURN_SELF);
                 }
             } else {
                 // empty method body means we just return self
-                ctxt.push_instr_no_arg(Bytecode::ReturnSelf);
+                ctxt.push_instr_no_arg(Bytecode::RETURN_SELF);
             }
 
             ctxt.remove_dup_popx_pop_sequences();
@@ -993,16 +987,16 @@ fn compile_block_method(outer: &mut dyn GenCtxt, defn: &ast::Block, gc_interface
     if let Some((last, rest)) = splitted {
         for expr in rest {
             expr.codegen(&mut ctxt, gc_interface)?;
-            ctxt.push_instr_no_arg(Bytecode::Pop);
+            ctxt.push_instr_no_arg(Bytecode::POP);
         }
         last.codegen(&mut ctxt, gc_interface)?;
-        ctxt.push_instr_no_arg(Bytecode::ReturnLocal);
+        ctxt.push_instr_no_arg(Bytecode::RETURN_LOCAL);
     }
     ctxt.remove_dup_popx_pop_sequences();
 
     if ctxt.body.is_none() {
-        ctxt.push_instr_no_arg(Bytecode::PushNil);
-        ctxt.push_instr_no_arg(Bytecode::ReturnLocal);
+        ctxt.push_instr_no_arg(Bytecode::PUSH_NIL);
+        ctxt.push_instr_no_arg(Bytecode::RETURN_LOCAL);
     }
 
     let literals: Vec<Literal> = ctxt.literals.clone().into_iter().collect();
