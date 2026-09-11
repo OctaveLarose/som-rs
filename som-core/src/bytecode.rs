@@ -103,15 +103,15 @@ static BYTECODE_MAP: Lazy<HashMap<u8, BcType>> = Lazy::new(|| {
     ])
 });
 
-#[inline(always)]
+// NB: likely slower than the macro version in `interpreter.rs`, so not to be used past bytecode compilation.
 pub fn read_u16(bytecodes: &[u8], idx: usize) -> u16 {
-    (bytecodes[idx + 1] as u16) | ((bytecodes[idx] as u16) << 8)
+    (bytecodes[idx] as u16) | ((bytecodes[idx + 1] as u16) << 8)
 }
 
 pub fn split_u16(val: u16) -> (u8, u8) {
-    let high_byte: u8 = (val >> 8) as u8;
     let low_byte: u8 = (val & 0xff) as u8;
-    (high_byte, low_byte)
+    let high_byte: u8 = (val >> 8) as u8;
+    (low_byte, high_byte)
 }
 
 impl Bytecode {

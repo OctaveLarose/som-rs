@@ -13,7 +13,7 @@ use std::cell::UnsafeCell;
 use crate::debug::profiler::Profiler;
 
 use num_bigint::BigInt;
-use som_core::bytecode::{read_u16, Bytecode, BC_SIZE_1_ARG, BC_SIZE_2_ARG, BC_SIZE_NO_ARGS, BC_SIZE_U16_ARG};
+use som_core::bytecode::{Bytecode, BC_SIZE_1_ARG, BC_SIZE_2_ARG, BC_SIZE_NO_ARGS, BC_SIZE_U16_ARG};
 use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_value::interned::Interned;
@@ -72,6 +72,19 @@ macro_rules! stack_fast_last_mut {
     };
 }
 
+macro_rules! read_u16_fast {
+    ($var_name:ident, $bytecodes:expr, $idx:expr) => {
+        let $var_name: u16 = unsafe {
+            u16::from_le_bytes(
+                $bytecodes
+                    .get_unchecked($idx..$idx + 2)
+                    .try_into()
+                    .unwrap_unchecked(),
+            )
+        };
+    };
+}
+
 pub struct Interpreter {
     /// The time record of the interpreter's creation.
     pub start_time: Instant,
@@ -102,7 +115,7 @@ impl Interpreter {
 
     /// Return the current frame.
     /// It's in an `UnsafeCell` for moving GC reasons: you get many bugs by using Gc<Frame> by
-    /// itself, since Rust assumes that it hasn't moved when it in fact very much has
+    /// itself, since Rust assumes that it hasn't moved when it has
     pub fn get_current_frame(&self) -> Gc<Frame> {
         unsafe { (*self.current_frame.get()).clone() }
     }
@@ -242,28 +255,28 @@ impl Interpreter {
             match bytecode {
                 Bytecode::SEND_1 => {
                     let _timing = profiler_maybe_start!("SEND");
-                    let val = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(val, bytecodes, self.bytecode_idx as usize + 1);
                     let symbol: Interned = Interned(val);
                     resolve_method_and_send!(self, universe, symbol, 1);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::SEND_2 => {
                     let _timing = profiler_maybe_start!("SEND");
-                    let val = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(val, bytecodes, self.bytecode_idx as usize + 1);
                     let symbol: Interned = Interned(val);
                     resolve_method_and_send!(self, universe, symbol, 2);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::SEND_3 => {
                     let _timing = profiler_maybe_start!("SEND");
-                    let val = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(val, bytecodes, self.bytecode_idx as usize + 1);
                     let symbol: Interned = Interned(val);
                     resolve_method_and_send!(self, universe, symbol, 3);
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::SEND_N => {
                     let _timing = profiler_maybe_start!("SEND");
-                    let val = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(val, bytecodes, self.bytecode_idx as usize + 1);
                     let symbol: Interned = Interned(val);
                     let nbr_args = nbr_args(universe.lookup_symbol(symbol));
                     resolve_method_and_send!(self, universe, symbol, nbr_args);
@@ -494,7 +507,7 @@ impl Interpreter {
                 }
                 Bytecode::SUPER_SEND => {
                     let _timing = profiler_maybe_start!("SUPER_SEND");
-                    let val = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(val, bytecodes, self.bytecode_idx as usize + 1);
                     let symbol: Interned = Interned(val);
                     let nbr_args = {
                         let signature = universe.lookup_symbol(symbol);
@@ -584,19 +597,19 @@ impl Interpreter {
                 }
                 Bytecode::JUMP => {
                     let _timing = profiler_maybe_start!("JUMP");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     self.bytecode_idx += offset;
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::JUMP_BACKWARD => {
                     let _timing = profiler_maybe_start!("JUMP_BACKWARD");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     self.bytecode_idx -= offset;
                     profiler_maybe_stop!(_timing);
                 }
                 Bytecode::JUMP_ON_TRUE_TOP_NIL => {
                     let _timing = profiler_maybe_start!("JUMP_ON_TRUE_TOP_NIL");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_last_mut!(&mut self.stack);
 
                     if condition_result.is_boolean_true() {
@@ -612,7 +625,7 @@ impl Interpreter {
                 }
                 Bytecode::JUMP_ON_FALSE_TOP_NIL => {
                     let _timing = profiler_maybe_start!("JUMP_ON_FALSE_TOP_NIL");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_last_mut!(&mut self.stack);
 
                     if condition_result.is_boolean_true() {
@@ -628,7 +641,7 @@ impl Interpreter {
                 }
                 Bytecode::JUMP_ON_TRUE_POP => {
                     let _timing = profiler_maybe_start!("JUMP_ON_TRUE_POP");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if condition_result.is_boolean_true() {
@@ -643,7 +656,7 @@ impl Interpreter {
                 }
                 Bytecode::JUMP_ON_FALSE_POP => {
                     let _timing = profiler_maybe_start!("JUMP_ON_FALSE_POP");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if condition_result.is_boolean_false() {
@@ -658,7 +671,7 @@ impl Interpreter {
                 }
                 Bytecode::JUMP_IF_GREATER => {
                     let _timing = profiler_maybe_start!("JUMP_IF_GREATER");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     let top = stack_fast_last!(&self.stack);
                     let top2 = self.stack[self.stack.len() - 2];
 
@@ -682,7 +695,7 @@ impl Interpreter {
                 }
                 Bytecode::JUMP_ON_NIL_TOP_TOP => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NIL_TOP_TOP");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_last!(&mut self.stack);
 
                     if condition_result.is_nil() {
@@ -695,7 +708,7 @@ impl Interpreter {
                 }
                 Bytecode::JUMP_ON_NOT_NIL_TOP_TOP => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NOT_NIL_TOP_TOP");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_last!(&mut self.stack);
 
                     if !condition_result.is_nil() {
@@ -708,7 +721,7 @@ impl Interpreter {
                 }
                 Bytecode::JUMP_ON_NIL_POP => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NIL_POP");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if condition_result.is_nil() {
@@ -721,7 +734,7 @@ impl Interpreter {
                 }
                 Bytecode::JUMP_ON_NOT_NIL_POP => {
                     let _timing = profiler_maybe_start!("JUMP_ON_NOT_NIL_POP");
-                    let offset = read_u16(bytecodes, self.bytecode_idx as usize + 1);
+                    read_u16_fast!(offset, bytecodes, self.bytecode_idx as usize + 1);
                     let condition_result = stack_fast_pop!(&mut self.stack);
 
                     if !condition_result.is_nil() {
@@ -732,7 +745,9 @@ impl Interpreter {
                     }
                     profiler_maybe_stop!(_timing);
                 }
-                _ => unreachable!(),
+                _ => {
+                    unsafe { std::hint::unreachable_unchecked() }
+                },
             }
         }
 
