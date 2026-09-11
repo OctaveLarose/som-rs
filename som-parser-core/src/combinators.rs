@@ -152,20 +152,21 @@ pub fn sep_by<A, B, I: Clone, GCTXT: Clone>(
     move |input: I, genctxt: GCTXT| {
         let mut output = Vec::<B>::new();
         let l1 = within.parse(input.clone(), genctxt.clone());
-        if l1.is_some() {
-            let (value, mut input, mut genctxt2) = l1.unwrap();
+        if let Some(l1) = l1 {
+            let (value, mut input, mut genctxt2) = l1;
             output.push(value);
 
             loop {
                 let l2 = delim.parse(input.clone(), genctxt2.clone()).and_then(|(_, input, genctxt3)| within.parse(input, genctxt3));
 
-                if l2.is_none() {
-                    break;
-                } else {
-                    let (value, next, new_mg) = l2.unwrap();
-                    input = next;
-                    output.push(value);
-                    genctxt2 = new_mg;
+                match l2 {
+                    None => break,
+                    Some(l2) => {
+                        let (value, next, new_mg) = l2;
+                        input = next;
+                        output.push(value);
+                        genctxt2 = new_mg;
+                    }
                 }
             }
 

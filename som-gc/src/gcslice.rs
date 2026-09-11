@@ -32,7 +32,7 @@ where
         }
     }
 
-    pub fn iter(&self) -> GCSliceIter<T> {
+    pub fn iter(&self) -> GCSliceIter<'_, T> {
         GCSliceIter { gc_slice: self, cur_idx: 0 }
     }
 
@@ -52,7 +52,7 @@ where
 
     /// Get the address of the Nth element.
     /// # Safety
-    /// Safe ic checked ahead of time that n is within the slice's bounds.
+    /// Safe if checked ahead of time that n is within the slice's bounds.
     pub unsafe fn nth_addr(&self, n: usize) -> Address {
         Address::from_usize(self.ptr.as_ptr().byte_add(size_of::<usize>() + (n * std::mem::size_of::<T>())) as usize)
     }

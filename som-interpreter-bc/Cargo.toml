@@ -16,7 +16,7 @@ som-parser = { package = "som-parser-symbols", path = "../som-parser-symbols", v
 som-gc = { path = "../som-gc", version = "0.1.0" }
 
 #mmtk = { path = "../mmtk-core", version = "0.29.0" }
-mmtk = "0.31.0"
+mmtk = "0.33.0"
 
 # error handling
 anyhow = "1.0.51"
@@ -51,5 +51,4 @@ profiler = ["measureme"]
 
 ## mmtk stuff
 #default = ["mmtk/extreme_assertions"]
-is_mmtk_object = ["mmtk/is_mmtk_object"]
 malloc_counted_size = ["mmtk/malloc_counted_size"]

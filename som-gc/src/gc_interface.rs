@@ -418,7 +418,7 @@ impl SOMAllocator for GCInterface {
             match _alloc_origin_marker {
                 AstFrame | Instance | MethodFrame | MethodFrameWithArgs | InitMethodFrame | BlockFrame | String | VecValue | BigInt
                 | SliceAstLiteral | RuntimeBlock => self.total_other_memory_size += size as u128,
-                Block | Method | BlockMethod | Class | SliceAstExpression | VecBCLiteral | StringLiteral => {
+                Block | Method | MethodInfo | BlockMethod | Class | SliceAstExpression | VecBCLiteral | StringLiteral => {
                     self.total_program_repr_size += size as u128
                 }
             }

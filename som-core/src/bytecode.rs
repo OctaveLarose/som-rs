@@ -115,7 +115,7 @@ pub fn split_u16(val: u16) -> (u8, u8) {
 }
 
 impl Bytecode {
-    pub fn get_iter(bytecodes: &[u8]) -> BytecodeIter {
+    pub fn get_iter(bytecodes: &[u8]) -> BytecodeIter<'_> {
         BytecodeIter { bytecodes, cur_idx: 0 }
     }
 

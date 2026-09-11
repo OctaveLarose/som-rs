@@ -59,7 +59,7 @@ macro_rules! demote {
     ($heap:expr, $expr:expr) => {{
         let value = $expr;
         match value.to_i32() {
-            Some(value) => Value::Integer((value)),
+            Some(value) => Value::Integer(value),
             None => Value::BigInteger($heap.alloc(value, AllocSiteMarker::BigInt)),
         }
     }};

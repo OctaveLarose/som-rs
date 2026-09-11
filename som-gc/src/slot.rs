@@ -26,17 +26,17 @@ impl<T> From<&GcSlice<T>> for SOMSlot {
     }
 }
 
-impl From<*mut BaseValue> for SOMSlot {
-    // we allow unsafe derefs since it's just for debugging
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    fn from(value: *mut BaseValue) -> Self {
-        SOMSlot::RefValueSlot(RefValueSlot {
-            value,
-            #[cfg(debug_assertions)]
-            expected_tag: (unsafe { *value }).tag(),
-        })
-    }
-}
+// impl From<*mut BaseValue> for SOMSlot {
+//     // we allow unsafe derefs since it's just for debugging
+//     #[allow(clippy::not_unsafe_ptr_arg_deref)]
+//     fn from(value: *mut BaseValue) -> Self {
+//         SOMSlot::RefValueSlot(RefValueSlot {
+//             value,
+//             #[cfg(debug_assertions)]
+//             expected_tag: (unsafe { *value }).tag(),
+//         })
+//     }
+// }
 
 impl Slot for SOMSlot {
     fn load(&self) -> Option<ObjectReference> {
@@ -56,37 +56,47 @@ impl Slot for SOMSlot {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RefValueSlot {
-    value: *mut BaseValue,
+    /// Reference to a value. Can be treated as a `*mut BaseValue`.
+    value: Address,
     #[cfg(debug_assertions)]
-    /// for debugging. Sometimes, a bug makes it that the value's type changes in between the time
-    /// it's stored and the time it's loaded.
-    /// So this can be used to check the original type, by manually comparing it to the NaN boxing tag list.
+    /// Tag of the value stored. Used in debugging to check that the data isn't malformed.
     expected_tag: u64,
 }
 
-unsafe impl Send for RefValueSlot {}
+impl From<*mut BaseValue> for SOMSlot {
+    #[allow(clippy::not_unsafe_ptr_arg_deref)] // It's just used in debug assertions.
+    fn from(value: *mut BaseValue) -> Self {
+        SOMSlot::RefValueSlot(RefValueSlot {
+            value: Address::from_mut_ptr(value),
+            #[cfg(debug_assertions)]
+            expected_tag: unsafe { (*value).tag() },
+        })
+    }
+}
 
 impl Slot for RefValueSlot {
     fn load(&self) -> Option<ObjectReference> {
         unsafe {
+            let val_ref = self.value.as_mut_ref::<BaseValue>();
             #[cfg(debug_assertions)] // a bit silly, but otherwise rust complains release versions don't have expected_tag
             debug_assert!(
-                (*self.value).is_ptr_type(),
+                val_ref.is_ptr_type(),
                 "load failed, pointer 0x{:x} does not point to a value pointer type (value: {}, tag: {}, expected_tag: {})",
-                self.value as usize,
-                (*self.value).as_u64(),
-                (*self.value).tag(),
+                self.value.as_usize(),
+                val_ref.as_u64(),
+                (*val_ref).tag(),
                 self.expected_tag
             );
-            ObjectReference::from_raw_address(Address::from_usize((*self.value).extract_pointer_bits() as usize))
+            ObjectReference::from_raw_address(Address::from_usize((*val_ref).extract_pointer_bits() as usize))
         }
     }
 
     fn store(&self, object: ObjectReference) {
         unsafe {
-            debug_assert!((*self.value).is_ptr_type());
-            *self.value = BaseValue::new((*self.value).tag(), object.to_raw_address().as_usize() as u64);
-            debug_assert!((*self.value).is_ptr_type());
+            let val_ref = self.value.as_mut_ref::<BaseValue>();
+            debug_assert!((*val_ref).is_ptr_type());
+            *val_ref = BaseValue::new((*val_ref).tag(), object.to_raw_address().as_usize() as u64);
+            debug_assert!((*val_ref).is_ptr_type());
         }
     }
 }

@@ -31,7 +31,7 @@ impl VMBinding for SOMVM {
     type VMSlot = SOMSlot;
     type VMMemorySlice = mmtk::vm::slot::UnimplementedMemorySlice<SOMSlot>;
 
-    const ALIGNMENT_VALUE: usize = 0xdead_beef;
+    const ALIGNMENT_VALUE: u8 = 0xff;
     /// Allowed minimal alignment in bytes.
     const MIN_ALIGNMENT: usize = 1 << 2;
     /// Allowed maximum alignment in bytes.

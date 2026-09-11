@@ -165,7 +165,7 @@ impl<ClassPtr: Clone> CoreClasses<ClassPtr> {
 }
 
 impl<Class: Clone> CoreClasses<Class> {
-    pub fn iter(&self) -> CoreClassesIter<Class> {
+    pub fn iter(&self) -> CoreClassesIter<'_, Class> {
         CoreClassesIter {
             fields: vec![
                 ("Object", &self.object_class),

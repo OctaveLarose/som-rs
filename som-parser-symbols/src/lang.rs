@@ -364,7 +364,7 @@ pub fn operator_method_def<'a>() -> impl Parser<MethodDef, &'a [Token], AstGenCt
     move |input: &'a [Token], genctxt: AstGenCtxt<'a>| {
         let ((op, rhs), input, genctxt) = operator().and(identifier()).and_left(exact(Token::Equal)).parse(input, genctxt)?;
 
-        genctxt.borrow_mut().add_params(&[rhs.clone()]);
+        genctxt.borrow_mut().add_params(std::slice::from_ref(&rhs));
 
         primitive()
             .or(method_body())
