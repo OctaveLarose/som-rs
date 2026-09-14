@@ -207,10 +207,10 @@ impl InnerGenCtxt for BlockGenCtxt<'_> {
         let mut cur_idx = 0;
         for entry in Bytecode::get_iter(body) {
             let size = match entry {
-                BcEntry::NoArg(_) => BC_SIZE_NO_ARGS as usize,
-                BcEntry::OneArg(_, _) => BC_SIZE_1_ARG as usize,
-                BcEntry::TwoArgs(_, _, _) => BC_SIZE_2_ARG as usize,
-                BcEntry::U16Arg(_, _) => BC_SIZE_U16_ARG as usize,
+                BcEntry::NoArg(_) => BC_SIZE_NO_ARGS,
+                BcEntry::OneArg(_, _) => BC_SIZE_1_ARG,
+                BcEntry::TwoArgs(_, _, _) => BC_SIZE_2_ARG,
+                BcEntry::U16Arg(_, _) => BC_SIZE_U16_ARG,
             };
             entries.push((cur_idx, entry));
             cur_idx += size;

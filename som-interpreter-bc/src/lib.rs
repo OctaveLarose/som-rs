@@ -2,6 +2,8 @@
 //! This is the interpreter for the Simple Object Machine.
 //!
 
+#![feature(explicit_tail_calls)]
+
 use crate::interpreter::Interpreter;
 use crate::universe::Universe;
 use std::sync::atomic::AtomicPtr;

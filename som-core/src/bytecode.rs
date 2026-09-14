@@ -46,11 +46,11 @@ impl Bytecode {
     pub const DUP_2: u8 = 38;
 }
 
-// `u16`s for easy addition to bytecode index.
-pub const BC_SIZE_NO_ARGS: u16 = 1;
-pub const BC_SIZE_1_ARG: u16 = 2;
-pub const BC_SIZE_2_ARG: u16 = 3;
-pub const BC_SIZE_U16_ARG: u16 = 3;
+// TODO: used to be u16?
+pub const BC_SIZE_NO_ARGS: usize = 1;
+pub const BC_SIZE_1_ARG: usize = 2;
+pub const BC_SIZE_2_ARG: usize = 3;
+pub const BC_SIZE_U16_ARG: usize = 3;
 
 enum BcType {
     NoArgs,
@@ -194,26 +194,26 @@ impl Iterator for BytecodeIter<'_> {
         match bc_type {
             BcType::NoArgs => {
                 let ret = BcEntry::NoArg(bc);
-                self.cur_idx += BC_SIZE_NO_ARGS as usize;
+                self.cur_idx += BC_SIZE_NO_ARGS;
                 Some(ret)
             }
             BcType::OneArg => {
                 let arg = self.bytecodes[self.cur_idx + 1];
                 let ret = BcEntry::OneArg(bc, arg);
-                self.cur_idx += BC_SIZE_1_ARG as usize;
+                self.cur_idx += BC_SIZE_1_ARG;
                 Some(ret)
             }
             BcType::TwoArg => {
                 let arg1 = self.bytecodes[self.cur_idx + 1];
                 let arg2 = self.bytecodes[self.cur_idx + 2];
                 let ret = BcEntry::TwoArgs(bc, arg1, arg2);
-                self.cur_idx += BC_SIZE_2_ARG as usize;
+                self.cur_idx += BC_SIZE_2_ARG;
                 Some(ret)
             }
             BcType::U16Arg => {
                 let big_arg = read_u16(self.bytecodes, self.cur_idx + 1);
                 let ret = BcEntry::U16Arg(bc, big_arg);
-                self.cur_idx += BC_SIZE_U16_ARG as usize;
+                self.cur_idx += BC_SIZE_U16_ARG;
                 Some(ret)
             }
         }

@@ -118,8 +118,8 @@ impl GcType for Class {
     fn scan_object(class: Gc<Self>, visit_slot_fn: &mut dyn FnMut(som_gc::slot::SOMSlot)) {
         visit_slot_fn(SOMSlot::from(&class.class));
 
-        if class.super_class.is_some() {
-            visit_slot_fn(SOMSlot::from(class.super_class.as_ref().unwrap()));
+        if let Some(scls) = &class.super_class {
+            visit_slot_fn(SOMSlot::from(scls));
         }
 
         for (_, method_ref) in class.methods.iter() {

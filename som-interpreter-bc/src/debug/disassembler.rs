@@ -133,10 +133,10 @@ fn disassemble_body(universe: &Universe, class: &Class, level: usize, env: &mut 
         }
 
         match bytecode {
-            BcEntry::NoArg(..) => cur_idx += BC_SIZE_NO_ARGS as usize,
-            BcEntry::OneArg(..) => cur_idx += BC_SIZE_1_ARG as usize,
-            BcEntry::TwoArgs(..) => cur_idx += BC_SIZE_2_ARG as usize,
-            BcEntry::U16Arg(..) => cur_idx += BC_SIZE_U16_ARG as usize,
+            BcEntry::NoArg(..) => cur_idx += BC_SIZE_NO_ARGS,
+            BcEntry::OneArg(..) => cur_idx += BC_SIZE_1_ARG,
+            BcEntry::TwoArgs(..) => cur_idx += BC_SIZE_2_ARG,
+            BcEntry::U16Arg(..) => cur_idx += BC_SIZE_U16_ARG,
         }
     }
 }
