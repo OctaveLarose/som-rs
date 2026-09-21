@@ -29,6 +29,7 @@ pub mod gc;
 
 /// Used for debugging.
 pub mod debug;
+pub mod jit;
 
 // NB: I made them macros just in case the compiler wouldn't necessarily inline them with `inline(always)`, but really that's not a serious concern at all.
 // So we can make them functions instead in the future. Same difference, I feel.

@@ -24,6 +24,8 @@ anyhow = "1.0.51"
 # consistently-ordered hashmaps
 indexmap = "2.6.0"
 
+inkwell = { version = "0.10.0", features = ["llvm22-1"] }
+
 # big integers
 num-bigint = "0.4.6"
 num-traits = "0.2.14"
