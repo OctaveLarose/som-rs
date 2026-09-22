@@ -17,6 +17,7 @@ pub(crate) const OFFSET_TO_VALUES: usize = size_of::<Frame>();
 // TODO: fix hacky conversions from u8 to usize and vice-versa, settle on a more uniform scheme (i.e. only usizes..)
 
 /// Represents a stack frame.
+#[repr(C)]
 pub struct Frame {
     /// The previous frame. Frames are handled as a linked list
     pub prev_frame: Gc<Frame>,

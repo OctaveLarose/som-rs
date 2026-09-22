@@ -33,6 +33,7 @@ impl BasicMethodInfo {
 
 /// Data for a method, or a block.
 // TODO: not a fan of the name. But this *is* info/metadata about each method... Still, a rename would be nice.
+#[repr(C)]
 #[derive(Clone)]
 pub struct MethodInfo {
     pub basic_method_info: BasicMethodInfo,
