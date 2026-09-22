@@ -3,7 +3,6 @@ use std::convert::{TryFrom, TryInto};
 
 use super::PrimInfo;
 use crate::gc::VecValue;
-use crate::interpreter::Interpreter;
 use crate::pop_args_from_stack;
 use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
@@ -52,28 +51,28 @@ fn length(receiver: VecValue) -> Result<i32, Error> {
     receiver.len().try_into().context("could not convert `usize` to `i32`")
 }
 
-fn new(interp: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
+fn new(universe: &mut Universe) -> Result<(), Error> {
     // this whole thing is an attempt at fixing a GC related bug when allocating an Array
     // I think it did work, to be fair... but TODO clean up.
 
-    std::hint::black_box(&interp.current_frame);
+    std::hint::black_box(&universe.current_frame);
 
-    let count = usize::try_from(stack_pop!(interp.sp).as_integer().unwrap())?;
-    stack_drop!(interp.sp); // receiver is just an unneeded Array class
+    let count = usize::try_from(stack_pop!(universe.sp).as_integer().unwrap())?;
+    stack_drop!(universe.sp); // receiver is just an unneeded Array class
 
     let arr_ptr: VecValue = VecValue(universe.gc_interface.alloc_slice(&vec![Value::NIL; count], AllocSiteMarker::VecValue));
 
-    stack_push!(interp.sp, arr_ptr.into_value());
+    stack_push!(universe.sp, arr_ptr.into_value());
     Ok(())
 }
 
-fn copy(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValue, Error> {
-    let arr: VecValue = stack_last!(interp.sp).as_array().unwrap();
+fn copy(universe: &mut Universe) -> Result<VecValue, Error> {
+    let arr: VecValue = stack_last!(universe.sp).as_array().unwrap();
     std::hint::black_box(&arr); // paranoia, in case the compiler gets ideas about reusing that variable
     let slice_size = arr.0.get_true_size();
     let slice_addr = universe.gc_interface.request_memory_for_slice_type(slice_size, AllocSiteMarker::VecValue);
 
-    pop_args_from_stack!(interp, arr2 => VecValue);
+    pop_args_from_stack!(universe, arr2 => VecValue);
     std::hint::black_box(&arr2);
 
     let copied_arr: Vec<Value> = arr2.iter().copied().collect();

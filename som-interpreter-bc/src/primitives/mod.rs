@@ -24,13 +24,12 @@ pub mod system;
 pub mod r#true;
 
 pub use self::blocks::{block1, block2, block3};
-use crate::interpreter::Interpreter;
 use crate::universe::Universe;
 use crate::value::convert::Primitive;
 use anyhow::Error;
 use once_cell::sync::Lazy;
 
-pub type PrimitiveFn = dyn Fn(&mut Interpreter, &mut Universe, usize) -> Result<(), Error> + Send + Sync + 'static;
+pub type PrimitiveFn = dyn Fn(&mut Universe, usize) -> Result<(), Error> + Send + Sync + 'static;
 
 pub type PrimInfo = (&'static str, &'static PrimitiveFn, bool);
 
@@ -85,10 +84,10 @@ pub static UNIMPLEM_PRIMITIVE: Lazy<Box<&'static PrimitiveFn>> = Lazy::new(|| Bo
 
 #[macro_export]
 macro_rules! pop_args_from_stack {
-    ($interp:ident,) => {}; // base case
+    ($universe:ident,) => {}; // base case
 
-    ($interp:ident, $var:ident => $ty:ty $(, $rest:ident => $rest_ty:ty )* $(,)?) => {
-        pop_args_from_stack!($interp, $( $rest => $rest_ty ),*);
-        let $var: $ty = $crate::value::convert::FromArgs::from_args(stack_pop!($interp.sp)).unwrap();
+    ($universe:ident, $var:ident => $ty:ty $(, $rest:ident => $rest_ty:ty )* $(,)?) => {
+        pop_args_from_stack!($universe, $( $rest => $rest_ty ),*);
+        let $var: $ty = $crate::value::convert::FromArgs::from_args(stack_pop!($universe.sp)).unwrap();
     };
 }

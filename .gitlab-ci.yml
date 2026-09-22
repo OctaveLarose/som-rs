@@ -17,6 +17,7 @@ build-and-test-interpreters:
     - cargo build --release --features=som-gc/semispace
     - cargo clippy
 
+    - RUST_TEST_THREADS=1 cargo test -p som-interpreter-bc --features som-gc/semispace,switch-dispatch
     - RUST_TEST_THREADS=1 cargo test --features som-gc/semispace
 
     # Package and Upload

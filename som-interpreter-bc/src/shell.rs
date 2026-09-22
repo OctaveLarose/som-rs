@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
+
+use std::cell::UnsafeCell;
 use std::io;
 use std::io::{BufRead, Write};
 use std::time::Instant;
@@ -8,9 +10,10 @@ use anyhow::Error;
 use som_gc::gcref::Gc;
 use som_interpreter_bc::compiler;
 use som_interpreter_bc::compiler::compile::compile_class;
+use som_interpreter_bc::interpreter::run;
 use som_interpreter_bc::vm_objects::frame::Frame;
 use som_interpreter_bc::vm_objects::method::Invoke;
-use som_interpreter_bc::{interpreter::Interpreter, universe::Universe, value::Value};
+use som_interpreter_bc::{universe::Universe, value::Value};
 use som_lexer::{Lexer, Token};
 use som_parser::lang;
 
@@ -83,8 +86,8 @@ pub fn interactive(universe: &mut Universe, verbose: bool) -> Result<(), Error> 
         let start = Instant::now();
 
         let frame_ptr = Frame::alloc_initial_method(method, &[Value::Class(class), last_value], &mut universe.gc_interface);
-        let mut interpreter = Interpreter::new(frame_ptr);
-        last_value = interpreter.run(universe).expect("failed to run");
+        universe.current_frame = UnsafeCell::from(frame_ptr);
+        last_value = run(universe).expect("failed to run");
 
         let elapsed = start.elapsed();
         if verbose {

@@ -1,7 +1,7 @@
 use anyhow::Error;
 use once_cell::sync::Lazy;
 
-use crate::interpreter::Interpreter;
+use crate::interpreter::push_block_frame;
 use crate::primitives::PrimInfo;
 use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
@@ -32,17 +32,17 @@ fn or(_self: Value, _other: Value) -> Result<bool, Error> {
 }
 
 /// See equivalent function for the false primitive.
-fn and_if_true(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
-    let cond_val = stack_last!(interpreter.sp);
+fn and_if_true(universe: &mut Universe) -> Result<(), Error> {
+    let cond_val = stack_last!(universe.sp);
 
     if cond_val.as_block().is_some() {
-        interpreter.push_block_frame(1, &mut universe.gc_interface);
-        let stack_marker = stack_pop!(interpreter.sp);
-        *stack_last!(interpreter.sp) = stack_marker; // the "True". the "Block" was already consumed and put into the new frame
+        push_block_frame(universe, 1);
+        let stack_marker = stack_pop!(universe.sp);
+        *stack_last!(universe.sp) = stack_marker; // the "True". the "Block" was already consumed and put into the new frame
     } else {
-        stack_drop!(interpreter.sp);
-        stack_drop!(interpreter.sp);
-        stack_push!(interpreter.sp, *cond_val);
+        stack_drop!(universe.sp);
+        stack_drop!(universe.sp);
+        stack_push!(universe.sp, *cond_val);
     }
     Ok(())
 }

@@ -5,7 +5,7 @@ use crate::vm_objects::class::Class;
 use crate::vm_objects::frame::Frame;
 use crate::vm_objects::instance::Instance;
 use crate::vm_objects::method::{Method, MethodInfo};
-use crate::{INTERPRETER_RAW_PTR_CONST, UNIVERSE_RAW_PTR_CONST};
+use crate::UNIVERSE_RAW_PTR_CONST;
 use log::{debug, trace};
 use mmtk::util::{Address, ObjectReference};
 use mmtk::vm::{ObjectModel, SlotVisitor};
@@ -156,24 +156,24 @@ fn get_roots_in_mutator_thread(_mutator: &mut Mutator<SOMVM>) -> Vec<SOMSlot> {
         };
 
         assert!(
-            !(*UNIVERSE_RAW_PTR_CONST.as_ptr()).is_null() && !(*INTERPRETER_RAW_PTR_CONST.as_ptr()).is_null(),
+            !(*UNIVERSE_RAW_PTR_CONST.as_ptr()).is_null(),
             "GC triggered while the system wasn't finished initializing."
         );
 
         // walk the frame list.
-        let current_frame_addr = &*(**INTERPRETER_RAW_PTR_CONST.as_ptr()).current_frame.get();
+        let current_frame_addr = &*(**UNIVERSE_RAW_PTR_CONST.as_ptr()).current_frame.get();
         debug!(
             "scanning root: current_frame (method: {})",
             current_frame_addr.context.basic_method_info.signature
         );
         to_process_fn(SOMSlot::from(current_frame_addr));
 
-        let frame_method_root = &(**INTERPRETER_RAW_PTR_CONST.as_ptr()).frame_method_root;
+        let frame_method_root = &(**UNIVERSE_RAW_PTR_CONST.as_ptr()).frame_method_root;
         if !frame_method_root.is_empty() {
             to_process_fn(SOMSlot::from(frame_method_root));
         }
 
-        let frame_args_root = &(**INTERPRETER_RAW_PTR_CONST.as_ptr()).frame_args_root;
+        let frame_args_root = &(**UNIVERSE_RAW_PTR_CONST.as_ptr()).frame_args_root;
         if let Some(frame_args) = frame_args_root {
             for arg in frame_args {
                 visit_value(arg, &mut to_process_fn);
@@ -181,8 +181,8 @@ fn get_roots_in_mutator_thread(_mutator: &mut Mutator<SOMVM>) -> Vec<SOMSlot> {
         }
 
         debug!("scanning roots: stack");
-        let mut sp = (**INTERPRETER_RAW_PTR_CONST.as_ptr()).sp.sub(1);
-        while sp > (**INTERPRETER_RAW_PTR_CONST.as_ptr()).base_sp {
+        let mut sp = (**UNIVERSE_RAW_PTR_CONST.as_ptr()).sp.sub(1);
+        while sp > (**UNIVERSE_RAW_PTR_CONST.as_ptr()).base_sp {
             visit_value(&*sp, &mut to_process_fn);
             sp = sp.sub(1);
         }

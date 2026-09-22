@@ -1,5 +1,4 @@
 use crate::gc::VecValue;
-use crate::interpreter::Interpreter;
 use crate::pop_args_from_stack;
 use crate::primitives::PrimInfo;
 use crate::primitives::PrimitiveFn;
@@ -38,45 +37,45 @@ fn superclass(receiver: Gc<Class>) -> Result<Value, Error> {
     Ok(super_class_val)
 }
 
-fn new(interp: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
-    std::hint::black_box(&interp.current_frame);
+fn new(universe: &mut Universe) -> Result<(), Error> {
+    std::hint::black_box(&universe.current_frame);
 
-    let nbr_fields = stack_last!(interp.sp).as_class().unwrap().get_nbr_fields();
+    let nbr_fields = stack_last!(universe.sp).as_class().unwrap().get_nbr_fields();
     let size = size_of::<Instance>() + (nbr_fields * size_of::<Value>());
 
     let mut instance_ptr: Gc<Instance> = universe.gc_interface.request_memory_for_type(size, AllocSiteMarker::Instance);
-    *instance_ptr = Instance::from_class(stack_last!(interp.sp).as_class().unwrap());
+    *instance_ptr = Instance::from_class(stack_last!(universe.sp).as_class().unwrap());
 
     for idx in 0..nbr_fields {
         Instance::assign_field(&instance_ptr, idx, Value::NIL)
     }
 
-    stack_drop!(interp.sp);
-    stack_push!(interp.sp, Value::Instance(instance_ptr));
+    stack_drop!(universe.sp);
+    stack_push!(universe.sp, Value::Instance(instance_ptr));
 
     Ok(())
 }
 
-fn name(interp: &mut Interpreter, universe: &mut Universe) -> Result<Interned, Error> {
-    pop_args_from_stack!(interp, receiver => Gc<Class>);
+fn name(universe: &mut Universe) -> Result<Interned, Error> {
+    pop_args_from_stack!(universe, receiver => Gc<Class>);
     Ok(universe.intern_symbol(receiver.name()))
 }
 
-fn methods(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValue, Error> {
-    let cls: Gc<Class> = stack_last!(interp.sp).as_class().unwrap();
+fn methods(universe: &mut Universe) -> Result<VecValue, Error> {
+    let cls: Gc<Class> = stack_last!(universe.sp).as_class().unwrap();
     std::hint::black_box(&cls); // paranoia, in case the compiler gets ideas about reusing that variable
     let slice_size = cls.methods.len() * size_of::<Value>();
     let slice_addr = universe.gc_interface.request_memory_for_slice_type(slice_size, AllocSiteMarker::VecValue);
 
-    pop_args_from_stack!(interp, receiver => Gc<Class>);
+    pop_args_from_stack!(universe, receiver => Gc<Class>);
     let methods: Vec<Value> = receiver.methods.values().cloned().map(Value::Invokable).collect();
     let allocated: GcSlice<Value> = universe.gc_interface.write_slice_to_addr(slice_addr, &methods);
 
     Ok(VecValue(allocated))
 }
 
-fn fields(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValue, Error> {
-    pop_args_from_stack!(interp, receiver => Gc<Class>);
+fn fields(universe: &mut Universe) -> Result<VecValue, Error> {
+    pop_args_from_stack!(universe, receiver => Gc<Class>);
     let fields: Vec<Value> = receiver.field_names.iter().copied().map(Value::Symbol).collect();
     Ok(VecValue(universe.gc_interface.alloc_slice(&fields, AllocSiteMarker::VecValue)))
 }

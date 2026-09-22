@@ -1,5 +1,4 @@
 use crate::gc::VecValue;
-use crate::interpreter::Interpreter;
 use crate::pop_args_from_stack;
 use crate::primitives::PrimInfo;
 use crate::primitives::PrimitiveFn;
@@ -27,18 +26,17 @@ fn holder(invokable: Gc<Method>) -> Result<Gc<Class>, Error> {
     Ok(invokable.holder().clone())
 }
 
-fn signature(interp: &mut Interpreter, universe: &mut Universe) -> Result<Interned, Error> {
-    pop_args_from_stack!(interp, invokable => Gc<Method>);
+fn signature(universe: &mut Universe) -> Result<Interned, Error> {
+    pop_args_from_stack!(universe, invokable => Gc<Method>);
     Ok(universe.intern_symbol(invokable.signature()))
 }
 
-fn invoke_on_with(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
-    pop_args_from_stack!(interpreter, invokable => Gc<Method>, receiver => Value, arguments => VecValue);
+fn invoke_on_with(universe: &mut Universe) -> Result<(), Error> {
+    pop_args_from_stack!(universe, invokable => Gc<Method>, receiver => Value, arguments => VecValue);
 
     // TODO: this should NOT pop. a frame allocation causes a GC bug here, as far as I know.
 
     invokable.invoke(
-        interpreter,
         universe,
         receiver,
         arguments.iter().copied().collect(), // todo lame to clone tbh

@@ -4,7 +4,6 @@ use som_value::value_ptr::HasPointerTag;
 use std::convert::TryFrom;
 
 use crate::gc::VecValue;
-use crate::interpreter::Interpreter;
 use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
 use crate::value::Value;
@@ -183,23 +182,22 @@ impl IntoValue for Gc<Method> {
 }
 
 pub trait Primitive<T>: Sized + Send + Sync + 'static {
-    fn invoke(&self, interpreter: &mut Interpreter, universe: &mut Universe, nbr_args: usize) -> Result<(), Error>;
+    fn invoke(&self, universe: &mut Universe, nbr_args: usize) -> Result<(), Error>;
 
     fn into_func(self) -> &'static PrimitiveFn {
-        let boxed =
-            Box::new(move |interpreter: &mut Interpreter, universe: &mut Universe, nbr_args: usize| self.invoke(interpreter, universe, nbr_args));
+        let boxed = Box::new(move |universe: &mut Universe, nbr_args: usize| self.invoke(universe, nbr_args));
         Box::leak(boxed)
     }
 }
 
 pub trait IntoReturn {
-    fn into_return(self, interpreter: &mut Interpreter, nbr_args: usize) -> Result<(), Error>;
+    fn into_return(self, universe: &mut Universe, nbr_args: usize) -> Result<(), Error>;
 }
 
 impl<T: IntoValue> IntoReturn for T {
-    fn into_return(self, interpreter: &mut Interpreter, nbr_args: usize) -> Result<(), Error> {
-        stack_truncate!(interpreter.sp, nbr_args);
-        stack_push!(interpreter.sp, self.into_value());
+    fn into_return(self, universe: &mut Universe, nbr_args: usize) -> Result<(), Error> {
+        stack_truncate!(universe.sp, nbr_args);
+        stack_push!(universe.sp, self.into_value());
         Ok(())
     }
 }
@@ -223,7 +221,7 @@ impl<T: IntoValue> IntoValue for Option<T> {
 }
 
 impl IntoReturn for () {
-    fn into_return(self, _: &mut Interpreter, _: usize) -> Result<(), Error> {
+    fn into_return(self, _: &mut Universe, _: usize) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -266,9 +264,9 @@ macro_rules! derive_prims {
             R: $crate::value::convert::IntoValue,
             $($ty: $crate::value::convert::FromArgs),*,
         {
-            fn invoke(&self, interpreter: &mut $crate::interpreter::Interpreter, _: &mut $crate::universe::Universe, nbr_args: usize) -> Result<(), Error> {
+            fn invoke(&self, universe: &mut $crate::universe::Universe, nbr_args: usize) -> Result<(), Error> {
                 let result = {
-                    let args: &[Value] = stack_n_last_elements!(interpreter.sp, nbr_args);
+                    let args: &[Value] = stack_n_last_elements!(universe.sp, nbr_args);
                     let mut args_iter = args.iter();
                     $(
                         #[allow(non_snake_case)]
@@ -278,8 +276,8 @@ macro_rules! derive_prims {
                    (self)($($ty),*,)?.into_value()
                 };
 
-                stack_truncate!(interpreter.sp, nbr_args);
-                stack_push!(interpreter.sp, result);
+                stack_truncate!(universe.sp, nbr_args);
+                stack_push!(universe.sp, result);
                 Ok(())
             }
         }
@@ -296,12 +294,12 @@ derive_prims!(_A, _B, _C, _D);
 /// for ensuring possible GC triggers can't invalidate their arguments, or the primitive's behavior.
 impl<F, R> Primitive<R> for F
 where
-    F: Fn(&mut Interpreter, &mut Universe) -> Result<R, Error> + Send + Sync + 'static,
+    F: Fn(&mut Universe) -> Result<R, Error> + Send + Sync + 'static,
     R: crate::value::convert::IntoValue,
 {
-    fn invoke(&self, interpreter: &mut Interpreter, universe: &mut Universe, _: usize) -> Result<(), Error> {
-        let result = self(interpreter, universe)?.into_value();
-        stack_push!(interpreter.sp, result);
+    fn invoke(&self, universe: &mut Universe, _: usize) -> Result<(), Error> {
+        let result = self(universe)?.into_value();
+        stack_push!(universe.sp, result);
         Ok(())
     }
 }
@@ -309,9 +307,9 @@ where
 /// For primitives who have no return values... or want complete control over their arguments and return value.
 impl<F> Primitive<()> for F
 where
-    F: Fn(&mut Interpreter, &mut Universe) -> Result<(), Error> + Send + Sync + 'static,
+    F: Fn(&mut Universe) -> Result<(), Error> + Send + Sync + 'static,
 {
-    fn invoke(&self, interpreter: &mut Interpreter, universe: &mut Universe, _: usize) -> Result<(), Error> {
-        self(interpreter, universe)
+    fn invoke(&self, universe: &mut Universe, _: usize) -> Result<(), Error> {
+        self(universe)
     }
 }

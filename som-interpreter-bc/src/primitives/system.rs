@@ -4,7 +4,6 @@ use std::fs;
 use std::io::Write;
 
 use crate::gc::VecValue;
-use crate::interpreter::Interpreter;
 use crate::pop_args_from_stack;
 use crate::primitives::PrimInfo;
 use crate::primitives::PrimitiveFn;
@@ -40,8 +39,8 @@ pub static INSTANCE_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| {
 });
 pub static CLASS_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| Box::new([]));
 
-fn load_file(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<Option<Gc<String>>, Error> {
-    pop_args_from_stack!(interpreter, _a => Value, path => StringLike);
+fn load_file(universe: &mut Universe) -> Result<Option<Gc<String>>, Error> {
+    pop_args_from_stack!(universe, _a => Value, path => StringLike);
     let path = path.as_str(|sym| universe.lookup_symbol(sym));
 
     let Ok(value) = fs::read_to_string(&*path) else {
@@ -51,8 +50,8 @@ fn load_file(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<O
     Ok(Some(universe.gc_interface.alloc(value, AllocSiteMarker::String)))
 }
 
-fn print_string(interp: &mut Interpreter, universe: &mut Universe) -> Result<Value, Error> {
-    pop_args_from_stack!(interp, system => Value, string => StringLike);
+fn print_string(universe: &mut Universe) -> Result<Value, Error> {
+    pop_args_from_stack!(universe, system => Value, string => StringLike);
 
     let string = string.as_str(|sym| universe.lookup_symbol(sym));
     print!("{string}");
@@ -66,8 +65,8 @@ fn print_newline(_: Value) -> Result<Nil, Error> {
     Ok(Nil)
 }
 
-fn error_print(interp: &mut Interpreter, universe: &mut Universe) -> Result<Value, Error> {
-    pop_args_from_stack!(interp, system => Value, string => StringLike);
+fn error_print(universe: &mut Universe) -> Result<Value, Error> {
+    pop_args_from_stack!(universe, system => Value, string => StringLike);
 
     let string = string.as_str(|sym| universe.lookup_symbol(sym));
 
@@ -77,49 +76,49 @@ fn error_print(interp: &mut Interpreter, universe: &mut Universe) -> Result<Valu
     Ok(system)
 }
 
-fn error_println(interp: &mut Interpreter, universe: &mut Universe) -> Result<Value, Error> {
-    pop_args_from_stack!(interp, system => Value, string => StringLike);
+fn error_println(universe: &mut Universe) -> Result<Value, Error> {
+    pop_args_from_stack!(universe, system => Value, string => StringLike);
     let string = string.as_str(|sym| universe.lookup_symbol(sym));
     eprintln!("{string}");
     Ok(system)
 }
 
-fn load(interp: &mut Interpreter, universe: &mut Universe) -> Result<Gc<Class>, Error> {
-    pop_args_from_stack!(interp, _a => Value, class_name => Interned);
+fn load(universe: &mut Universe) -> Result<Gc<Class>, Error> {
+    pop_args_from_stack!(universe, _a => Value, class_name => Interned);
     let class_name = universe.lookup_symbol(class_name).to_string();
     let class = universe.load_class(class_name)?;
 
     Ok(class)
 }
 
-fn has_global(interp: &mut Interpreter, universe: &mut Universe) -> Result<bool, Error> {
-    pop_args_from_stack!(interp, _a => Value, name => Interned);
+fn has_global(universe: &mut Universe) -> Result<bool, Error> {
+    pop_args_from_stack!(universe, _a => Value, name => Interned);
     Ok(universe.has_global(name))
 }
 
-fn global(interp: &mut Interpreter, universe: &mut Universe) -> Result<Option<Value>, Error> {
-    pop_args_from_stack!(interp, _a => Value, name => Interned);
+fn global(universe: &mut Universe) -> Result<Option<Value>, Error> {
+    pop_args_from_stack!(universe, _a => Value, name => Interned);
 
     Ok(universe.lookup_global(name))
 }
 
-fn global_put(interp: &mut Interpreter, universe: &mut Universe) -> Result<Option<Value>, Error> {
-    pop_args_from_stack!(interp, _a => Value, name => Interned, value => Value);
+fn global_put(universe: &mut Universe) -> Result<Option<Value>, Error> {
+    pop_args_from_stack!(universe, _a => Value, name => Interned, value => Value);
     universe.assign_global(name, value);
     Ok(Some(value))
 }
 
-fn exit(interp: &mut Interpreter, _: &mut Universe) -> Result<(), Error> {
-    pop_args_from_stack!(interp, _a => Value, status => i32);
+fn exit(universe: &mut Universe) -> Result<(), Error> {
+    pop_args_from_stack!(universe, _a => Value, status => i32);
     std::process::exit(status);
 }
 
-fn ticks(interpreter: &mut Interpreter, _: &mut Universe) -> Result<i32, Error> {
-    pop_args_from_stack!(interpreter, _a => Value);
+fn ticks(universe: &mut Universe) -> Result<i32, Error> {
+    pop_args_from_stack!(universe, _a => Value);
 
     const SIGNATURE: &str = "System>>#ticks";
 
-    interpreter
+    universe
         .start_time
         .elapsed()
         .as_micros()
@@ -127,11 +126,11 @@ fn ticks(interpreter: &mut Interpreter, _: &mut Universe) -> Result<i32, Error> 
         .with_context(|| format!("`{SIGNATURE}`: could not convert `i128` to `i32`"))
 }
 
-fn time(interpreter: &mut Interpreter, _: &mut Universe) -> Result<i32, Error> {
+fn time(universe: &mut Universe) -> Result<i32, Error> {
     const SIGNATURE: &str = "System>>#time";
-    pop_args_from_stack!(interpreter, _a => Value);
+    pop_args_from_stack!(universe, _a => Value);
 
-    interpreter
+    universe
         .start_time
         .elapsed()
         .as_millis()
@@ -139,12 +138,12 @@ fn time(interpreter: &mut Interpreter, _: &mut Universe) -> Result<i32, Error> {
         .with_context(|| format!("`{SIGNATURE}`: could not convert `i128` to `i32`"))
 }
 
-fn print_stack_trace(interpreter: &mut Interpreter, _: &mut Universe) -> Result<bool, Error> {
-    pop_args_from_stack!(interpreter, _a => Value);
+fn print_stack_trace(universe: &mut Universe) -> Result<bool, Error> {
+    pop_args_from_stack!(universe, _a => Value);
 
     let frame_stack = {
         let mut frame_stack = vec![];
-        let mut current_frame = interpreter.get_current_frame();
+        let mut current_frame = universe.get_current_frame();
         while !current_frame.is_empty() {
             frame_stack.push(current_frame.clone());
             current_frame = current_frame.prev_frame.clone();
@@ -168,13 +167,13 @@ fn print_stack_trace(interpreter: &mut Interpreter, _: &mut Universe) -> Result<
     Ok(true)
 }
 
-fn full_gc(interp: &mut Interpreter, universe: &mut Universe) -> Result<bool, Error> {
-    pop_args_from_stack!(interp, _a => Value);
+fn full_gc(universe: &mut Universe) -> Result<bool, Error> {
+    pop_args_from_stack!(universe, _a => Value);
     Ok(universe.gc_interface.full_gc_request())
 }
 
-fn gc_stats(interp: &mut Interpreter, universe: &mut Universe) -> Result<VecValue, Error> {
-    pop_args_from_stack!(interp, _a => Value);
+fn gc_stats(universe: &mut Universe) -> Result<VecValue, Error> {
+    pop_args_from_stack!(universe, _a => Value);
 
     let gc_interface = &mut universe.gc_interface;
 

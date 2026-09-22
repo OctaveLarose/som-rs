@@ -22,7 +22,7 @@ use som_interpreter_bc::universe::Universe;
 use som_interpreter_bc::value::Value;
 use som_interpreter_bc::vm_objects::class::Class;
 use som_interpreter_bc::vm_objects::method::Method;
-use som_interpreter_bc::{INTERPRETER_RAW_PTR_CONST, UNIVERSE_RAW_PTR_CONST};
+use som_interpreter_bc::{interpreter, UNIVERSE_RAW_PTR_CONST};
 
 #[cfg(feature = "jemalloc")]
 #[global_allocator]
@@ -70,13 +70,12 @@ fn run() -> anyhow::Result<()> {
         .map(|arg| Value::String(universe.gc_interface.alloc(arg, AllocSiteMarker::String)))
         .collect();
 
-    let mut interpreter = universe.initialize(args).expect("issue running program");
+    universe.initialize(args).expect("issue running program");
 
     som_gc::handshake_with_vm(&mut universe.gc_interface, get_callbacks_for_gc());
-    INTERPRETER_RAW_PTR_CONST.store(&mut interpreter, Ordering::SeqCst);
     UNIVERSE_RAW_PTR_CONST.store(&mut universe, Ordering::SeqCst);
 
-    interpreter.run(&mut universe);
+    interpreter::run(&mut universe);
 
     //let _total_nbr_frames = &universe
     //    .gc_interface

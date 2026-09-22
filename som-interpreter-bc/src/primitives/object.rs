@@ -3,7 +3,6 @@ use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
 
 use crate::gc::VecValue;
-use crate::interpreter::Interpreter;
 use crate::pop_args_from_stack;
 use crate::primitives::PrimInfo;
 use crate::primitives::PrimitiveFn;
@@ -40,8 +39,8 @@ pub static INSTANCE_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| {
 });
 pub static CLASS_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| Box::new([]));
 
-fn class(interp: &mut Interpreter, universe: &mut Universe) -> Result<Gc<Class>, Error> {
-    pop_args_from_stack!(interp, receiver => Value);
+fn class(universe: &mut Universe) -> Result<Gc<Class>, Error> {
+    pop_args_from_stack!(universe, receiver => Value);
     Ok(receiver.class(universe))
 }
 
@@ -70,18 +69,18 @@ fn eq(receiver: Value, other: Value) -> Result<bool, Error> {
     Ok(receiver == other)
 }
 
-fn perform(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
+fn perform(universe: &mut Universe) -> Result<(), Error> {
     const SIGNATURE: &str = "Object>>#perform:";
 
     // TODO: popping from the previous frame in this, and all the other perform family function should NOT happen
     // if GC happens, that makes those values (receiver, signature) orphaned, and might cause a crash. it's highly unlikely in practice but TODO fix
-    pop_args_from_stack!(interpreter, receiver => Value, signature => Interned);
+    pop_args_from_stack!(universe, receiver => Value, signature => Interned);
 
     let Some(invokable) = receiver.lookup_method(universe, signature) else {
         let signature_str = universe.lookup_symbol(signature).to_owned();
         let args = vec![receiver];
         return universe
-            .does_not_understand(interpreter, receiver, signature, &args)
+            .does_not_understand(receiver, signature, &args)
             .with_context(|| format!("`{SIGNATURE}`: method `{signature_str}` not found for `{}`", receiver.to_string(universe),));
     };
 
@@ -92,48 +91,48 @@ fn perform(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(),
     //     frame.stack_push(ret);
     // }
 
-    invokable.invoke(interpreter, universe, receiver, vec![]);
+    invokable.invoke(universe, receiver, vec![]);
     Ok(())
 }
 
-fn perform_with_arguments(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
+fn perform_with_arguments(universe: &mut Universe) -> Result<(), Error> {
     const SIGNATURE: &str = "Object>>#perform:withArguments:";
 
-    pop_args_from_stack!(interpreter, receiver => Value, signature => Interned, arguments => VecValue);
+    pop_args_from_stack!(universe, receiver => Value, signature => Interned, arguments => VecValue);
 
     let Some(invokable) = receiver.lookup_method(universe, signature) else {
         let signature_str = universe.lookup_symbol(signature).to_owned();
         let args: Vec<Value> = std::iter::once(receiver).chain(arguments.iter().copied()).collect(); // lame clone
         return universe
-            .does_not_understand(interpreter, receiver, signature, &args)
+            .does_not_understand(receiver, signature, &args)
             .with_context(|| format!("`{SIGNATURE}`: method `{signature_str}` not found for `{}`", receiver.to_string(universe)));
     };
 
-    invokable.invoke(interpreter, universe, receiver, arguments.iter().copied().collect());
+    invokable.invoke(universe, receiver, arguments.iter().copied().collect());
     Ok(())
 }
 
-fn perform_in_super_class(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
+fn perform_in_super_class(universe: &mut Universe) -> Result<(), Error> {
     const SIGNATURE: &str = "Object>>#perform:inSuperclass:";
 
-    pop_args_from_stack!(interpreter, receiver => Value, signature => Interned, class => Gc<Class>);
+    pop_args_from_stack!(universe, receiver => Value, signature => Interned, class => Gc<Class>);
 
     let Some(invokable) = class.lookup_method(signature) else {
         let signature_str = universe.lookup_symbol(signature).to_owned();
         let args = vec![receiver];
         return universe
-            .does_not_understand(interpreter, Value::Class(class), signature, &args)
+            .does_not_understand(Value::Class(class), signature, &args)
             .with_context(|| format!("`{SIGNATURE}`: method `{signature_str}` not found for `{}`", receiver.to_string(universe)));
     };
 
-    invokable.invoke(interpreter, universe, receiver, vec![]);
+    invokable.invoke(universe, receiver, vec![]);
     Ok(())
 }
 
-fn perform_with_arguments_in_super_class(interpreter: &mut Interpreter, universe: &mut Universe) -> Result<(), Error> {
+fn perform_with_arguments_in_super_class(universe: &mut Universe) -> Result<(), Error> {
     const SIGNATURE: &str = "Object>>#perform:withArguments:inSuperclass:";
 
-    pop_args_from_stack!(interpreter, receiver => Value, signature => Interned, arguments => VecValue, class => Gc<Class>);
+    pop_args_from_stack!(universe, receiver => Value, signature => Interned, arguments => VecValue, class => Gc<Class>);
 
     let method = class.lookup_method(signature);
 
@@ -141,11 +140,11 @@ fn perform_with_arguments_in_super_class(interpreter: &mut Interpreter, universe
         let signature_str = universe.lookup_symbol(signature).to_owned();
         let args: Vec<Value> = std::iter::once(receiver).chain(arguments.iter().copied()).collect(); // lame to clone args, right?
         return universe
-            .does_not_understand(interpreter, Value::Class(class), signature, &args)
+            .does_not_understand(Value::Class(class), signature, &args)
             .with_context(|| format!("`{SIGNATURE}`: method `{signature_str}` not found for `{}`", receiver.to_string(universe)));
     };
 
-    invokable.invoke(interpreter, universe, receiver, arguments.iter().copied().collect());
+    invokable.invoke(universe, receiver, arguments.iter().copied().collect());
     Ok(())
 }
 

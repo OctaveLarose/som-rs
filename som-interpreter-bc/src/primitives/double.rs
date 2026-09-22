@@ -1,4 +1,3 @@
-use crate::interpreter::Interpreter;
 use crate::pop_args_from_stack;
 use crate::primitives::PrimInfo;
 use crate::primitives::PrimitiveFn;
@@ -66,10 +65,10 @@ fn from_string(_: Value, string: Gc<String>) -> Result<f64, Error> {
     string.parse().with_context(|| format!("`{SIGNATURE}`: could not parse `f64` from string"))
 }
 
-fn as_string(interp: &mut Interpreter, universe: &mut Universe) -> Result<Gc<String>, Error> {
+fn as_string(universe: &mut Universe) -> Result<Gc<String>, Error> {
     const SIGNATURE: &str = "Double>>#asString";
 
-    pop_args_from_stack!(interp, receiver => DoubleLike);
+    pop_args_from_stack!(universe, receiver => DoubleLike);
 
     let receiver = promote!(SIGNATURE, receiver);
 

@@ -3,7 +3,6 @@ use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::hash::Hasher;
 
-use crate::interpreter::Interpreter;
 use crate::pop_args_from_stack;
 use crate::primitives::PrimInfo;
 use crate::primitives::PrimitiveFn;
@@ -32,8 +31,8 @@ pub static INSTANCE_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| {
 });
 pub static CLASS_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| Box::new([]));
 
-fn length(interp: &mut Interpreter, universe: &mut Universe) -> Result<Value, Error> {
-    pop_args_from_stack!(interp, receiver => StringLike);
+fn length(universe: &mut Universe) -> Result<Value, Error> {
+    pop_args_from_stack!(universe, receiver => StringLike);
 
     // tragically, we do not allow strings to have over 2 billion characters and just cast as i32
     // i apologize to everyone for that. i will strive to be better
@@ -44,8 +43,8 @@ fn length(interp: &mut Interpreter, universe: &mut Universe) -> Result<Value, Er
     }
 }
 
-fn hashcode(interp: &mut Interpreter, universe: &mut Universe) -> Result<i32, Error> {
-    pop_args_from_stack!(interp, receiver => StringLike);
+fn hashcode(universe: &mut Universe) -> Result<i32, Error> {
+    pop_args_from_stack!(universe, receiver => StringLike);
     let string = receiver.as_str(|sym| universe.lookup_symbol(sym));
     let mut hasher = DefaultHasher::new();
     hasher.write(string.as_bytes());
@@ -54,27 +53,27 @@ fn hashcode(interp: &mut Interpreter, universe: &mut Universe) -> Result<i32, Er
     Ok(hash)
 }
 
-fn is_letters(interp: &mut Interpreter, universe: &mut Universe) -> Result<bool, Error> {
-    pop_args_from_stack!(interp, receiver => StringLike);
+fn is_letters(universe: &mut Universe) -> Result<bool, Error> {
+    pop_args_from_stack!(universe, receiver => StringLike);
     let string = receiver.as_str(|sym| universe.lookup_symbol(sym));
     Ok(!string.is_empty() && string.chars().all(char::is_alphabetic))
 }
 
-fn is_digits(interp: &mut Interpreter, universe: &mut Universe) -> Result<bool, Error> {
-    pop_args_from_stack!(interp, receiver => StringLike);
+fn is_digits(universe: &mut Universe) -> Result<bool, Error> {
+    pop_args_from_stack!(universe, receiver => StringLike);
     let string = receiver.as_str(|sym| universe.lookup_symbol(sym));
     Ok(!string.is_empty() && string.chars().all(char::is_numeric))
 }
 
-fn is_whitespace(interp: &mut Interpreter, universe: &mut Universe) -> Result<bool, Error> {
-    pop_args_from_stack!(interp, receiver => StringLike);
+fn is_whitespace(universe: &mut Universe) -> Result<bool, Error> {
+    pop_args_from_stack!(universe, receiver => StringLike);
     let string = receiver.as_str(|sym| universe.lookup_symbol(sym));
 
     Ok(!string.is_empty() && string.chars().all(char::is_whitespace))
 }
 
-fn concatenate(interp: &mut Interpreter, universe: &mut Universe) -> Result<Gc<String>, Error> {
-    pop_args_from_stack!(interp, receiver => StringLike, other => StringLike);
+fn concatenate(universe: &mut Universe) -> Result<Gc<String>, Error> {
+    pop_args_from_stack!(universe, receiver => StringLike, other => StringLike);
 
     let s1 = receiver.as_str(|sym| universe.lookup_symbol(sym));
     let s2 = other.as_str(|sym| universe.lookup_symbol(sym));
@@ -83,8 +82,8 @@ fn concatenate(interp: &mut Interpreter, universe: &mut Universe) -> Result<Gc<S
     Ok(universe.gc_interface.alloc(final_str, AllocSiteMarker::String))
 }
 
-fn as_symbol(interp: &mut Interpreter, universe: &mut Universe) -> Result<Interned, Error> {
-    pop_args_from_stack!(interp, receiver => StringLike);
+fn as_symbol(universe: &mut Universe) -> Result<Interned, Error> {
+    pop_args_from_stack!(universe, receiver => StringLike);
 
     let symbol = match receiver {
         StringLike::String(ref value) => universe.intern_symbol(value.as_str()),
@@ -95,8 +94,8 @@ fn as_symbol(interp: &mut Interpreter, universe: &mut Universe) -> Result<Intern
     Ok(symbol)
 }
 
-fn eq(interp: &mut Interpreter, universe: &mut Universe) -> Result<bool, Error> {
-    pop_args_from_stack!(interp, a => Value, b => Value);
+fn eq(universe: &mut Universe) -> Result<bool, Error> {
+    pop_args_from_stack!(universe, a => Value, b => Value);
 
     let Ok(a) = StringLike::try_from(a.0) else {
         return Ok(false);
@@ -109,8 +108,8 @@ fn eq(interp: &mut Interpreter, universe: &mut Universe) -> Result<bool, Error> 
     Ok(a.eq_stringlike(&b, |sym| universe.lookup_symbol(sym)))
 }
 
-fn prim_substring_from_to(interp: &mut Interpreter, universe: &mut Universe) -> Result<Gc<String>, Error> {
-    pop_args_from_stack!(interp, receiver => StringLike, from => i32, to => i32);
+fn prim_substring_from_to(universe: &mut Universe) -> Result<Gc<String>, Error> {
+    pop_args_from_stack!(universe, receiver => StringLike, from => i32, to => i32);
 
     let from = usize::try_from(from - 1)?;
     let to = usize::try_from(to)?;
@@ -120,8 +119,8 @@ fn prim_substring_from_to(interp: &mut Interpreter, universe: &mut Universe) -> 
     Ok(universe.gc_interface.alloc(string.chars().skip(from).take(to - from).collect(), AllocSiteMarker::String))
 }
 
-fn char_at(interp: &mut Interpreter, universe: &mut Universe) -> Result<Value, Error> {
-    pop_args_from_stack!(interp, receiver => StringLike, idx => i32);
+fn char_at(universe: &mut Universe) -> Result<Value, Error> {
+    pop_args_from_stack!(universe, receiver => StringLike, idx => i32);
 
     let string = receiver.as_str(|sym| universe.lookup_symbol(sym));
     let char = *string.as_bytes().get((idx - 1) as usize).unwrap();

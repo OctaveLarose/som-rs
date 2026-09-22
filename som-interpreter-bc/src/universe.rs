@@ -1,24 +1,30 @@
 use crate::compiler::compile::compile_class;
 use crate::gc::VecValue;
-use crate::interpreter::Interpreter;
+use crate::interpreter::push_method_frame_with_args;
+use crate::stack_push;
 use crate::value::Value;
 use crate::vm_objects::block::Block;
 use crate::vm_objects::class::Class;
 use crate::vm_objects::frame::Frame;
 use crate::vm_objects::instance::Instance;
+use crate::vm_objects::method::MethodInfo;
 use anyhow::{anyhow, Error};
 use som_core::core_classes::CoreClasses;
 use som_core::interner::Interner;
 use som_gc::gc_interface::{AllocSiteMarker, GCInterface, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_value::interned::Interned;
+use std::cell::UnsafeCell;
 use std::fs;
 use std::io;
 use std::marker::PhantomPinned;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 /// GC default heap size
 pub const DEFAULT_HEAP_SIZE: usize = 1024 * 1024 * 256;
+
+pub const STACK_SIZE: usize = 2 << 20; // 2 MiB
 
 /// The central data structure for the interpreter.
 ///
@@ -36,6 +42,23 @@ pub struct Universe {
     pub core: CoreClasses<Gc<Class>>,
     /// GC interface for GC operations
     pub gc_interface: Box<GCInterface>,
+
+    /// The time record of the interpreter's creation.
+    pub start_time: Instant,
+    /// Pointer to top of stack
+    pub sp: *mut Value,
+    /// Pointer to base of stack
+    pub base_sp: *mut Value,
+    /// The current bytecode index.
+    pub bytecode_idx: u16,
+    /// The current frame. TODO: I think we can rethink the interpreter not to need to store it other than for GC?
+    pub current_frame: UnsafeCell<Gc<Frame>>,
+    /// GC can trigger when the interpreter wants to allocate a new frame.
+    /// We're then in a situation where we've looked up a `Method` (which is how we knew we were dealing with a non-primitive, and so that we had to create a frame)
+    /// So this method can't be stored on the Rust stack, or GC would miss it. Therefore: we keep it reachable there.
+    pub frame_method_root: Gc<MethodInfo>,
+    pub frame_args_root: Option<Vec<Value>>,
+
     /// Universe must be `Pin`, since the GC must assume the field `gc_interface` will never move,
     /// since it holds a duplicated reference to it that it needs to interact with the VM
     _pin: PhantomPinned,
@@ -92,12 +115,30 @@ impl Universe {
 
         globals.push((interner.intern("system"), system_instance));
 
+        let stack_ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                STACK_SIZE,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                -1,
+                0,
+            ) as *mut Value
+        };
+
         Ok(Self {
+            start_time: Instant::now(),
             globals,
             interner,
             classpath,
             core,
             gc_interface,
+            sp: stack_ptr,
+            base_sp: stack_ptr,
+            current_frame: UnsafeCell::from(Gc::default()),
+            bytecode_idx: 0,
+            frame_method_root: Gc::default(),
+            frame_args_root: None,
             _pin: PhantomPinned,
         })
     }
@@ -217,17 +258,24 @@ impl Universe {
 }
 
 impl Universe {
+    /// Return the current frame.
+    /// It's in an `UnsafeCell` for moving GC reasons: you get many bugs by using Gc<Frame> by
+    /// itself, since Rust assumes that it hasn't moved when it has
+    pub fn get_current_frame(&self) -> Gc<Frame> {
+        unsafe { (*self.current_frame.get()).clone() }
+    }
+
     /// Call `escapedBlock:` on the given value, if it is defined.
-    pub fn escaped_block(&mut self, interpreter: &mut Interpreter, value: Value, block: Gc<Block>) -> Option<()> {
+    pub fn escaped_block(&mut self, value: Value, block: Gc<Block>) -> Option<()> {
         let method_name = self.intern_symbol("escapedBlock:");
         let method = value.lookup_method(self, method_name)?;
-        interpreter.push_method_frame_with_args(method.as_method_info(), vec![value, Value::Block(block)], &mut self.gc_interface);
+        push_method_frame_with_args(self, method.as_method_info(), vec![value, Value::Block(block)]);
         Some(())
     }
 
     /// Call `doesNotUnderstand:` on the given value, if it is defined.
     #[allow(unreachable_code, unused_variables)]
-    pub fn does_not_understand(&mut self, interpreter: &mut Interpreter, value: Value, symbol: Interned, args: &[Value]) -> Option<()> {
+    pub fn does_not_understand(&mut self, value: Value, symbol: Interned, args: &[Value]) -> Option<()> {
         // panic!("does not understand: {:?}, called on {:?}", self.interner.lookup(symbol), &value);
 
         let method_name = self.intern_symbol("doesNotUnderstand:arguments:");
@@ -241,41 +289,44 @@ impl Universe {
         // }
 
         // TODO: GC bug here: alloc_slice triggering a collection would introduce UB.
-        interpreter.push_method_frame_with_args(
-            method.as_method_info(),
-            vec![
-                value,
-                Value::Symbol(symbol),
-                Value::Array(VecValue(self.gc_interface.alloc_slice(args, AllocSiteMarker::VecValue))),
-            ],
-            &mut self.gc_interface,
-        );
+        let args = vec![
+            value,
+            Value::Symbol(symbol),
+            Value::Array(VecValue(self.gc_interface.alloc_slice(args, AllocSiteMarker::VecValue))),
+        ];
+
+        push_method_frame_with_args(self, method.as_method_info(), args);
 
         Some(())
     }
 
     /// Call `unknownGlobal:` on the given value, if it is defined.
-    pub fn unknown_global(&mut self, interpreter: &mut Interpreter, value: Value, name: Interned) -> Option<()> {
+    pub fn unknown_global(&mut self, value: Value, name: Interned) -> Option<()> {
         let method_name = self.intern_symbol("unknownGlobal:");
         let method = value.lookup_method(self, method_name)?;
 
-        interpreter.get_current_frame().bytecode_idx = interpreter.bytecode_idx;
-        interpreter.push_method_frame_with_args(method.as_method_info(), vec![value, Value::Symbol(name)], &mut self.gc_interface);
+        self.get_current_frame().bytecode_idx = self.bytecode_idx;
+        push_method_frame_with_args(self, method.as_method_info(), vec![value, Value::Symbol(name)]);
 
         Some(())
     }
 
     /// Call `System>>#initialize:` with the given name, if it is defined.
-    pub fn initialize(&mut self, args: Vec<Value>) -> Option<Interpreter> {
+    /// Also sets up the universe basic state to run the starting frame.
+    pub fn initialize(&mut self, args: Vec<Value>) -> Option<()> {
         let method_name = self.interner.intern("initialize:");
         let initialize = self.core.system_class().lookup_method(method_name)?.as_method_info();
         let system_value = self.lookup_global(self.interner.reverse_lookup("system")?)?;
 
         let args_vec = VecValue(self.gc_interface.alloc_slice(&args, AllocSiteMarker::VecValue));
         let frame_ptr = Frame::alloc_initial_method(initialize, &[system_value, Value::Array(args_vec)], &mut self.gc_interface);
-        let interpreter = Interpreter::new(frame_ptr);
 
-        Some(interpreter)
+        self.current_frame = UnsafeCell::from(frame_ptr);
+        self.bytecode_idx = 0;
+        self.sp = self.base_sp;
+        stack_push!(self.sp, Value::STACK_MARKER);
+
+        Some(())
     }
 }
 

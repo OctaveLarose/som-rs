@@ -1,6 +1,6 @@
 use crate::compiler::Literal;
 use crate::gc::{visit_literal, visit_value, GcIdentifier};
-use crate::interpreter::Interpreter;
+use crate::interpreter::push_method_frame_with_args;
 use crate::primitives::PrimitiveFn;
 use crate::universe::Universe;
 use crate::value::Value;
@@ -142,29 +142,29 @@ impl Method {
 }
 
 pub trait Invoke {
-    fn invoke(&self, interpreter: &mut Interpreter, universe: &mut Universe, receiver: Value, args: Vec<Value>);
+    fn invoke(&self, universe: &mut Universe, receiver: Value, args: Vec<Value>);
 }
 
 impl Invoke for Gc<Method> {
-    fn invoke(&self, interpreter: &mut Interpreter, universe: &mut Universe, receiver: Value, mut args: Vec<Value>) {
+    fn invoke(&self, universe: &mut Universe, receiver: Value, mut args: Vec<Value>) {
         match &**self {
             Method::Defined(method_info) => {
                 let mut frame_args = vec![receiver];
                 frame_args.append(&mut args);
-                interpreter.push_method_frame_with_args(method_info.clone(), frame_args, &mut universe.gc_interface);
+                push_method_frame_with_args(universe, method_info.clone(), frame_args);
             }
             Method::Primitive(func, ..) => {
                 let nbr_args = args.len() + 1;
-                stack_push!(interpreter.sp, receiver);
+                stack_push!(universe.sp, receiver);
                 for arg in args {
-                    stack_push!(interpreter.sp, arg);
+                    stack_push!(universe.sp, arg);
                 }
-                func(interpreter, universe, nbr_args).unwrap_or_else(|_| panic!("invoking func {} failed", &self.signature()));
+                func(universe, nbr_args).unwrap_or_else(|_| panic!("invoking func {} failed", &self.signature()));
             }
-            Method::TrivialGlobal(met, _) => met.invoke(universe, interpreter),
-            Method::TrivialLiteral(met, _) => met.invoke(universe, interpreter),
-            Method::TrivialGetter(met, _) => met.invoke(universe, interpreter),
-            Method::TrivialSetter(met, _) => met.invoke(universe, interpreter),
+            Method::TrivialGlobal(met, _) => met.invoke(universe),
+            Method::TrivialLiteral(met, _) => met.invoke(universe),
+            Method::TrivialGetter(met, _) => met.invoke(universe),
+            Method::TrivialSetter(met, _) => met.invoke(universe),
         }
     }
 }

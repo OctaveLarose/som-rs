@@ -2,9 +2,9 @@
 //! This is the interpreter for the Simple Object Machine.
 //!
 
+// Ideally this would be preceded by a `#[cfg(not(feature = "switch-dispatch"))]`, but that's not something Rust allows.
 #![feature(explicit_tail_calls)]
 
-use crate::interpreter::Interpreter;
 use crate::universe::Universe;
 use std::sync::atomic::AtomicPtr;
 
@@ -104,6 +104,3 @@ macro_rules! stack_truncate {
 
 /// Raw pointer needed to trace GC roots. Meant to be accessed only non-mutably, hence the "CONST" in the name.
 pub static UNIVERSE_RAW_PTR_CONST: AtomicPtr<Universe> = AtomicPtr::new(std::ptr::null_mut());
-
-/// See `UNIVERSE_RAW_PTR_CONST`.
-pub static INTERPRETER_RAW_PTR_CONST: AtomicPtr<Interpreter> = AtomicPtr::new(std::ptr::null_mut());

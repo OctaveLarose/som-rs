@@ -2,15 +2,14 @@ use rstest::{fixture, rstest};
 use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_interpreter_bc::compiler::compile::compile_class;
 use som_interpreter_bc::gc::get_callbacks_for_gc;
-use som_interpreter_bc::interpreter::Interpreter;
 use som_interpreter_bc::universe::Universe;
 use som_interpreter_bc::value::Value;
 use som_interpreter_bc::vm_objects::frame::Frame;
 use som_interpreter_bc::vm_objects::instance::Instance;
-use som_interpreter_bc::{INTERPRETER_RAW_PTR_CONST, UNIVERSE_RAW_PTR_CONST};
+use som_interpreter_bc::{interpreter, stack_push, UNIVERSE_RAW_PTR_CONST};
 use som_lexer::{Lexer, Token};
 use som_parser::lang;
-use std::cell::OnceCell;
+use std::cell::{OnceCell, UnsafeCell};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
@@ -151,9 +150,13 @@ fn basic_interpreter_tests(universe: &mut Universe) {
 
         let method = class.lookup_method(method_name).expect("method not found ??").as_method_info();
 
+        // TODO: really, this should just call Universe::initialize I think?
         let frame = Frame::alloc_initial_method(method, &[system_value], &mut universe.gc_interface);
-        let mut interpreter = Interpreter::new(frame);
-        if let Some(output) = interpreter.run(universe) {
+        universe.current_frame = UnsafeCell::from(frame);
+        universe.bytecode_idx = 0;
+        universe.sp = universe.base_sp;
+        stack_push!(universe.sp, Value::STACK_MARKER);
+        if let Some(output) = interpreter::run(universe) {
             assert_eq!(&output, expected, "unexpected test output value");
         }
     }
@@ -167,12 +170,9 @@ fn test_harness(universe: &mut Universe) {
         .map(|str| Value::String(universe.gc_interface.alloc(String::from(*str), AllocSiteMarker::String)))
         .collect();
 
-    let mut interpreter = universe.initialize(args).unwrap();
+    universe.initialize(args).unwrap();
 
-    // needed for GC
-    INTERPRETER_RAW_PTR_CONST.store(&mut interpreter, Ordering::SeqCst);
-
-    assert_eq!(interpreter.run(universe), Some(Value::INTEGER_ZERO))
+    assert_eq!(interpreter::run(universe), Some(Value::INTEGER_ZERO))
 }
 
 #[rstest]
@@ -190,16 +190,17 @@ fn test_harness(universe: &mut Universe) {
 // #[case::richards("Richards")]
 #[case::towers("Towers")]
 fn basic_benchmark_runner(universe: &mut Universe, #[case] benchmark_name: &str) {
+    dbg!("OK");
+
     let args = ["BenchmarkHarness", benchmark_name, "1", "1"]
         .iter()
         .map(|str| Value::String(universe.gc_interface.alloc(String::from(*str), AllocSiteMarker::String)))
         .collect();
 
-    let mut interpreter = universe.initialize(args).unwrap();
+    universe.initialize(args).unwrap();
 
-    INTERPRETER_RAW_PTR_CONST.store(&mut interpreter, Ordering::SeqCst);
-
-    let output = interpreter.run(universe);
+    let output = interpreter::run(universe);
+    dbg!("KO");
 
     let intern_id = universe.interner.reverse_lookup("BenchmarkHarness");
     assert!(intern_id.is_some());
@@ -207,5 +208,5 @@ fn basic_benchmark_runner(universe: &mut Universe, #[case] benchmark_name: &str)
     let benchmark_harness_class = universe.lookup_global(intern_id.unwrap()).unwrap().as_class().unwrap();
 
     assert!(output.unwrap().is_value_ptr::<Instance>());
-    assert_eq!(output.unwrap().as_instance().unwrap().class, benchmark_harness_class)
+    assert_eq!(output.unwrap().as_instance().unwrap().class, benchmark_harness_class);
 }

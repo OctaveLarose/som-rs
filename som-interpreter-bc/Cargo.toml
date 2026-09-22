@@ -44,6 +44,9 @@ libc = "0.2.189"
 rstest = "0.24.0"
 
 [features]
+# use the classic, slower, but safer switch-dispatch bytecode loop
+switch-dispatch = []
+
 jemalloc = ["jemallocator"]
 frame-debug-info = []
 inlining-disabled = []
