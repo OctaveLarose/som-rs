@@ -3,6 +3,8 @@
 // There is no safety. This is a JIT.
 #![allow(clippy::missing_safety_doc)]
 
+#![allow(unused)]
+
 use crate::value::Value;
 use crate::vm_objects::frame::Frame;
 use crate::vm_objects::method::MethodInfo;
@@ -18,6 +20,7 @@ use som_core::bytecode::{BC_SIZE_1_ARG, BC_SIZE_NO_ARGS};
 use som_gc::gcref::Gc;
 use som_value::value;
 use std::mem::offset_of;
+use crate::universe::Universe;
 
 pub struct CodeGen<'ctx> {
     pub context: &'ctx inkwell::context::Context,
@@ -28,10 +31,7 @@ pub struct CodeGen<'ctx> {
     // jit_fns: HashMap<String, FunctionValue<'ctx>>,
 }
 
-pub type IncFunc = unsafe extern "C" fn(*mut *mut Value, *mut u16) -> u8;
-pub type PushLocalFunc = unsafe extern "C" fn(*const Frame, *const u8, *mut *mut Value, *mut u16);
-pub type PushArgFunc = unsafe extern "C" fn(*const Frame, *const u8, *mut *mut Value, *mut u16);
-pub type PopFunc = unsafe extern "C" fn(*mut *mut Value, *mut u16);
+pub type JitFn = unsafe extern "C" fn(*mut Universe, *const u8, *const Frame, u16);
 
 /// We do NaN tagging, so there's no double tag. But 0 isn't a tag in use so we use it to mean a value "of type double"
 const UNOFFICIAL_GREAT_DOUBLE_TAG: u64 = 0;
@@ -108,19 +108,19 @@ impl<'ctx> CodeGen<'ctx> {
 
             let fn_value_new = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
             let llvm_value_new_integer = codegen.module.add_function("value_new", fn_value_new, None);
-            codegen.execution_engine.add_global_mapping(&llvm_value_new_integer, value_new as usize);
+            codegen.execution_engine.add_global_mapping(&llvm_value_new_integer, value_new as *const () as usize);
 
             let fn_value_is = bool_type.fn_type(&[i64_type.into(), i64_type.into()], false);
             let llvm_value_is_integer = codegen.module.add_function("value_is", fn_value_is, None);
-            codegen.execution_engine.add_global_mapping(&llvm_value_is_integer, value_is as usize);
+            codegen.execution_engine.add_global_mapping(&llvm_value_is_integer, value_is as *const () as usize);
 
             let fn_value_extract = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
-            let llvm_value_is_integer = codegen.module.add_function("value_extract", fn_value_extract, None);
-            codegen.execution_engine.add_global_mapping(&llvm_value_is_integer, value_extract as usize);
+            let llvm_value_extract = codegen.module.add_function("value_extract", fn_value_extract, None);
+            codegen.execution_engine.add_global_mapping(&llvm_value_extract, value_extract as *const () as usize);
 
             let fn_bigint_increment = void_type.fn_type(&[ptr_type.into()], false);
             let llvm_value_bigint_increment = codegen.module.add_function("bigint_increment", fn_bigint_increment, None);
-            codegen.execution_engine.add_global_mapping(&llvm_value_bigint_increment, bigint_increment as usize);
+            codegen.execution_engine.add_global_mapping(&llvm_value_bigint_increment, bigint_increment as *const () as usize);
         }
 
         codegen
@@ -224,7 +224,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn build_get_bytecode_arg(&self, bytecodes: PointerValue<'ctx>, bc_idx: IntValue<'ctx>, n: u64) -> BasicValueEnum<'ctx> {
         let i8_type = self.context.i8_type();
 
-        let idx_arg = self.builder.build_int_add(bc_idx, self.context.i64_type().const_int(n, false), "idx_arg").unwrap();
+        let idx_arg = self.builder.build_int_add(bc_idx, self.context.i16_type().const_int(n, false), "idx_arg").unwrap();
 
         let element_ptr = unsafe { self.builder.build_gep(i8_type, bytecodes, &[idx_arg], "element_ptr").unwrap() };
         self.builder.build_load(i8_type, element_ptr, "element").unwrap()
@@ -282,11 +282,12 @@ impl<'ctx> CodeGen<'ctx> {
         //         panic!("Invalid type in Inc")
         //     };
         //     self.bytecode_idx += BC_SIZE_NO_ARGS;
+        let i16_type = self.context.i16_type();
         let i64_type = self.context.i64_type();
         let ptr_type = self.context.ptr_type(AddressSpace::default());
 
         let inc_jit_fn_val = {
-            let inc_type = self.context.i8_type().fn_type(&[ptr_type.into(), ptr_type.into()], false);
+            let inc_type = self.context.void_type().fn_type(&[ptr_type.into(), ptr_type.into(), ptr_type.into(), i16_type.into()], false);
             self.module.add_function("inc", inc_type, None)
         };
 
@@ -302,11 +303,16 @@ impl<'ctx> CodeGen<'ctx> {
         // ---- entry
         self.builder.position_at_end(entry);
 
+        let universe_ref = inc_jit_fn_val.get_nth_param(0).unwrap().into_pointer_value();
+        let bytecodes = inc_jit_fn_val.get_nth_param(1).unwrap().into_pointer_value();
+        let frame = inc_jit_fn_val.get_nth_param(2).unwrap().into_pointer_value();
+        let bc_idx= inc_jit_fn_val.get_nth_param(3).unwrap().into_int_value();
+
         let sp = {
-            let sp_ref = inc_jit_fn_val.get_nth_param(0).unwrap().into_pointer_value();
+            let offset_to_sp = offset_of!(Universe, sp);
+            let sp_ref = unsafe { self.builder.build_gep(self.context.i8_type(), universe_ref, &[i64_type.const_int(offset_to_sp as u64, false)], "sp_ref").unwrap() };
             self.builder.build_load(ptr_type, sp_ref, "sp").unwrap().into_pointer_value()
         };
-        let bc_idx_ptr = inc_jit_fn_val.get_nth_param(1).unwrap().into_pointer_value();
 
         let tos_value = self.build_stack_last(sp);
 
@@ -335,8 +341,7 @@ impl<'ctx> CodeGen<'ctx> {
         // ---- return ----
         {
             self.builder.position_at_end(failure_block);
-            let false_const = self.context.i8_type().const_int(0, false);
-            self.builder.build_return(Some(&false_const)).unwrap();
+            self.builder.build_return(None).unwrap();
         }
 
         // ---- int_blk ----
@@ -411,10 +416,11 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
             };
 
+                let offset_to_bc_idx = offset_of!(Universe, bytecode_idx);
+        let bc_idx_ptr = unsafe { self.builder.build_gep(self.context.i8_type(), universe_ref, &[i64_type.const_int(offset_to_bc_idx as u64, false)], "sp_ref").unwrap() };
             self.build_increment_bc_idx(bc_idx_ptr, BC_SIZE_NO_ARGS as u64);
 
-            let true_const = self.context.i8_type().const_int(1, false);
-            self.builder.build_return(Some(&true_const)).ok().unwrap();
+            self.builder.build_return(None).ok().unwrap();
         }
         // ------
 
@@ -428,10 +434,11 @@ impl<'ctx> CodeGen<'ctx> {
             let tos_ptr = unsafe { self.builder.build_gep(i64_type, sp, &[i64_type.const_int(-1i64 as u64, true)], "last_ptr").unwrap() };
             self.builder.build_store(tos_ptr, phi.as_basic_value()).ok().unwrap();
 
+                    let offset_to_bc_idx = offset_of!(Universe, bytecode_idx);
+        let bc_idx_ptr = unsafe { self.builder.build_gep(self.context.i8_type(), universe_ref, &[i64_type.const_int(offset_to_bc_idx as u64, false)], "bc_idx_ptr").unwrap() };
             self.build_increment_bc_idx(bc_idx_ptr, BC_SIZE_NO_ARGS as u64);
 
-            let true_const = self.context.i8_type().const_int(1, false);
-            self.builder.build_return(Some(&true_const)).ok().unwrap();
+            self.builder.build_return(None).ok().unwrap();
         }
         // ----
 
@@ -444,23 +451,23 @@ impl<'ctx> CodeGen<'ctx> {
         // stack_push!(self.sp, value);
         // self.bytecode_idx += BC_SIZE_1_ARG;
 
+        let i16_type = self.context.i16_type();
         let i64_type = self.context.i64_type();
         let ptr_type = self.context.ptr_type(AddressSpace::default());
 
         let push_local_jit_fn_val = {
-            let push_local_type = self.context.void_type().fn_type(&[ptr_type.into(), ptr_type.into(), ptr_type.into(), ptr_type.into()], false);
+            let push_local_type = self.context.void_type().fn_type(&[ptr_type.into(), ptr_type.into(), ptr_type.into(), i16_type.into()], false);
             self.module.add_function("push_local", push_local_type, None)
         };
 
         let entry = self.context.append_basic_block(push_local_jit_fn_val, "push_local_entry");
         self.builder.position_at_end(entry);
 
-        let frame = push_local_jit_fn_val.get_nth_param(0).unwrap().into_pointer_value();
+        let universe_ref = push_local_jit_fn_val.get_nth_param(0).unwrap().into_pointer_value();
         let bytecodes = push_local_jit_fn_val.get_nth_param(1).unwrap().into_pointer_value();
-        let sp_ref = push_local_jit_fn_val.get_nth_param(2).unwrap().into_pointer_value();
-        let bc_idx_ptr = push_local_jit_fn_val.get_nth_param(3).unwrap().into_pointer_value();
+        let frame = push_local_jit_fn_val.get_nth_param(2).unwrap().into_pointer_value();
+        let bc_idx= push_local_jit_fn_val.get_nth_param(3).unwrap().into_int_value();
 
-        let bc_idx = self.builder.build_load(i64_type, bc_idx_ptr, "bc_idx_val").unwrap().into_int_value();
         let arg = self.build_get_bytecode_arg(bytecodes, bc_idx, 1);
 
         // let value = *frame.lookup_local(idx as usize);
@@ -470,8 +477,12 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap()
             .into_int_value();
 
+        let offset_to_sp = offset_of!(Universe, sp);
+        let sp_ref = unsafe { self.builder.build_gep(self.context.i8_type(), universe_ref, &[i64_type.const_int(offset_to_sp as u64, false)], "sp_ref").unwrap() };
         self.build_stack_push(sp_ref, value);
 
+        let offset_to_bc_idx = offset_of!(Universe, bytecode_idx);
+        let bc_idx_ptr = unsafe { self.builder.build_gep(self.context.i8_type(), universe_ref, &[i64_type.const_int(offset_to_bc_idx as u64, false)], "bc_idx_ptr").unwrap() };
         self.build_increment_bc_idx(bc_idx_ptr, BC_SIZE_1_ARG as u64);
 
         self.builder.build_return(None).ok().unwrap();
@@ -483,23 +494,23 @@ impl<'ctx> CodeGen<'ctx> {
         // stack_push!(self.sp, value);
         // self.bytecode_idx += BC_SIZE_1_ARG;
 
+        let i16_type = self.context.i16_type();
         let i64_type = self.context.i64_type();
         let ptr_type = self.context.ptr_type(AddressSpace::default());
 
-        let push_local_jit_fn_val = {
-            let push_local_type = self.context.void_type().fn_type(&[ptr_type.into(), ptr_type.into(), ptr_type.into(), ptr_type.into()], false);
+        let push_arg_jit_fn_val = {
+            let push_local_type = self.context.void_type().fn_type(&[ptr_type.into(), ptr_type.into(), ptr_type.into(), i16_type.into()], false);
             self.module.add_function("push_arg", push_local_type, None)
         };
 
-        let entry = self.context.append_basic_block(push_local_jit_fn_val, "push_arg");
+        let entry = self.context.append_basic_block(push_arg_jit_fn_val, "push_arg");
         self.builder.position_at_end(entry);
 
-        let frame = push_local_jit_fn_val.get_nth_param(0).unwrap().into_pointer_value();
-        let bytecodes = push_local_jit_fn_val.get_nth_param(1).unwrap().into_pointer_value();
-        let sp_ref = push_local_jit_fn_val.get_nth_param(2).unwrap().into_pointer_value();
-        let bc_idx_ptr = push_local_jit_fn_val.get_nth_param(3).unwrap().into_pointer_value();
+        let universe_ref = push_arg_jit_fn_val.get_nth_param(0).unwrap().into_pointer_value();
+        let bytecodes = push_arg_jit_fn_val.get_nth_param(1).unwrap().into_pointer_value();
+        let frame = push_arg_jit_fn_val.get_nth_param(2).unwrap().into_pointer_value();
+        let bc_idx= push_arg_jit_fn_val.get_nth_param(3).unwrap().into_int_value();
 
-        let bc_idx = self.builder.build_load(i64_type, bc_idx_ptr, "bc_idx_val").unwrap().into_int_value();
         let arg = self.build_get_bytecode_arg(bytecodes, bc_idx, 1);
 
         let value = self
@@ -508,28 +519,41 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap()
             .into_int_value();
 
+        let offset_to_sp = offset_of!(Universe, sp);
+        let sp_ref = unsafe { self.builder.build_gep(self.context.i8_type(), universe_ref, &[i64_type.const_int(offset_to_sp as u64, false)], "sp_ref").unwrap() };
         self.build_stack_push(sp_ref, value);
 
+        let offset_to_bc_idx = offset_of!(Universe, bytecode_idx);
+        let bc_idx_ptr = unsafe { self.builder.build_gep(self.context.i8_type(), universe_ref, &[i64_type.const_int(offset_to_bc_idx as u64, false)], "bc_idx_ptr").unwrap() };
         self.build_increment_bc_idx(bc_idx_ptr, BC_SIZE_1_ARG as u64);
 
         self.builder.build_return(None).ok().unwrap();
     }
 
     pub(crate) fn jit_compile_pop(&mut self) {
+        let i16_type = self.context.i16_type();
+        let i64_type = self.context.i64_type();
+
         let pop_fn_jit_fn = {
             let ptr_type = self.context.ptr_type(AddressSpace::default());
-            let push_local_type = self.context.void_type().fn_type(&[ptr_type.into(), ptr_type.into()], false);
+            let push_local_type = self.context.void_type().fn_type(&[ptr_type.into(), ptr_type.into(), ptr_type.into(), i16_type.into()], false);
             self.module.add_function("pop", push_local_type, None)
         };
 
         let entry = self.context.append_basic_block(pop_fn_jit_fn, "pop_entry");
         self.builder.position_at_end(entry);
 
-        let sp_ref = pop_fn_jit_fn.get_nth_param(0).unwrap().into_pointer_value();
-        let bc_idx_ptr = pop_fn_jit_fn.get_nth_param(1).unwrap().into_pointer_value();
+        let universe_ref = pop_fn_jit_fn.get_nth_param(0).unwrap().into_pointer_value();
+        let bytecodes = pop_fn_jit_fn.get_nth_param(1).unwrap().into_pointer_value();
+        let frame = pop_fn_jit_fn.get_nth_param(2).unwrap().into_pointer_value();
+        let bc_idx= pop_fn_jit_fn.get_nth_param(3).unwrap().into_int_value();
 
+        let offset_to_sp = offset_of!(Universe, sp);
+        let sp_ref = unsafe { self.builder.build_gep(self.context.i8_type(), universe_ref, &[i64_type.const_int(offset_to_sp as u64, false)], "sp_ref").unwrap() };
         self.build_stack_drop(sp_ref);
 
+        let offset_to_bc_idx = offset_of!(Universe, bytecode_idx);
+        let bc_idx_ptr = unsafe { self.builder.build_gep(self.context.i8_type(), universe_ref, &[i64_type.const_int(offset_to_bc_idx as u64, false)], "bc_idx_ptr").unwrap() };
         self.build_increment_bc_idx(bc_idx_ptr, BC_SIZE_NO_ARGS as u64);
 
         self.builder.build_return(None).ok().unwrap();

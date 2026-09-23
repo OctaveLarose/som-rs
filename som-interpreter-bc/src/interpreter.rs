@@ -18,6 +18,7 @@ use num_bigint::BigInt;
 #[allow(unused_imports)]
 use som_core::bytecode::{Bytecode, BC_SIZE_1_ARG, BC_SIZE_2_ARG, BC_SIZE_NO_ARGS, BC_SIZE_U16_ARG};
 
+use crate::jit::{CodeGen, JitFn};
 use som_gc::gc_interface::{AllocSiteMarker, SOMAllocator};
 use som_gc::gcref::Gc;
 use som_value::interned::Interned;
@@ -950,6 +951,19 @@ macro_rules! resolve_method_and_send_legacy {
 
 #[cfg(feature = "switch-dispatch")]
 pub fn run(universe: &mut Universe) -> Option<Value> {
+    let context = inkwell::context::Context::create();
+    let mut codegen = CodeGen::init(&context);
+
+    codegen.jit_compile_inc();
+    codegen.jit_compile_push_local();
+    codegen.jit_compile_push_arg();
+    codegen.jit_compile_pop();
+    println!("{}", codegen.module.print_to_string().to_string());
+    codegen.module.verify().unwrap_or_else(|e| {
+        eprintln!("LLVM verification failed:\n{}", e);
+        panic!();
+    });
+
     let mut frame = universe.get_current_frame();
     // Pointer to bytecodes for faster access, to presumably lead to better codegen.
     // Safety: all updates to it are alongside updates to `frame`. See `update_frame_and_bytecodes` macro.
@@ -999,10 +1013,14 @@ pub fn run(universe: &mut Universe) -> Option<Value> {
             }
             Bytecode::PUSH_LOCAL => {
                 let _timing = profiler_maybe_start!("PUSH_LOCAL");
-                let idx: u8 = bytecodes[universe.bytecode_idx as usize + 1];
-                let value = *frame.lookup_local(idx as usize);
-                stack_push!(universe.sp, value);
-                universe.bytecode_idx += BC_SIZE_1_ARG as u16;
+                // let idx: u8 = bytecodes[universe.bytecode_idx as usize + 1];
+                // let value = *frame.lookup_local(idx as usize);
+                // stack_push!(universe.sp, value);
+                // universe.bytecode_idx += BC_SIZE_1_ARG as u16;
+                unsafe {
+                    let push_local_fn = codegen.execution_engine.get_function::<JitFn>("push_local").unwrap();
+                    push_local_fn.call(universe, bytecodes.as_ptr(),  frame.as_ptr(), universe.bytecode_idx);
+                }
                 profiler_maybe_stop!(_timing);
             }
             Bytecode::PUSH_NON_LOCAL => {
@@ -1018,11 +1036,15 @@ pub fn run(universe: &mut Universe) -> Option<Value> {
             }
             Bytecode::PUSH_ARG => {
                 let _timing = profiler_maybe_start!("PUSH_ARG");
-                let idx: u8 = bytecodes[universe.bytecode_idx as usize + 1];
-                debug_assert_ne!(idx, 0); // that's a Returnuniverse case.
-                let value = *frame.lookup_argument(idx as usize);
-                stack_push!(universe.sp, value);
-                universe.bytecode_idx += BC_SIZE_1_ARG as u16;
+                // let idx: u8 = bytecodes[universe.bytecode_idx as usize + 1];
+                // debug_assert_ne!(idx, 0); // that's a Returnuniverse case.
+                // let value = *frame.lookup_argument(idx as usize);
+                // stack_push!(universe.sp, value);
+                // universe.bytecode_idx += BC_SIZE_1_ARG as u16;
+                unsafe {
+                    let push_arg_fn = codegen.execution_engine.get_function::<JitFn>("push_arg").unwrap();
+                    push_arg_fn.call(universe, bytecodes.as_ptr(), frame.as_ptr(), universe.bytecode_idx);
+                }
                 profiler_maybe_stop!(_timing);
             }
             Bytecode::PUSH_NON_LOCAL_ARG => {
@@ -1063,18 +1085,12 @@ pub fn run(universe: &mut Universe) -> Option<Value> {
             }
             Bytecode::INC => {
                 let _timing = profiler_maybe_start!("INC");
-                let last: &mut Value = stack_last!(universe.sp);
-
-                if let Some(int) = last.as_integer() {
-                    *last = Value::new_integer(int + 1);
-                } else if let Some(double) = last.as_double() {
-                    *last = Value::new_double(double + 1.0);
-                } else if let Some(mut big_int) = last.as_big_integer::<Gc<BigInt>>() {
-                    *big_int += 1;
-                } else {
-                    panic!("Invalid type in Inc")
-                };
-                universe.bytecode_idx += BC_SIZE_NO_ARGS as u16;
+                unsafe {
+                    codegen.execution_engine.get_function::<JitFn>("inc").unwrap().call(universe, bytecodes.as_ptr(), frame.as_ptr(), universe.bytecode_idx);
+                    // {
+                    //     panic!("Invalid type in Inc")
+                    // };
+                }
                 profiler_maybe_stop!(_timing);
             }
             Bytecode::DEC => {
@@ -1178,8 +1194,10 @@ pub fn run(universe: &mut Universe) -> Option<Value> {
             }
             Bytecode::POP => {
                 let _timing = profiler_maybe_start!("POP");
-                stack_drop!(universe.sp);
-                universe.bytecode_idx += BC_SIZE_NO_ARGS as u16;
+                unsafe {
+                    let pop_fn = codegen.execution_engine.get_function::<JitFn>("pop").unwrap();
+                    pop_fn.call(universe, bytecodes.as_ptr(), frame.as_ptr(), universe.bytecode_idx);
+                }
                 profiler_maybe_stop!(_timing);
             }
             Bytecode::POP_LOCAL => {
