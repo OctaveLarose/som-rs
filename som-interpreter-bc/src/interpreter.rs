@@ -385,6 +385,7 @@ impl Interpreter {
                     // allocating ahead of time in case it triggers GC.
                     let mut new_blk =
                         universe.gc_interface.request_memory_for_type::<Block>(std::mem::size_of::<Block>(), AllocSiteMarker::RuntimeBlock);
+                    update_frame_and_bytecodes!(self, frame, bytecodes);
 
                     match frame.lookup_constant(idx as usize) {
                         Literal::Block(blk) => {

@@ -9,22 +9,16 @@ on:
 jobs:
   rebench:
     name: Run and report benchmarks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout master branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
         with:
           submodules: true
       - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: default
-          toolchain: stable
+        run: rustup default stable
       - name: Compile SOM interpreter
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release -p som-interpreter-ast -p som-interpreter-bc
+        run: cargo build --release -p som-interpreter-ast -p som-interpreter-bc
       - name: Install ReBench
         run: |
           pip install setuptools

@@ -33,6 +33,7 @@ pub static INSTANCE_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| {
         ),
         ("instVarAt:", self::inst_var_at.into_func(), true),
         ("instVarAt:put:", self::inst_var_at_put.into_func(), true),
+        ("instVarNamed:", self::inst_var_named.into_func(), true),
         ("==", self::eq.into_func(), true),
     ])
 });
@@ -211,6 +212,27 @@ fn inst_var_at(object: Value, index: i32) -> Result<Option<Value>, Error> {
     } else {
         unreachable!("instVarAt called not on an instance or a class")
     }
+}
+
+fn inst_var_named(universe: &mut Universe, stack: &mut GlobalValueStack) -> Result<Option<Value>, Error> {
+    const SIGNATURE: &str = "Object>>#instVarNamed:";
+
+    get_args_from_stack!(stack, object => Value, name => Interned);
+    let name = universe.lookup_symbol(name);
+
+    let index = if let Some(instance) = object.as_instance() {
+        instance.class().field_names.iter().position(|field_name| field_name == name)
+    } else if let Some(cls) = object.as_class() {
+        cls.field_names.iter().position(|field_name| field_name == name)
+    } else {
+        panic!("#instVarNamed: needs an instance, but got a {:?}", object)
+    };
+
+    let Some(index) = index else {
+        bail!("'{}': no field named '{}'", SIGNATURE, name);
+    };
+
+    inst_var_at(object, (index + 1) as i32)
 }
 
 fn inst_var_at_put(object: Value, index: i32, value: Value) -> Result<Value, Error> {

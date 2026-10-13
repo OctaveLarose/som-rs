@@ -541,7 +541,7 @@ fn shift_right(interp: &mut Interpreter, universe: &mut Universe) -> Result<Valu
             Some(value) => match value.try_into() {
                 Ok(value) => Value::Integer(value),
                 Err(_) => {
-                    let allocated = universe.gc_interface.alloc(BigInt::from(value as i32), AllocSiteMarker::BigInt);
+                    let allocated = universe.gc_interface.alloc(BigInt::from(value), AllocSiteMarker::BigInt);
                     Value::BigInteger(allocated)
                 }
             },

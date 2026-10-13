@@ -5,7 +5,7 @@ on: [push, pull_request]
 jobs:
   run_test_suite:
     name: Run SOM Test Suite
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       matrix:
         interpreter:
@@ -13,39 +13,40 @@ jobs:
           - som-interpreter-bc
     steps:
       - name: Checkout master branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
       - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: default
-          toolchain: stable
+        run: rustup default stable
       - name: Compile SOM interpreter
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release -p ${{ matrix.interpreter }}
+        run: cargo build --release -p ${{ matrix.interpreter }}
       - name: Run test suite
         run: |
           ./target/release/${{ matrix.interpreter }} -c core-lib/Smalltalk core-lib/TestSuite -- TestHarness
 
+      - name: Run integration tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+          cd core-lib
+          export VM="../target/release/${{ matrix.interpreter }}"
+          export CLASSPATH=Smalltalk
+          export AWFY=Examples/AreWeFastYet/Core
+          export TEST_EXPECTATIONS=../.integration-tests-${{ matrix.interpreter }}.yml
+          pytest IntegrationTests
+
   run_own_tests:
     name: Run own tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout master branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: true
       - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: default
-          toolchain: stable
+        run: rustup default stable
       - name: Run all tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+        run: cargo test
         env:
           RUST_TEST_THREADS: 1

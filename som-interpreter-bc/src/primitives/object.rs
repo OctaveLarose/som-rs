@@ -14,7 +14,7 @@ use crate::value::Value;
 use crate::vm_objects::class::Class;
 use crate::vm_objects::instance::Instance;
 use crate::vm_objects::method::Invoke;
-use anyhow::{Context, Error};
+use anyhow::{bail, Context, Error};
 use once_cell::sync::Lazy;
 use som_gc::gcref::Gc;
 use som_value::interned::Interned;
@@ -35,6 +35,7 @@ pub static INSTANCE_PRIMITIVES: Lazy<Box<[PrimInfo]>> = Lazy::new(|| {
         ),
         ("instVarAt:", self::inst_var_at.into_func(), true),
         ("instVarAt:put:", self::inst_var_at_put.into_func(), true),
+        ("instVarNamed:", self::inst_var_named.into_func(), true),
         ("==", self::eq.into_func(), true),
     ])
 });
@@ -181,6 +182,26 @@ fn inst_var_at(receiver: Value, index: i32) -> Result<Option<Value>, Error> {
     } else {
         panic!("looking up a local not from an instance or a class")
     }
+}
+
+fn inst_var_named(interp: &mut Interpreter, _universe: &mut Universe) -> Result<Option<Value>, Error> {
+    const SIGNATURE: &str = "Object>>#instVarNamed:";
+
+    pop_args_from_stack!(interp, receiver => Value, name => Interned);
+
+    let field_names = if let Some(instance) = receiver.as_instance() {
+        instance.class().field_names.clone()
+    } else if let Some(class) = receiver.as_class() {
+        class.field_names.clone()
+    } else {
+        panic!("#instVarNamed: needs an instance, but got a {:?}", receiver)
+    };
+
+    let Some(idx) = field_names.iter().position(|&field_name| field_name == name) else {
+        bail!("'{}': no field named '{}'", SIGNATURE, name);
+    };
+
+    inst_var_at(receiver, (idx + 1) as i32)
 }
 
 fn inst_var_at_put(receiver: Value, index: i32, value: Value) -> Result<Option<Value>, Error> {
